@@ -131,3 +131,4 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
     </header>
   );
 };
+export default Header;

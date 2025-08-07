@@ -100,3 +100,4 @@ const UserRolesSection = () => {
     </section>
   );
 };
+export default UserRolesSection;
