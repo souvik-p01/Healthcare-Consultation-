@@ -56,3 +56,4 @@ const StatsSection = () => {
     </section>
   );
 };
+export default StatsSection;

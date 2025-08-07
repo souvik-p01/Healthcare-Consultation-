@@ -1,10 +1,12 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-import "tailwindcss";
+import { useState } from 'react';
 
 
+import Header from './components/Header';
+import HeroSection from './components/HeroSection';
+import FeaturesSection from './components/FeaturesSection';
+import StatsSection from './components/StatsSection';
+import UserRolesSection from './components/UserRolesSection';
+import Footer from './components/Footer';
 
 const App = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
