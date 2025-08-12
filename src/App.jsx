@@ -1,23 +1,23 @@
 import { useState } from 'react';
-
-
+import Home from './Pages/Home';
 import Header from './components/Header';
-import HeroSection from './components/HeroSection';
-import FeaturesSection from './components/FeaturesSection';
-import StatsSection from './components/StatsSection';
-import UserRolesSection from './components/UserRolesSection';
 import Footer from './components/Footer';
+import About from './Pages/About';
+import Service from './Pages/Service';
+import './index.css'
+import { Routes, Route } from 'react-router-dom';
 
 const App = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen">
-      <Header isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
-      <HeroSection />
-      <FeaturesSection />
-      <StatsSection />
-      <UserRolesSection />
+    <div className="w-full flex flex-col justify-center min-h-screen">
+      <Header />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/services" element={<Service />} />
+      </Routes>
       <Footer />
     </div>
   );
