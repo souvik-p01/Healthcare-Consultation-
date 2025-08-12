@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Heart, 
@@ -51,7 +50,7 @@ const HeroSection = () => {
           <div className="relative">
             <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-2xl p-8">
               <img 
-                src="/api/placeholder/500/400" 
+                src="https://i.pinimg.com/736x/04/fb/c8/04fbc82b3a01a095448eee941b83ea05.jpg" 
                 alt="Healthcare professionals" 
                 className="rounded-lg shadow-2xl w-full"
               />
