@@ -4,11 +4,13 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import About from './Pages/About';
 import Service from './Pages/Service';
+import Contact from './Pages/Contact';
 import PatientPortal from './Pages/PatientPortal';
 import DoctorPortal from './Pages/DoctorPortal';
 import TechnicianPortal from './Pages/TechnicianPortal';
 import './index.css'
 import { Routes, Route } from 'react-router-dom';
+
 
 const App = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -23,6 +25,7 @@ const App = () => {
         <Route path="/patient-portal" element={<PatientPortal />} />
         <Route path="/doctor-portal" element={<DoctorPortal />} />
         <Route path="/technician-portal" element={<TechnicianPortal />} />
+        <Route path="/contact" element={<Contact />} />
       </Routes>
       <Footer />
     </div>
