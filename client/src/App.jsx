@@ -9,7 +9,10 @@ import PatientPortal from './Pages/PatientPortal';
 import DoctorPortal from './Pages/DoctorPortal';
 import TechnicianPortal from './Pages/TechnicianPortal';
 import './index.css'
-import { Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
+import { ToastContainer } from 'react-toastify';
+import LoginSignUpPage from './Pages/LoginSignUpPage';
 
 
 const App = () => {
@@ -26,7 +29,9 @@ const App = () => {
         <Route path="/doctor-portal" element={<DoctorPortal />} />
         <Route path="/technician-portal" element={<TechnicianPortal />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/login" element={<LoginSignUpPage />} />
       </Routes>
+      < ToastContainer />
       <Footer />
     </div>
   );

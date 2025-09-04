@@ -8,17 +8,15 @@ import {
   Stethoscope,
   Settings
 } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 
-// Header Component
 const Header = ({ isMenuOpen, setIsMenuOpen }) => {
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <header className="w-full flex justify-between bg-white shadow-lg sticky top-0 z-50">
-      {/* Main Navigation */}
       <nav className="py-4 w-full px-6 flex justify-between">
-        {/* Logo */}
         <div className="flex items-center space-x-2">
           <div className="bg-blue-600 p-2 rounded-lg">
             <Heart className="w-6 h-6 text-white" />
@@ -55,7 +53,6 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
               Services
             </NavLink>
             
-            {/* Role Dropdown */}
             <div className="relative">
               <button 
                 onClick={() => setShowRoleDropdown(!showRoleDropdown)}
@@ -107,12 +104,28 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
             >
               Contact
             </NavLink>
-            <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+
+            <button 
+              onClick={() => {
+                navigate('/login', { state: { mode: 'login' } });
+                setIsMenuOpen(false);
+              }}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
               Login
+            </button>
+
+            <button 
+              onClick={() => {
+                navigate('/login', { state: { mode: 'signup' } });
+                setIsMenuOpen(false);
+              }}
+              className="bg-gray-100 text-blue-600 px-6 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Sign Up
             </button>
           </div>
 
-          {/* Mobile Menu Button */}
           <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="md:hidden"
@@ -121,7 +134,6 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
           </button>
         </div>
 
-        {/* Mobile Menu */}
         {isMenuOpen && (
           <div className="md:hidden absolute top-full left-0 right-0 bg-white border-t shadow-lg z-50 p-6">
             <div className="flex flex-col space-y-4">
@@ -153,7 +165,6 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
                 Services
               </NavLink>
               
-              {/* Mobile Portal Links */}
               <div className="pl-4 border-l-2 border-gray-100">
                 <NavLink 
                   to="/patient-portal" 
@@ -193,8 +204,25 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
               >
                 Contact
               </NavLink>
-              <button className="bg-blue-600 text-white px-6 py-2 rounded-lg w-fit mt-4">
+
+              <button 
+                onClick={() => {
+                  navigate('/login', { state: { mode: 'login' } });
+                  setIsMenuOpen(false);
+                }}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg w-fit mt-4"
+              >
                 Login
+              </button>
+
+              <button 
+                onClick={() => {
+                  navigate('/login', { state: { mode: 'signup' } });
+                  setIsMenuOpen(false);
+                }}
+                className="bg-gray-100 text-blue-600 px-6 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Sign Up
               </button>
             </div>
           </div>
