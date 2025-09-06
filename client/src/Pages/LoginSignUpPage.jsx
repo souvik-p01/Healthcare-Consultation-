@@ -272,13 +272,6 @@ const LoginSignUpPage = () => {
             shaking ? 'animate-shake' : ''
           }`}
         >
-          {/* Close Button */}
-          <button
-            onClick={() => navigate('/')}
-            className="absolute top-4 right-4 text-gray-500 hover:bg-red-500 hover:text-white rounded-full p-1.5 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
 
           {/* Header with Logo */}
           <motion.div
@@ -391,8 +384,24 @@ const LoginSignUpPage = () => {
               </label>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg select-none min-w-[120px] justify-center">
-                  <span className="font-mono text-lg tracking-wider font-bold">
-                    {captchaText}
+                  <span className="flex space-x-1">
+                    {captchaText.split("").map((char, index) => {
+                      const randomSize = Math.random() > 0.5 ? "text-xl" : "text-sm";
+                      const randomRotate = Math.floor(Math.random() * 30 - 15); 
+                      const randomWeight = Math.random() > 0.5 ? "font-bold" : "font-extrabold";
+                      return (
+                        <span
+                          key={index}
+                          className={`font-mono tracking-wider ${randomSize} ${randomWeight}`}
+                          style={{
+                            display: "inline-block",
+                            transform: `rotate(${randomRotate}deg)`,
+                          }}
+                        >
+                          {char}
+                        </span>
+                      );
+                    })}
                   </span>
                   <button
                     type="button"

@@ -1,13 +1,13 @@
 import React, { createContext, useState, useContext } from 'react';
 
 // Create the context
-const AppContext = createContext();
+export const AppContext = createContext();
 
 // Create a provider component
-export const AppProvider = ({ children }) => {
+export const AppContextProvider = ({ children }) => {
   const [showLogin, setShowLogin] = useState(false);
   const [token, setToken] = useState(null);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   
   // You can set your backend URL here or use environment variables
@@ -33,13 +33,4 @@ export const AppProvider = ({ children }) => {
 };
 
 // Custom hook to use the context
-export const useAppContext = () => {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useAppContext must be used within an AppProvider');
-  }
-  return context;
-};
-
-// Export the context itself for class components if needed
-export { AppContext };
+export default AppContextProvider;
