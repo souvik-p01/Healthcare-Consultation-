@@ -124,7 +124,7 @@ const AboutSection = () => {
 
           {/* Mission, Vision, Values Tabs - Company principles */}
           <div className="mb-20">
-            <div className="flex flex-wrap justify-center mb-8 border-b">
+            <div className="flex flex-wrap justify-center mb-8">
               {['mission', 'vision', 'values'].map((tab) => (
                 <button
                   key={tab}

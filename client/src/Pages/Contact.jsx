@@ -15,6 +15,9 @@ import {
   Sparkles
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { Modal } from 'antd';
+import { CloseOutlined } from "@ant-design/icons";
+import { assets } from '../assets/assets';
 
 // Improved SVG Logo Component with proper healthcare styling
 const HealthcarePlusLogo = () => (
@@ -82,6 +85,8 @@ const ContactPage = () => {
   const [submitStatus, setSubmitStatus] = useState(null); // Success or error message
   const [selectedOffice, setSelectedOffice] = useState(0);
   const [activeFAQ, setActiveFAQ] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const contactMethods = [
     {
@@ -164,10 +169,50 @@ const ContactPage = () => {
     }
   ];
 
+  const validateField = (name, value) => {
+    if (name === 'phone') {
+      if (value && !/^\d{10}$/.test(value)) {
+        return 'Phone number must be exactly 10 digits';
+      }
+    }
+    if (name === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      return 'Please enter a valid email address';
+    }
+    return ''; 
+  };
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    const error = validateField(name, value);
+
+    setErrors((prev) => ({
+      ...prev,
+      [name]: error,
+    }));
+  };
+
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setSubmitStatus(null);
+
+    const newErrors = {};
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+    if (formData.phone && !/^\d{10}$/.test(formData.phone)) {
+      newErrors.phone = 'Phone number must be exactly 10 digits';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setIsSubmitting(false);
+      return;
+    }
+
+    setErrors({});
+
+    setErrors({});
 
     try {
       const response = await fetch('https://jsonplaceholder.typicode.com/posts', {
@@ -182,7 +227,6 @@ const ContactPage = () => {
         throw new Error('Failed to submit form');
       }
 
-      setSubmitStatus('Thank you for your message! We will get back to you within 24 hours.');
       setFormData({
         name: '',
         email: '',
@@ -195,6 +239,7 @@ const ContactPage = () => {
       setSubmitStatus('Error submitting form. Please try again later.');
     } finally {
       setIsSubmitting(false);
+      setModalOpen(true);
     }
   }, [formData]);
 
@@ -223,7 +268,6 @@ const ContactPage = () => {
               <NavLink 
                 to="/"
                 className="flex items-center text-white hover:text-blue-200 transition-colors bg-white bg-opacity-20 px-4 py-2 rounded-full hover:bg-opacity-30 backdrop-blur-sm"
-                activeClassName="bg-blue-200 text-white"
               >
                 <Home className="w-4 h-4 mr-2" />
                 <span className="text-sm font-medium">Back to Home</span>
@@ -305,10 +349,14 @@ const ContactPage = () => {
                       name="email"
                       value={formData.email}
                       onChange={handleChange}
+                      onBlur={handleBlur}
                       required
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
                       placeholder="Enter your email"
                     />
+                    {errors.email && (
+                      <span className="text-red-600 text-sm">{errors.email}</span>
+                    )}
                   </div>
                 </div>
 
@@ -321,11 +369,17 @@ const ContactPage = () => {
                     <input
                       type="tel"
                       name="phone"
+                      max={10}
+                      min={10}
                       value={formData.phone}
                       onChange={handleChange}
+                      onBlur={handleBlur}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                      placeholder="+91 98765 43210"
+                      placeholder="98765 43210"
                     />
+                    {errors.phone && (
+                      <span className="text-red-600 text-sm">{errors.phone}</span>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -455,7 +509,6 @@ const ContactPage = () => {
                 <NavLink
                   to="/patient-portal"
                   className="w-full bg-white text-green-600 py-3 px-4 rounded-lg font-semibold hover:bg-gray-50 transition-all duration-300 flex items-center justify-center text-sm min-h-[48px] hover:scale-105"
-                  activeClassName="bg-gray-50"
                 >
                   <Calendar className="w-4 h-4 mr-2 flex-shrink-0" />
                   <span>Book Appointment</span>
@@ -463,7 +516,6 @@ const ContactPage = () => {
                 <NavLink
                   to="/emergency-services"
                   className="w-full bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center text-sm min-h-[48px] hover:scale-105 shadow-lg"
-                  activeClassName="bg-red-600"
                 >
                   <Ambulance className="w-4 h-4 mr-2 flex-shrink-0" />
                   <span>Emergency Services</span>
@@ -523,7 +575,6 @@ const ContactPage = () => {
             <NavLink
               to="/live-chat"
               className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-all duration-300 flex items-center justify-center text-sm min-h-[48px] hover:scale-105"
-              activeClassName="bg-white text-blue-600"
             >
               <MessageCircle className="w-4 h-4 mr-2 flex-shrink-0" />
               <span>Live Chat</span>
@@ -537,11 +588,28 @@ const ContactPage = () => {
         <NavLink 
           to="/"
           className="bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center animate-bounce"
-          activeClassName="bg-blue-700"
         >
           <Home className="w-6 h-6" />
         </NavLink>
       </div>
+
+      {modalOpen && (
+        <Modal
+          open={modalOpen}
+          onCancel={() => setModalOpen(false)} 
+          footer={null}
+          width={400}
+          closeIcon={<CloseOutlined style={{ color: "red", fontSize: "18px" }} />}
+          centered
+          maskClosable={true}
+        >
+          <div className="text-center">
+            <h2 className="text-lg font-bold mb-2">Thank you for your message!</h2>
+            {/* <img src={assets.Empty} alt='Thank You' /> */}
+            <p>We will get back to you within 24 hours.</p>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
