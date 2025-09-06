@@ -21,9 +21,12 @@ import {
   Play,
   CheckCircle
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 // Hero Section Component
 const HeroSection = () => {
+  const navigate = useNavigate()
+  
   return (
     <section id="home" className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white py-20">
       <div className="container mx-auto px-4">
@@ -38,7 +41,7 @@ const HeroSection = () => {
               telemedicine, emergency services, and personalized care - all in one place.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <button className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-blue-50 transition-colors">
+              <button onClick={() => navigate('/patient-portal')} className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-blue-50 transition-colors">
                 Get Started
               </button>
               <button className="flex items-center text-white border-2 border-white px-8 py-4 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors">
