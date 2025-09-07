@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { 
   Heart, 
   Phone, 
@@ -22,12 +22,14 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AppContext } from '../context/AppContext';
 
 // User Roles Section Component
 const UserRolesSection = () => {
   const navigate = useNavigate();
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef(null);
+  const {userRole} = useContext(AppContext)
   
   const roles = [
     {
@@ -158,15 +160,20 @@ const UserRolesSection = () => {
                 ))}
               </ul>
               <button 
-                onClick={() => handlePortalAccess(role.path)}
-                className={`w-full ${role.color} text-white py-3 rounded-lg font-semibold mt-6 hover:opacity-90 transition-all duration-300 ease-out transform hover:scale-105`}
+                onClick={() => userRole === role.title.replace(" Portal", "") && handlePortalAccess(role.path)}
+                disabled={userRole !== role.title.replace(" Portal", "")}
+                className={`w-full py-3 rounded-lg font-semibold mt-6 transition-all duration-300 ease-out
+                  ${userRole === role.title.replace(" Portal", "")
+                    ? `${role.color} text-white hover:opacity-90 hover:scale-105`
+                    : 'bg-gray-300 text-gray-500 !cursor-not-allowed'}
+                `}
                 style={{
                   opacity: isVisible ? 1 : 0,
                   transform: isVisible ? 'translateY(0)' : 'translateY(20px)',
                   transitionDelay: isVisible ? `${role.delay + 600}ms` : '0ms'
                 }}
               >
-                Access Portal
+                {userRole === role.title.replace(" Portal", "") ? "Access Portal" : "Not Available"}
               </button>
             </div>
           ))}

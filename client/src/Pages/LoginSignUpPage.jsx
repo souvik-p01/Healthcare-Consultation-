@@ -31,6 +31,7 @@ const LoginSignUpPage = () => {
   const [userCaptchaInput, setUserCaptchaInput] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
+  const [captchaStyles, setCaptchaStyles] = useState([]);
 
   // Generate captcha on component mount and mode change
   useEffect(() => {
@@ -68,10 +69,22 @@ const LoginSignUpPage = () => {
   const generateCaptcha = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let captcha = '';
+    let styles = [];
+
     for (let i = 0; i < 6; i++) {
-      captcha += chars.charAt(Math.floor(Math.random() * chars.length));
+      const char = chars.charAt(Math.floor(Math.random() * chars.length));
+      captcha += char;
+
+      // Pre-generate style for each char
+      styles.push({
+        size: Math.random() > 0.5 ? "text-xl" : "text-sm",
+        rotate: Math.floor(Math.random() * 30 - 15),
+        weight: Math.random() > 0.5 ? "font-bold" : "font-extrabold"
+      });
     }
+
     setCaptchaText(captcha);
+    setCaptchaStyles(styles);
     setUserCaptchaInput('');
   };
 
@@ -90,7 +103,7 @@ const LoginSignUpPage = () => {
 
     // Validate captcha first
     if (userCaptchaInput !== captchaText) {
-      alert('❌ Captcha does not match. Please try again.');
+      toast.error("Captcha does not matched.")
       triggerShake();
       generateCaptcha();
       setUserCaptchaInput('');
@@ -99,7 +112,7 @@ const LoginSignUpPage = () => {
 
     // Validate password for signup
     if (isSignUp && !validatePassword(password)) {
-      alert('❌ Password must be 8+ characters long, contain an uppercase letter and a special character (@, $, !, etc.).');
+      toast.error("Password must be 8+ characters long, contain an uppercase letter and a special character (@, $, !, etc.).")
       triggerShake();
       return;
     }
@@ -129,7 +142,7 @@ const LoginSignUpPage = () => {
           email: email.trim(), 
           password: password 
         });
-        alert('✅ Account created successfully! Welcome to HealthCarePlus!');
+        toast.success("Account created successfully! Welcome to HealthCarePlus!")
         setIsSignUp(false);
         clearForm();
       } else {
@@ -137,14 +150,14 @@ const LoginSignUpPage = () => {
           email: email.trim(), 
           password: password 
         });
-        alert('✅ Login successful! Redirecting to dashboard...');
+        toast.success("Login successful! ")
         clearForm();
         navigate('/dashboard'); // Redirect to a dashboard page (you can define this route)
       }
       
     } catch (error) {
       console.error('Authentication error:', error);
-      alert('❌ An error occurred. Please try again.');
+      toast.error("Please try again.")
       triggerShake();
     } finally {
       setLoading(false);
@@ -156,7 +169,7 @@ const LoginSignUpPage = () => {
     e.preventDefault();
     
     if (!forgotEmail.trim()) {
-      alert('❌ Please enter your email address.');
+      toast.warn("Please enter your email address.")
       return;
     }
 
@@ -164,12 +177,12 @@ const LoginSignUpPage = () => {
       setLoading(true);
       await new Promise(resolve => setTimeout(resolve, 1500));
       console.log('📧 Password reset request for:', forgotEmail.trim());
-      alert('✅ Password reset link sent to your email!');
+      toast.success("Password reset link sent to your email!")
       setForgotEmail('');
       setShowForgotPassword(false);
     } catch (error) {
       console.error('Forgot password error:', error);
-      alert('❌ Error sending reset link. Please try again.');
+      toast.error("Please try again.")
     } finally {
       setLoading(false);
     }
@@ -253,7 +266,7 @@ const LoginSignUpPage = () => {
 
   // Main Login/Signup Component
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+    <div className="bg-gray-100 flex items-center justify-center p-4 z-99">
       {/* Loading Overlay */}
       {loading && (
         <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -295,9 +308,9 @@ const LoginSignUpPage = () => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2 }}
-            className="text-center mb-6"
+            className="text-center mb-4"
           >
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">
+            <h2 className="text-2xl font-bold text-gray-800">
               {isSignUp ? 'Create Account' : 'Welcome Back'}
             </h2>
             <p className="text-gray-600">
@@ -386,16 +399,14 @@ const LoginSignUpPage = () => {
                 <div className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg select-none min-w-[120px] justify-center">
                   <span className="flex space-x-1">
                     {captchaText.split("").map((char, index) => {
-                      const randomSize = Math.random() > 0.5 ? "text-xl" : "text-sm";
-                      const randomRotate = Math.floor(Math.random() * 30 - 15); 
-                      const randomWeight = Math.random() > 0.5 ? "font-bold" : "font-extrabold";
+                      const style = captchaStyles[index];
                       return (
                         <span
                           key={index}
-                          className={`font-mono tracking-wider ${randomSize} ${randomWeight}`}
+                          className={`font-mono tracking-wider ${style?.size} ${style?.weight}`}
                           style={{
                             display: "inline-block",
-                            transform: `rotate(${randomRotate}deg)`,
+                            transform: `rotate(${style?.rotate}deg)`,
                           }}
                         >
                           {char}
@@ -466,7 +477,7 @@ const LoginSignUpPage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.9 }}
-              className="text-center mt-6"
+              className="text-center"
             >
               <p className="text-gray-600">
                 {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
@@ -486,7 +497,7 @@ const LoginSignUpPage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 1.0 }}
-            className="text-center mt-6 text-gray-500 text-sm"
+            className="text-center text-gray-500 text-sm"
           >
             © 2025 HealthCarePlus. All rights reserved.
           </motion.div>

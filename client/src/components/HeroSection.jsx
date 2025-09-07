@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import { 
   Heart, 
   Phone, 
@@ -22,10 +22,22 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AppContext } from '../context/AppContext';
 
 // Hero Section Component
 const HeroSection = () => {
   const navigate = useNavigate()
+  const {showLogin, userRole} = useContext(AppContext)
+
+  const handleClick = () => {
+    if(showLogin){
+      if(userRole === 'Patient') navigate('/patient-portal')
+      else if(userRole === 'Doctor') navigate('/doctor-portal')
+      else if(userRole === 'Technician') navigate('/technician-portal')
+      else return null; 
+    }
+    else navigate('/login')
+  }
   
   return (
     <section id="home" className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white py-20">
@@ -41,7 +53,7 @@ const HeroSection = () => {
               telemedicine, emergency services, and personalized care - all in one place.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <button onClick={() => navigate('/patient-portal')} className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-blue-50 transition-colors">
+              <button onClick={handleClick} className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-blue-50 transition-colors">
                 Get Started
               </button>
               <button className="flex items-center text-white border-2 border-white px-8 py-4 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors">

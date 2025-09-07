@@ -16,3 +16,7 @@ This project aims to provide an intuitive interface for patients to consult with
 - Vite
 - JavaScript
 - CSS
+
+
+<!-- Backend -->
+<!-- npm i  axios bcryptjs cors dotenv express form-data jsonwebtoken mongoose multer nodemailer nodemon razorpay -->
