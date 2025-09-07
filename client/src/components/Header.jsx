@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { 
   Heart, 
   ChevronDown,
@@ -7,15 +7,57 @@ import {
   UserCheck,
   Stethoscope,
   Settings,
-  User
+  User,
+  LogOut,
+  Bell
 } from 'lucide-react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
+import { tr } from 'framer-motion/client';
 
 const Header = ({ isMenuOpen, setIsMenuOpen }) => {
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const navigate = useNavigate();
-  const {showLogin} = useContext(AppContext)
+  const {showLogin, userRole} = useContext(AppContext)
+  const [userIconClick, setUserIconClick] = useState(false)
+  const location = useLocation()
+  const [showNotification, setShowNotification] = useState(false)
+
+  const handleUserRole = () => {
+    if(userRole === 'Patient'){
+      navigate('/patient-portal')
+      setShowNotification(true)
+    }
+    else if(userRole === 'Doctor'){
+      navigate('/doctor-portal')
+      setShowNotification(true)
+    }
+    else if(userRole === 'Technician'){
+      navigate('/technician-portal')
+      setShowNotification(true)
+    }
+    else return null;
+
+    if(userRole === 'Patient' && isMenuOpen){
+      navigate('/patient-portal')
+      setShowNotification(true)
+      setIsMenuOpen(false)
+    }
+    else if(userRole === 'Doctor' && isMenuOpen){
+      navigate('/doctor-portal')
+      setShowNotification(true)
+      setIsMenuOpen(false)
+    }
+    else if(userRole === 'Technician' && isMenuOpen){
+      navigate('/technician-portal')
+      setShowNotification(true)
+      setIsMenuOpen(false)
+    }
+    else return null;
+  }
+
+  useEffect(() => {
+    setUserIconClick(false)
+  }, [location])
 
   return (
     <header className="w-full flex justify-between bg-white shadow-lg sticky top-0 z-50">
@@ -24,93 +66,73 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
           <div className="bg-blue-600 p-2 rounded-lg">
             <Heart className="w-6 h-6 text-white" />
           </div>
-          <NavLink to="/" className="text-2xl font-bold text-gray-800">
+          <NavLink to="/" onClick={() => setShowNotification(false)} className="text-2xl font-bold text-gray-800">
             HealthCare<span className="text-blue-600">Plus</span>
           </NavLink>
         </div>
 
         <div>
           <div className="hidden md:flex items-center space-x-8">
-            <NavLink 
-              to="/" 
-              className={({ isActive }) => 
-                `font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
-              }
-            >
-              Home
-            </NavLink>
-            <NavLink 
-              to="/about" 
-              className={({ isActive }) => 
-                `font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
-              }
-            >
-              About
-            </NavLink>
-            <NavLink 
-              to="/services" 
-              className={({ isActive }) => 
-                `font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
-              }
-            >
-              Services
-            </NavLink>
-            
-            <div className="relative">
-              <button 
-                onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                className="flex items-center text-gray-700 hover:text-blue-600 font-medium"
-              >
-                User Roles <ChevronDown className="w-4 h-4 ml-1" />
-              </button>
-              {showRoleDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-50">
-                  <NavLink 
-                    to="/patient-portal" 
-                    className={({ isActive }) => 
-                      `flex items-center px-4 py-3 hover:bg-blue-50 hover:text-blue-600 ${isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`
-                    }
-                    onClick={() => setShowRoleDropdown(false)}
-                  >
-                    <UserCheck className="w-4 h-4 mr-2" />
-                    Patient Portal
-                  </NavLink>
-                  <NavLink 
-                    to="/doctor-portal" 
-                    className={({ isActive }) => 
-                      `flex items-center px-4 py-3 hover:bg-blue-50 hover:text-blue-600 ${isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`
-                    }
-                    onClick={() => setShowRoleDropdown(false)}
-                  >
-                    <Stethoscope className="w-4 h-4 mr-2" />
-                    Doctor Portal
-                  </NavLink>
-                  <NavLink 
-                    to="/technician-portal" 
-                    className={({ isActive }) => 
-                      `flex items-center px-4 py-3 hover:bg-blue-50 hover:text-blue-600 ${isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`
-                    }
-                    onClick={() => setShowRoleDropdown(false)}
-                  >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Technician Portal
-                  </NavLink>
-                </div>
-              )}
-            </div>
+            {!showNotification ? (
+              <>
+                <NavLink 
+                  to="/" 
+                  className={({ isActive }) => 
+                    `font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
+                  }
+                >
+                  Home
+                </NavLink>
+                <NavLink 
+                  to="/about" 
+                  className={({ isActive }) => 
+                    `font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
+                  }
+                >
+                  About
+                </NavLink>
+                <NavLink 
+                  to="/services" 
+                  className={({ isActive }) => 
+                    `font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
+                  }
+                >
+                  Services
+                </NavLink>
 
-            <NavLink 
-              to="/contact" 
-              className={({ isActive }) => 
-                `font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
-              }
-            >
-              Contact
-            </NavLink>
+                <NavLink 
+                  to="/contact" 
+                  className={({ isActive }) => 
+                    `font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
+                  }
+                >
+                  Contact
+                </NavLink>
+              </>
+            ) : (
+              <div>
+                <Bell className="w-6 h-6 cursor-pointer" />  
+              </div>
+            )}
 
             {showLogin ? (
-              <div className='p-1 w-[30px] h-[30px] border cursor-pointer rounded-full flex items-center justify-center'>
+              <div className='relative p-1 w-[30px] h-[30px] border cursor-pointer rounded-full flex items-center justify-center' onClick={() => setUserIconClick(true)}>
                 <User className='w-full h-full' />
+                <div
+                  className={`absolute top-full right-0 mt-2 w-40 bg-white z-99 flex-col text-gray-700 ${userIconClick ? 'flex' : 'hidden'}`}
+                >
+                  <button
+                    onClick={handleUserRole}
+                    className="px-4 py-2 text-left hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    className="px-4 py-2 flex items-center gap-2 text-left hover:bg-blue-50 hover:text-red-600"
+                  >
+                    <LogOut className="w-4 h-4" /> Logout
+                  </button>
+                </div>
               </div>
             ) : (
               <button 
@@ -163,64 +185,6 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
               >
                 Services
               </NavLink>
-              
-              <div className="relative">
-                <button
-                  onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                  className="flex items-center justify-between w-full text-gray-700 hover:text-blue-600 py-2"
-                >
-                  User Roles <ChevronDown className="w-4 h-4 ml-1" />
-                </button>
-                {showRoleDropdown && (
-                  <div className="mt-2 w-full z-50">
-                    <NavLink 
-                      to="/patient-portal" 
-                      className={({ isActive }) => 
-                        `flex items-center px-4 py-3 hover:bg-blue-50 hover:text-blue-600 ${
-                          isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                        }`
-                      }
-                      onClick={() => {
-                        setShowRoleDropdown(false);
-                        setIsMenuOpen(false);
-                      }}
-                    >
-                      <UserCheck className="w-4 h-4 mr-2" />
-                      Patient Portal
-                    </NavLink>
-                    <NavLink 
-                      to="/doctor-portal" 
-                      className={({ isActive }) => 
-                        `flex items-center px-4 py-3 hover:bg-blue-50 hover:text-blue-600 ${
-                          isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                        }`
-                      }
-                      onClick={() => {
-                        setShowRoleDropdown(false);
-                        setIsMenuOpen(false);
-                      }}
-                    >
-                      <Stethoscope className="w-4 h-4 mr-2" />
-                      Doctor Portal
-                    </NavLink>
-                    <NavLink 
-                      to="/technician-portal" 
-                      className={({ isActive }) => 
-                        `flex items-center px-4 py-3 hover:bg-blue-50 hover:text-blue-600 ${
-                          isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                        }`
-                      }
-                      onClick={() => {
-                        setShowRoleDropdown(false);
-                        setIsMenuOpen(false);
-                      }}
-                    >
-                      <Settings className="w-4 h-4 mr-2" />
-                      Technician Portal
-                    </NavLink>
-                  </div>
-                )}
-              </div>
 
               <NavLink 
                 to="/contact" 
@@ -233,8 +197,18 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
               </NavLink>
 
               {showLogin ? (
-                <div className='px-3 py-2 bg-[#155DFC] w-full cursor-pointer rounded-md flex items-center justify-center text-white'>
-                  <span>Dashboard</span>
+                <div className='flex flex-col gap-5 items-center justify-center text-white'>
+                  <button
+                    onClick={handleUserRole}
+                    className="px-4 py-2 text-left hover:bg-blue-50 hover:text-blue-600 bg-[#155DFC] w-full cursor-pointer rounded-md "
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    className="bg-[#155DFC] w-full cursor-pointer rounded-md px-4 py-2 flex items-center gap-2 text-left hover:bg-blue-50 hover:text-red-600"
+                  >
+                    <LogOut className="w-4 h-4" /> Logout
+                  </button>
                 </div>
                 ) : (
                 <button 

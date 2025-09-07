@@ -5,10 +5,11 @@ export const AppContext = createContext();
 
 // Create a provider component
 export const AppContextProvider = ({ children }) => {
-  const [showLogin, setShowLogin] = useState(false);
+  const [showLogin, setShowLogin] = useState(true);
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [userRole, setUserRole] = useState('Doctor')
   
   // You can set your backend URL here or use environment variables
   const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
@@ -22,7 +23,9 @@ export const AppContextProvider = ({ children }) => {
     user,
     setUser,
     showForgotPassword,
-    setShowForgotPassword
+    setShowForgotPassword,
+    userRole,
+    setUserRole
   };
 
   return (
