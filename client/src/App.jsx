@@ -10,8 +10,7 @@ import DoctorPortal from './Pages/DoctorPortal';
 import TechnicianPortal from './Pages/TechnicianPortal';
 import './index.css'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-
-import { ToastContainer } from 'react-toastify';
+import {toast, ToastContainer} from 'react-toastify'
 import LoginSignUpPage from './Pages/LoginSignUpPage';
 
 
@@ -20,6 +19,7 @@ const App = () => {
 
   return (
     <div className="w-full flex flex-col justify-center min-h-screen">
+      <ToastContainer position="bottom-right" toastStyle={{backgroundColor: "#000"}} />
       <Header isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
       <Routes>
         <Route path="/" element={<Home />} />

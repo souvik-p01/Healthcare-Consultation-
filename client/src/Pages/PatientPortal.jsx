@@ -44,35 +44,8 @@ const PatientPortal = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link to="/" className="flex items-center text-blue-600 hover:text-blue-700 transition-colors">
-                <Home className="w-5 h-5 mr-2" />
-                <span className="hidden sm:inline">Back to Home</span>
-              </Link>
-              <h1 className="text-xl md:text-2xl font-bold text-gray-800">Patient Portal</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <Bell className="w-6 h-6 text-gray-600 cursor-pointer hover:text-blue-600 transition-colors" />
-                {notifications > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-                    {notifications}
-                  </span>
-                )}
-              </div>
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-700 transition-colors cursor-pointer">
-                <UserCheck className="w-5 h-5 text-white" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container px-4 py-8">
         <div className="grid lg:grid-cols-4 gap-8">
           {/* Sidebar Navigation - Hidden on mobile, shown on larger screens */}
           <div className="lg:col-span-1 hidden lg:block">
