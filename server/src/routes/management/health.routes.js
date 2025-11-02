@@ -14,8 +14,8 @@
  */
 
 import { Router } from "express";
-import { verifyJWT, restrictTo } from "../middlewares/auth.middleware.js";
-import { checkDatabaseHealth } from "../utils/databaseUtils.js";
+import { verifyJWT, restrictTo } from "../../middlewares/auth.middleware.js";
+import { checkDatabaseHealth } from "../../utils/databaseUtils.js";
 import mongoose from "mongoose";
 
 // Initialize router
