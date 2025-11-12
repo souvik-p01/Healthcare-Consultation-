@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { verifyJWT, restrictTo, verifyPatientAccess } from "../middlewares/auth.middleware.js";
-import { upload, handleUploadError } from "../middlewares/multer.middleware.js";
+import { verifyJWT, restrictTo, verifyPatientAccess } from "../../middlewares/auth.middleware.js";
+import { upload, handleUploadError } from "../../middlewares/multer.middleware.js";
 
 const router = Router();
 

@@ -15,7 +15,7 @@ const prescriptionSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'Patient',
             required: [true, 'Patient reference is required'],
-            index: true
+            //index: true
         },
         
         // Prescribing Doctor
@@ -23,7 +23,7 @@ const prescriptionSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: [true, 'Doctor reference is required'],
-            index: true
+            //index: true
         },
         
         // Medical Record Reference
@@ -45,7 +45,7 @@ const prescriptionSchema = new Schema(
             type: Date,
             required: true,
             default: Date.now,
-            index: true
+            //index: true
         },
         expiryDate: {
             type: Date,
@@ -160,7 +160,7 @@ const prescriptionSchema = new Schema(
             type: String,
             enum: ['active', 'completed', 'cancelled', 'expired', 'on-hold'],
             default: 'active',
-            index: true
+            //index: true
         },
         dispenseStatus: {
             type: String,

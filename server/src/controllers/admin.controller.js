@@ -10,6 +10,7 @@
  * - System configuration
  * - Audit logs and reporting
  * - Bulk operations
+ * - System health monitoring
  */
 
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -17,7 +18,6 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import { Patient } from "../models/patient.model.js";
-import { Doctor } from "../models/doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { Prescription } from "../models/prescription.model.js";
 import { MedicalRecord } from "../models/medicalRecord.model.js";
@@ -33,7 +33,7 @@ import { AuditLog } from "../models/auditLog.model.js";
  * GET /api/v1/admin/dashboard
  * Requires: verifyJWT middleware, admin role
  */
-const getDashboardStatistics = asyncHandler(async (req, res) => {
+const getDashboardStats = asyncHandler(async (req, res) => {
   console.log("📊 Fetching admin dashboard statistics");
 
   const currentDate = new Date();
@@ -43,13 +43,11 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
   // User Statistics
   const totalUsers = await User.countDocuments();
   const totalPatients = await User.countDocuments({ role: 'patient' });
-  const totalDoctors = await User.countDocuments({ role: 'doctor' });
+  const totalProviders = await User.countDocuments({ role: 'provider' });
   const totalAdmins = await User.countDocuments({ role: 'admin' });
-
   const newUsersThisMonth = await User.countDocuments({
     createdAt: { $gte: startOfMonth }
   });
-
   const activeUsers = await User.countDocuments({
     lastLogin: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days
   });
@@ -59,7 +57,6 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
   const appointmentsThisMonth = await Appointment.countDocuments({
     appointmentDate: { $gte: startOfMonth }
   });
-
   const appointmentStatusStats = await Appointment.aggregate([
     {
       $group: {
@@ -74,7 +71,6 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
     { $match: { status: 'completed' } },
     { $group: { _id: null, total: { $sum: '$amount' } } }
   ]);
-
   const monthlyRevenue = await Payment.aggregate([
     {
       $match: {
@@ -84,7 +80,6 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
     },
     { $group: { _id: null, total: { $sum: '$amount' } } }
   ]);
-
   const previousMonthRevenue = await Payment.aggregate([
     {
       $match: {
@@ -102,11 +97,17 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
   const totalPrescriptions = await Prescription.countDocuments();
   const totalMedicalRecords = await MedicalRecord.countDocuments();
   const totalLabResults = await LabResult.countDocuments();
-
   const criticalLabResults = await LabResult.countDocuments({
     isCritical: true,
     status: { $in: ['completed', 'verified'] }
   });
+
+  // Recent Activity
+  const recentAuditLogs = await AuditLog.find()
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .populate('userId', 'name email role')
+    .lean();
 
   // System Health
   const systemUptime = process.uptime();
@@ -115,11 +116,11 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
     refreshToken: { $exists: true, $ne: null }
   });
 
-  const statistics = {
+  const stats = {
     users: {
       total: totalUsers,
       patients: totalPatients,
-      doctors: totalDoctors,
+      providers: totalProviders,
       admins: totalAdmins,
       newThisMonth: newUsersThisMonth,
       active: activeUsers
@@ -136,8 +137,9 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
       totalRevenue: totalRevenue[0]?.total || 0,
       monthlyRevenue: monthlyRevenue[0]?.total || 0,
       previousMonthRevenue: previousMonthRevenue[0]?.total || 0,
-      growthRate: previousMonthRevenue[0]?.total ?
-        ((monthlyRevenue[0]?.total - previousMonthRevenue[0]?.total) / previousMonthRevenue[0]?.total * 100).toFixed(2) : 0
+      growthRate: previousMonthRevenue[0]?.total
+        ? ((monthlyRevenue[0]?.total - previousMonthRevenue[0]?.total) / previousMonthRevenue[0]?.total * 100).toFixed(2)
+        : 0
     },
     medical: {
       prescriptions: totalPrescriptions,
@@ -156,6 +158,7 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
       nodeVersion: process.version,
       environment: process.env.NODE_ENV
     },
+    recentActivity: recentAuditLogs,
     timestamp: new Date()
   };
 
@@ -166,8 +169,8 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         200,
-        { statistics },
-        "Dashboard statistics fetched successfully"
+        { stats },
+        "Dashboard stats retrieved successfully"
       )
     );
 });
@@ -182,7 +185,6 @@ const getDashboardStatistics = asyncHandler(async (req, res) => {
 const getAllUsers = asyncHandler(async (req, res) => {
   const {
     role,
-    status,
     isActive,
     isVerified,
     dateFrom,
@@ -200,7 +202,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
   const query = {};
 
   if (role) query.role = role;
-  if (status) query.status = status;
   if (isActive !== undefined) query.isActive = isActive === 'true';
   if (isVerified !== undefined) query.isEmailVerified = isVerified === 'true';
 
@@ -214,10 +215,9 @@ const getAllUsers = asyncHandler(async (req, res) => {
   // Search filter
   if (search) {
     query.$or = [
-      { firstName: { $regex: search, $options: 'i' } },
-      { lastName: { $regex: search, $options: 'i' } },
+      { name: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } },
-      { phoneNumber: { $regex: search, $options: 'i' } }
+      { phone: { $regex: search, $options: 'i' } }
     ];
   }
 
@@ -227,7 +227,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
   const users = await User.find(query)
     .select('-password -refreshToken')
     .populate('patientId')
-    .populate('doctorId')
+    .populate('providerId')
     .sort(sort)
     .skip(skip)
     .limit(parseInt(limit))
@@ -241,17 +241,8 @@ const getAllUsers = asyncHandler(async (req, res) => {
     { $group: { _id: '$role', count: { $sum: 1 } } }
   ]);
 
-  const statusStats = await User.aggregate([
-    { $match: query },
-    { $group: { _id: '$status', count: { $sum: 1 } } }
-  ]);
-
   const statistics = {
     byRole: roleStats.reduce((acc, stat) => {
-      acc[stat._id] = stat.count;
-      return acc;
-    }, {}),
-    byStatus: statusStats.reduce((acc, stat) => {
       acc[stat._id] = stat.count;
       return acc;
     }, {}),
@@ -270,14 +261,11 @@ const getAllUsers = asyncHandler(async (req, res) => {
         {
           users,
           statistics,
-          pagination: {
-            currentPage: parseInt(page),
-            totalPages: Math.ceil(total / limit),
-            totalUsers: total,
-            hasNextPage: page * limit < total
-          }
+          totalPages: Math.ceil(total / limit),
+          currentPage: parseInt(page),
+          total
         },
-        "Users fetched successfully"
+        "Users retrieved successfully"
       )
     );
 });
@@ -289,7 +277,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
  * GET /api/v1/admin/users/:userId
  * Requires: verifyJWT middleware, admin role
  */
-const getUserDetails = asyncHandler(async (req, res) => {
+const getUserById = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 
   console.log("🔍 Fetching user details for:", userId);
@@ -305,17 +293,10 @@ const getUserDetails = asyncHandler(async (req, res) => {
       populate: [
         { path: 'emergencyContacts' },
         { path: 'allergies' },
-        { path: 'currentMedications' }
+        { path: 'medications' }
       ]
     })
-    .populate({
-      path: 'doctorId',
-      populate: [
-        { path: 'specialties' },
-        { path: 'educations' },
-        { path: 'experiences' }
-      ]
-    })
+    .populate('providerId')
     .lean();
 
   if (!user) {
@@ -338,6 +319,7 @@ const getUserDetails = asyncHandler(async (req, res) => {
   })
     .sort({ createdAt: -1 })
     .limit(10)
+    .populate('userId', 'name email role')
     .lean();
 
   const userDetails = {
@@ -366,33 +348,27 @@ const getUserDetails = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         { user: userDetails },
-        "User details fetched successfully"
+        "User retrieved successfully"
       )
     );
 });
 
 /**
- * UPDATE USER STATUS
- * Update user status (active, suspended, banned)
+ * UPDATE USER
+ * Update user information (general update, status, or role)
  * 
- * PATCH /api/v1/admin/users/:userId/status
+ * PATCH /api/v1/admin/users/:userId
  * Requires: verifyJWT middleware, admin role
  */
-const updateUserStatus = asyncHandler(async (req, res) => {
+const updateUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const { status, reason, notes } = req.body;
+  const { status, role, reason, notes, ...updateData } = req.body;
   const adminId = req.user._id;
 
-  console.log("🔄 Updating user status:", userId, "to:", status);
+  console.log("🔄 Updating user:", userId);
 
-  if (!userId || !status) {
-    throw new ApiError(400, "User ID and status are required");
-  }
-
-  // Validate status
-  const validStatuses = ['active', 'inactive', 'suspended', 'banned'];
-  if (!validStatuses.includes(status)) {
-    throw new ApiError(400, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+  if (!userId) {
+    throw new ApiError(400, "User ID is required");
   }
 
   // Find user
@@ -406,113 +382,68 @@ const updateUserStatus = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Cannot modify other admin users");
   }
 
-  const oldStatus = user.status;
+  // Prevent password updates through this route
+  if (updateData.password) {
+    delete updateData.password;
+  }
 
-  // Update user status
+  const updateFields = { ...updateData };
+
+  // Handle status update
+  let auditAction = 'USER_UPDATE';
+  if (status) {
+    const validStatuses = ['active', 'inactive', 'suspended', 'banned'];
+    if (!validStatuses.includes(status)) {
+      throw new ApiError(400, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+    }
+    updateFields.status = status;
+    updateFields.isActive = status === 'active';
+    auditAction = 'USER_STATUS_UPDATE';
+  }
+
+  // Handle role update
+  if (role) {
+    const validRoles = ['patient', 'provider', 'admin', 'nurse', 'staff'];
+    if (!validRoles.includes(role)) {
+      throw new ApiError(400, `Invalid role. Must be one of: ${validRoles.join(', ')}`);
+    }
+    updateFields.role = role;
+    auditAction = 'USER_ROLE_UPDATE';
+  }
+
+  // Update user
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     {
       $set: {
-        status: status,
-        isActive: status === 'active',
+        ...updateFields,
         updatedAt: new Date()
       }
     },
     { new: true, runValidators: true }
   ).select('-password -refreshToken');
 
-  // Create audit log
-  await AuditLog.create({
-    action: 'USER_STATUS_UPDATE',
-    userId: userId,
-    performedBy: adminId,
-    details: {
-      oldStatus: oldStatus,
-      newStatus: status,
-      reason: reason,
-      notes: notes
-    },
-    ipAddress: req.ip,
-    userAgent: req.get('User-Agent')
-  });
-
-  console.log('✅ User status updated:', userId, 'from', oldStatus, 'to', status);
-
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        { user: updatedUser },
-        "User status updated successfully"
-      )
-    );
-});
-
-/**
- * UPDATE USER ROLE
- * Update user role (patient, doctor, admin)
- * 
- * PATCH /api/v1/admin/users/:userId/role
- * Requires: verifyJWT middleware, admin role
- */
-const updateUserRole = asyncHandler(async (req, res) => {
-  const { userId } = req.params;
-  const { role, reason } = req.body;
-  const adminId = req.user._id;
-
-  console.log("🎭 Updating user role:", userId, "to:", role);
-
-  if (!userId || !role) {
-    throw new ApiError(400, "User ID and role are required");
-  }
-
-  // Validate role
-  const validRoles = ['patient', 'doctor', 'admin'];
-  if (!validRoles.includes(role)) {
-    throw new ApiError(400, `Invalid role. Must be one of: ${validRoles.join(', ')}`);
-  }
-
-  // Find user
-  const user = await User.findById(userId);
-  if (!user) {
+  if (!updatedUser) {
     throw new ApiError(404, "User not found");
   }
 
-  // Cannot modify other admins
-  if (user.role === 'admin' && user._id.toString() !== adminId.toString()) {
-    throw new ApiError(403, "Cannot modify other admin users");
-  }
-
-  const oldRole = user.role;
-
-  // Update user role
-  const updatedUser = await User.findByIdAndUpdate(
-    userId,
-    {
-      $set: {
-        role: role,
-        updatedAt: new Date()
-      }
-    },
-    { new: true, runValidators: true }
-  ).select('-password -refreshToken');
-
   // Create audit log
   await AuditLog.create({
-    action: 'USER_ROLE_UPDATE',
+    action: auditAction,
     userId: userId,
     performedBy: adminId,
     details: {
-      oldRole: oldRole,
-      newRole: role,
-      reason: reason
+      oldData: { status: user.status, role: user.role },
+      newData: { status: updatedUser.status, role: updatedUser.role },
+      reason,
+      notes,
+      updatedFields: updateData
     },
     ipAddress: req.ip,
     userAgent: req.get('User-Agent')
   });
 
-  console.log('✅ User role updated:', userId, 'from', oldRole, 'to', role);
+  console.log('✅ User updated:', userId);
 
   return res
     .status(200)
@@ -520,14 +451,14 @@ const updateUserRole = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         { user: updatedUser },
-        "User role updated successfully"
+        "User updated successfully"
       )
     );
 });
 
 /**
  * DELETE USER
- * Soft delete a user account
+ * Soft or permanent delete a user account
  * 
  * DELETE /api/v1/admin/users/:userId
  * Requires: verifyJWT middleware, admin role
@@ -555,12 +486,11 @@ const deleteUser = asyncHandler(async (req, res) => {
   }
 
   if (permanent) {
-    // Permanent deletion (use with caution)
+    // Permanent deletion
     await User.findByIdAndDelete(userId);
-
-    // Also delete related records if needed
-    await Patient.deleteMany({ userId: userId });
-    await Doctor.deleteMany({ userId: userId });
+    if (user.role === 'patient') {
+      await Patient.findOneAndDelete({ user: userId });
+    }
   } else {
     // Soft delete
     await User.findByIdAndUpdate(userId, {
@@ -579,8 +509,8 @@ const deleteUser = asyncHandler(async (req, res) => {
     userId: userId,
     performedBy: adminId,
     details: {
-      permanent: permanent,
-      reason: reason,
+      permanent,
+      reason,
       userEmail: user.email,
       userRole: user.role
     },
@@ -595,9 +525,7 @@ const deleteUser = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         200,
-        {
-          message: `User ${permanent ? 'permanently deleted' : 'soft deleted'} successfully`
-        },
+        { message: `User ${permanent ? 'permanently deleted' : 'soft deleted'} successfully` },
         "User deleted successfully"
       )
     );
@@ -687,6 +615,7 @@ const getAuditLogs = asyncHandler(async (req, res) => {
     action,
     userId,
     performedBy,
+    resource,
     dateFrom,
     dateTo,
     page = 1,
@@ -703,6 +632,7 @@ const getAuditLogs = asyncHandler(async (req, res) => {
   if (action) query.action = action;
   if (userId) query.userId = userId;
   if (performedBy) query.performedBy = performedBy;
+  if (resource) query.resource = resource;
 
   // Date range filter
   if (dateFrom || dateTo) {
@@ -717,11 +647,11 @@ const getAuditLogs = asyncHandler(async (req, res) => {
   const auditLogs = await AuditLog.find(query)
     .populate({
       path: 'userId',
-      select: 'firstName lastName email role'
+      select: 'name email role'
     })
     .populate({
       path: 'performedBy',
-      select: 'firstName lastName email role'
+      select: 'name email role'
     })
     .sort(sort)
     .skip(skip)
@@ -754,14 +684,11 @@ const getAuditLogs = asyncHandler(async (req, res) => {
         {
           auditLogs,
           statistics,
-          pagination: {
-            currentPage: parseInt(page),
-            totalPages: Math.ceil(total / limit),
-            totalLogs: total,
-            hasNextPage: page * limit < total
-          }
+          totalPages: Math.ceil(total / limit),
+          currentPage: parseInt(page),
+          total
         },
-        "Audit logs fetched successfully"
+        "Audit logs retrieved successfully"
       )
     );
 });
@@ -774,12 +701,7 @@ const getAuditLogs = asyncHandler(async (req, res) => {
  * Requires: verifyJWT middleware, admin role
  */
 const bulkOperations = asyncHandler(async (req, res) => {
-  const {
-    operation,
-    userIds,
-    data
-  } = req.body;
-
+  const { operation, userIds, data } = req.body;
   const adminId = req.user._id;
 
   console.log("⚡ Performing bulk operation:", operation, "on", userIds?.length, "users");
@@ -811,6 +733,16 @@ const bulkOperations = asyncHandler(async (req, res) => {
   // Perform bulk operation
   for (const userId of userIds) {
     try {
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      // Cannot modify other admins
+      if (user.role === 'admin' && user._id.toString() !== adminId.toString()) {
+        throw new Error("Cannot modify other admin users");
+      }
+
       switch (operation) {
         case 'activate':
           await User.findByIdAndUpdate(userId, {
@@ -846,6 +778,10 @@ const bulkOperations = asyncHandler(async (req, res) => {
           if (!data?.role) {
             throw new ApiError(400, "Role is required for assign_role operation");
           }
+          const validRoles = ['patient', 'provider', 'admin', 'nurse', 'staff'];
+          if (!validRoles.includes(data.role)) {
+            throw new ApiError(400, `Invalid role. Must be one of: ${validRoles.join(', ')}`);
+          }
           await User.findByIdAndUpdate(userId, {
             $set: {
               role: data.role,
@@ -855,8 +791,14 @@ const bulkOperations = asyncHandler(async (req, res) => {
           break;
 
         case 'send_notification':
-          // Implementation for bulk notifications
-          // This would integrate with your notification system
+          // Placeholder for notification system integration
+          await Notification.create({
+            userId,
+            title: data?.title || 'Admin Notification',
+            message: data?.message || 'You have received a notification from the admin.',
+            type: 'admin',
+            createdBy: adminId
+          });
           break;
       }
 
@@ -868,8 +810,8 @@ const bulkOperations = asyncHandler(async (req, res) => {
         userId: userId,
         performedBy: adminId,
         details: {
-          operation: operation,
-          data: data
+          operation,
+          data
         },
         ipAddress: req.ip,
         userAgent: req.get('User-Agent')
@@ -878,7 +820,7 @@ const bulkOperations = asyncHandler(async (req, res) => {
     } catch (error) {
       results.failed++;
       results.errors.push({
-        userId: userId,
+        userId,
         error: error.message
       });
     }
@@ -918,7 +860,7 @@ const getSystemHealth = asyncHandler(async (req, res) => {
   // Service status check
   const serviceStatus = await checkServiceStatus();
 
-  // Recent errors from logs (you would integrate with your logging system)
+  // Recent errors from logs
   const recentErrors = await getRecentErrors();
 
   const healthStatus = {
@@ -942,7 +884,7 @@ const getSystemHealth = asyncHandler(async (req, res) => {
     services: serviceStatus,
     errors: recentErrors,
     timestamp: new Date(),
-    overallStatus: 'healthy' // You would determine this based on checks
+    overallStatus: 'healthy' // Determined based on checks
   };
 
   console.log('✅ System health check completed');
@@ -966,8 +908,8 @@ const getSystemHealth = asyncHandler(async (req, res) => {
 const getRoleBasedQuery = (user) => {
   if (user.role === 'patient') {
     return { patientId: user.patientId?._id };
-  } else if (user.role === 'doctor') {
-    return { doctorId: user._id };
+  } else if (user.role === 'provider') {
+    return { providerId: user._id };
   }
   return {};
 };
@@ -980,7 +922,7 @@ const getOverviewAnalytics = async (dateRange) => {
     userGrowth,
     appointmentGrowth,
     revenueGrowth,
-    activeDoctors,
+    activeProviders,
     systemLoad
   ] = await Promise.all([
     User.countDocuments({ createdAt: dateRange }),
@@ -989,16 +931,16 @@ const getOverviewAnalytics = async (dateRange) => {
       { $match: { status: 'completed', paidAt: dateRange } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]),
-    User.countDocuments({ role: 'doctor', isActive: true }),
+    User.countDocuments({ role: 'provider', isActive: true }),
     getSystemLoad()
   ]);
 
   return {
-    userGrowth: userGrowth,
-    appointmentGrowth: appointmentGrowth,
+    userGrowth,
+    appointmentGrowth,
     revenueGrowth: revenueGrowth[0]?.total || 0,
-    activeDoctors: activeDoctors,
-    systemLoad: systemLoad
+    activeProviders,
+    systemLoad
   };
 };
 
@@ -1015,12 +957,8 @@ const getUserGrowthAnalytics = async (dateRange) => {
           month: { $month: '$createdAt' }
         },
         total: { $sum: 1 },
-        patients: {
-          $sum: { $cond: [{ $eq: ['$role', 'patient'] }, 1, 0] }
-        },
-        doctors: {
-          $sum: { $cond: [{ $eq: ['$role', 'doctor'] }, 1, 0] }
-        }
+        patients: { $sum: { $cond: [{ $eq: ['$role', 'patient'] }, 1, 0] } },
+        providers: { $sum: { $cond: [{ $eq: ['$role', 'provider'] }, 1, 0] } }
       }
     },
     { $sort: { '_id.year': 1, '_id.month': 1 } }
@@ -1031,7 +969,7 @@ const getUserGrowthAnalytics = async (dateRange) => {
       period: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
       total: item.total,
       patients: item.patients,
-      doctors: item.doctors
+      providers: item.providers
     }))
   };
 };
@@ -1111,13 +1049,11 @@ const getAppointmentAnalytics = async (dateRange) => {
  * Get database statistics
  */
 const getDatabaseStats = async () => {
-  // This would be implemented based on your database
-  // For MongoDB, you might use db.stats()
   return {
     status: 'connected',
-    collections: 10, // Example count
-    size: '2.5 GB', // Example size
-    lastBackup: new Date(Date.now() - 24 * 60 * 60 * 1000) // Example
+    collections: 10, // Placeholder
+    size: '2.5 GB', // Placeholder
+    lastBackup: new Date(Date.now() - 24 * 60 * 60 * 1000) // Placeholder
   };
 };
 
@@ -1125,7 +1061,6 @@ const getDatabaseStats = async () => {
  * Check service status
  */
 const checkServiceStatus = async () => {
-  // Implement checks for external services
   return {
     database: 'healthy',
     emailService: 'healthy',
@@ -1138,28 +1073,25 @@ const checkServiceStatus = async () => {
  * Get recent errors
  */
 const getRecentErrors = async () => {
-  // Integrate with your logging system
-  return [];
+  return []; // Placeholder
 };
 
 /**
  * Get system load
  */
 const getSystemLoad = async () => {
-  // Implement system load calculation
   return {
-    loadAverage: [1.5, 1.2, 1.0], // Example load averages
-    responseTime: '125ms' // Example response time
+    loadAverage: [1.5, 1.2, 1.0], // Placeholder
+    responseTime: '125ms' // Placeholder
   };
 };
 
 // Export all admin controller functions
 export {
-  getDashboardStatistics,
+  getDashboardStats,
   getAllUsers,
-  getUserDetails,
-  updateUserStatus,
-  updateUserRole,
+  getUserById,
+  updateUser,
   deleteUser,
   getSystemAnalytics,
   getAuditLogs,

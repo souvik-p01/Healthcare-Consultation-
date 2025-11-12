@@ -185,7 +185,7 @@ const notificationSchema = new Schema(
         },
         expiresAt: {
             type: Date,
-            index: true
+            //index: true
         },
         
         // Retry and Failure Handling

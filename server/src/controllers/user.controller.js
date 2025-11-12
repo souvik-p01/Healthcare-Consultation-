@@ -17,7 +17,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
-import { Patient } from "../models/patient.model.js";
+import { Patient } from "../models/Patient.model.js";
 import { Doctor } from "../models/doctor.model.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import { 
@@ -181,7 +181,7 @@ const registerUser = asyncHandler(async (req, res) => {
     // 6. Create role-specific profile (Patient or Doctor)
     if (role === 'patient') {
         const patient = await Patient.create({
-            userId: user._id,
+            user: user._id,
             // Medical record number will be auto-generated
         });
         user.patientId = patient._id;
@@ -226,7 +226,19 @@ const registerUser = asyncHandler(async (req, res) => {
         console.error('⚠️ Email verification sending failed:', error);
     }
 
-    // 9. Return success response
+    // 9. Send welcome email (async, don't wait)
+    try {
+        sendWelcomeEmail(user.email, {
+            firstName: user.firstName,
+            role: user.role,
+            userId: user._id.toString(),
+            dashboardLink: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard`
+        }).catch(err => console.error('Welcome email sending failed:', err));
+    } catch (error) {
+        console.error('⚠️ Welcome email sending failed:', error);
+    }
+
+    // 10. Return success response
     return res.status(201).json(
         new ApiResponse(
             201, 
@@ -631,6 +643,81 @@ const getUserProfile = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET PROFILE
+ * Get current user profile
+ * 
+ * GET /api/v1/users/profile
+ * Requires: verifyJWT middleware
+ */
+export const getProfile = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id)
+        .select("-password -refreshToken")
+        .populate('patientId')
+        .populate('doctorId')
+        .lean();
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(200, user, "User profile fetched successfully")
+        );
+});
+
+/**
+ * UPDATE PROFILE
+ * Update current user profile
+ * 
+ * PATCH /api/v1/users/profile
+ * Requires: verifyJWT middleware
+ */
+export const updateProfile = asyncHandler(async (req, res) => {
+    const { firstName, lastName, phoneNumber, dateOfBirth, gender } = req.body;
+
+    // Build update object
+    const updateData = {};
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
+    if (phoneNumber) updateData.phoneNumber = phoneNumber;
+    if (dateOfBirth) updateData.dateOfBirth = dateOfBirth;
+    if (gender) updateData.gender = gender;
+
+    if (Object.keys(updateData).length === 0) {
+        throw new ApiError(400, "At least one field is required to update");
+    }
+
+    // Check if phone number is already taken by another user
+    if (phoneNumber) {
+        const existingUser = await User.findOne({
+            phoneNumber,
+            _id: { $ne: req.user._id }
+        });
+
+        if (existingUser) {
+            throw new ApiError(409, "Phone number is already in use");
+        }
+    }
+
+    // Update user
+    const user = await User.findByIdAndUpdate(
+        req.user._id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+    ).select("-password -refreshToken");
+
+    console.log('✏️ Profile updated for:', user.email);
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(200, user, "Profile updated successfully")
+        );
+});
+
+/**
  * GET ALL DOCTORS
  * Get list of all active doctors with optional filters
  * 
@@ -679,6 +766,355 @@ const getAllDoctors = asyncHandler(async (req, res) => {
         );
 });
 
+/**
+ * VERIFY EMAIL
+ * Verify user's email address
+ * 
+ * POST /api/v1/users/verify-email
+ */
+export const verifyEmailController = asyncHandler(async (req, res) => {
+    const { token } = req.body;
+
+    if (!token) {
+        throw new ApiError(400, "Verification token is required");
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || process.env.ACCESS_TOKEN_SECRET);
+        
+        const user = await User.findById(decoded.userId);
+        if (!user) {
+            throw new ApiError(404, "User not found");
+        }
+
+        if (user.isEmailVerified) {
+            return res.status(200).json(
+                new ApiResponse(200, {}, "Email is already verified")
+            );
+        }
+
+        user.isEmailVerified = true;
+        user.emailVerifiedAt = new Date();
+        await user.save({ validateBeforeSave: false });
+
+        console.log('✅ Email verified for:', user.email);
+
+        return res.status(200).json(
+            new ApiResponse(200, {}, "Email verified successfully")
+        );
+
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            throw new ApiError(401, "Verification token has expired");
+        }
+        if (error.name === 'JsonWebTokenError') {
+            throw new ApiError(401, "Invalid verification token");
+        }
+        throw new ApiError(500, "Email verification failed");
+    }
+});
+
+/**
+ * RESEND VERIFICATION EMAIL
+ * Resend email verification link
+ * 
+ * POST /api/v1/users/resend-verification
+ */
+export const resendVerificationEmail = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id);
+
+    if (user.isEmailVerified) {
+        throw new ApiError(400, "Email is already verified");
+    }
+
+    // Check rate limiting for resend requests
+    const now = Date.now();
+    const lastSent = user.lastVerificationEmailSent;
+    if (lastSent && (now - lastSent) < 60000) { // 1 minute cooldown
+        throw new ApiError(429, "Please wait before requesting another verification email");
+    }
+
+    try {
+        const verificationToken = generateEmailVerificationToken(
+            user._id.toString(), 
+            user.email
+        );
+        const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+        
+        await sendEmailVerification(user.email, {
+            firstName: user.firstName,
+            verificationLink,
+            verificationCode: Math.floor(100000 + Math.random() * 900000)
+        });
+
+        user.lastVerificationEmailSent = new Date();
+        await user.save({ validateBeforeSave: false });
+
+        console.log('📧 Verification email resent to:', user.email);
+
+        return res.status(200).json(
+            new ApiResponse(200, {}, "Verification email sent successfully")
+        );
+
+    } catch (error) {
+        console.error('❌ Failed to resend verification email:', error);
+        throw new ApiError(500, "Failed to send verification email");
+    }
+});
+
+/**
+ * FORGOT PASSWORD
+ * Send password reset email
+ * 
+ * POST /api/v1/users/forgot-password
+ */
+export const forgotPasswordController = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        throw new ApiError(400, "Email is required");
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+        // Don't reveal whether email exists for security
+        return res.status(200).json(
+            new ApiResponse(200, {}, "If the email exists, a password reset link has been sent")
+        );
+    }
+
+    // Check rate limiting
+    const now = Date.now();
+    const lastResetRequest = user.lastPasswordResetRequest;
+    if (lastResetRequest && (now - lastResetRequest) < 60000) { // 1 minute cooldown
+        throw new ApiError(429, "Please wait before requesting another password reset");
+    }
+
+    try {
+        const resetToken = generatePasswordResetToken(user._id.toString());
+        const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+        
+        await sendPasswordReset(user.email, {
+            resetLink,
+            firstName: user.firstName
+        });
+
+        user.lastPasswordResetRequest = new Date();
+        await user.save({ validateBeforeSave: false });
+
+        console.log('🔐 Password reset email sent to:', user.email);
+
+        return res.status(200).json(
+            new ApiResponse(200, {}, "Password reset email sent successfully")
+        );
+
+    } catch (error) {
+        console.error('❌ Failed to send password reset email:', error);
+        throw new ApiError(500, "Failed to send password reset email");
+    }
+});
+
+/**
+ * RESET PASSWORD
+ * Reset user password using token
+ * 
+ * POST /api/v1/users/reset-password
+ */
+export const resetPasswordController = asyncHandler(async (req, res) => {
+    const { token, newPassword, confirmPassword } = req.body;
+
+    if (!token || !newPassword || !confirmPassword) {
+        throw new ApiError(400, "Token, new password, and confirm password are required");
+    }
+
+    if (newPassword !== confirmPassword) {
+        throw new ApiError(400, "New password and confirm password do not match");
+    }
+
+    if (newPassword.length < 8) {
+        throw new ApiError(400, "Password must be at least 8 characters long");
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || process.env.ACCESS_TOKEN_SECRET);
+        
+        const user = await User.findById(decoded.userId);
+        if (!user) {
+            throw new ApiError(404, "Invalid or expired reset token");
+        }
+
+        user.password = newPassword;
+        await user.save({ validateBeforeSave: false });
+
+        console.log('🔒 Password reset successfully for:', user.email);
+
+        return res.status(200).json(
+            new ApiResponse(200, {}, "Password reset successfully")
+        );
+
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            throw new ApiError(401, "Password reset token has expired");
+        }
+        if (error.name === 'JsonWebTokenError') {
+            throw new ApiError(401, "Invalid password reset token");
+        }
+        throw new ApiError(500, "Password reset failed");
+    }
+});
+
+/**
+ * DELETE ACCOUNT
+ * Soft delete user account
+ * 
+ * DELETE /api/v1/users/delete-account
+ */
+export const deleteAccountController = asyncHandler(async (req, res) => {
+    const { password, reason } = req.body;
+
+    if (!password) {
+        throw new ApiError(400, "Password is required to delete account");
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+    
+    const isPasswordValid = await user.isPasswordCorrect(password);
+    if (!isPasswordValid) {
+        throw new ApiError(401, "Invalid password");
+    }
+
+    // Soft delete - mark as inactive
+    user.isActive = false;
+    user.accountDeletionDate = new Date();
+    user.deletionReason = reason;
+    await user.save({ validateBeforeSave: false });
+
+    console.log('🗑️ Account marked for deletion:', user.email);
+
+    // Clear cookies
+    const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+    };
+
+    return res
+        .status(200)
+        .clearCookie("accessToken", cookieOptions)
+        .clearCookie("refreshToken", cookieOptions)
+        .json(
+            new ApiResponse(200, {}, "Account deleted successfully")
+        );
+});
+
+/**
+ * GET USER STATISTICS (Admin only)
+ * 
+ * GET /api/v1/users/statistics
+ */
+export const getUserStatistics = asyncHandler(async (req, res) => {
+    // Only admin can access this
+    if (req.user.role !== 'admin') {
+        throw new ApiError(403, "Access denied. Admin role required.");
+    }
+
+    const stats = await User.aggregate([
+        {
+            $facet: {
+                totalUsers: [{ $count: 'count' }],
+                usersByRole: [
+                    { $group: { _id: '$role', count: { $sum: 1 } } }
+                ],
+                usersByStatus: [
+                    { $group: { _id: '$isActive', count: { $sum: 1 } } }
+                ],
+                verifiedUsers: [
+                    { $match: { isEmailVerified: true } },
+                    { $count: 'count' }
+                ],
+                recentRegistrations: [
+                    { 
+                        $match: { 
+                            createdAt: { 
+                                $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+                            } 
+                        } 
+                    },
+                    { $count: 'count' }
+                ]
+            }
+        }
+    ]);
+
+    return res.status(200).json(
+        new ApiResponse(200, stats[0], "User statistics fetched successfully")
+    );
+});
+
+/**
+ * UPDATE USER ROLE (Admin only)
+ * 
+ * PATCH /api/v1/users/:userId/role
+ */
+export const updateUserRole = asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    const { role } = req.body;
+
+    if (!role) {
+        throw new ApiError(400, "Role is required");
+    }
+
+    if (!['patient', 'doctor', 'nurse', 'staff', 'admin'].includes(role)) {
+        throw new ApiError(400, "Invalid role");
+    }
+
+    const user = await User.findByIdAndUpdate(
+        userId,
+        { role },
+        { new: true }
+    ).select("-password -refreshToken");
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    console.log('👤 User role updated:', { userId, newRole: role });
+
+    return res.status(200).json(
+        new ApiResponse(200, user, "User role updated successfully")
+    );
+});
+
+/**
+ * DEACTIVATE USER (Admin only)
+ * 
+ * PATCH /api/v1/users/:userId/deactivate
+ */
+export const deactivateUser = asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    const { reason } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+        userId,
+        { 
+            isActive: false,
+            deactivationReason: reason,
+            deactivatedAt: new Date()
+        },
+        { new: true }
+    ).select("-password -refreshToken");
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    console.log('👤 User deactivated:', { userId, reason });
+
+    return res.status(200).json(
+        new ApiResponse(200, user, "User deactivated successfully")
+    );
+});
+
 // Export all controller functions
 export {
     registerUser,
@@ -692,14 +1128,3 @@ export {
     getUserProfile,
     getAllDoctors
 };
-
-/**
- * Additional controllers needed for complete healthcare system:
- * - verifyEmail
- * - resendVerificationEmail
- * - forgotPassword
- * - resetPassword
- * - verifyPhone
- * - deleteAccount
- * - getUserStatistics (for admin)
- */

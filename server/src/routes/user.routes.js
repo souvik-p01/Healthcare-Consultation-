@@ -26,7 +26,17 @@ import {
     updateAccountDetails,
     updateUserAvatar,
     getUserProfile,
-    getAllDoctors
+    getAllDoctors,
+    getProfile,
+    updateProfile,
+    verifyEmailController,
+    resendVerificationEmail,
+    forgotPasswordController,
+    resetPasswordController,
+    deleteAccountController,
+    getUserStatistics,
+    updateUserRole,
+    deactivateUser
 } from "../controllers/user.controller.js";
 
 // Import middlewares
@@ -98,7 +108,6 @@ router.post(
 router.post(
     "/login",
     loginRateLimiter, // Strict rate limiting for login (5 attempts per 15 min)
-    validateEmail, // Validate email format (if email provided)
     loginUser // Controller function
 );
 
@@ -138,10 +147,49 @@ router.get(
 );
 
 /**
+ * @route   POST /api/v1/users/verify-email
+ * @desc    Verify user email address with token
+ * @access  Public
+ * @body    { token }
+ */
+router.post(
+    "/verify-email",
+    rateLimiter(),
+    verifyEmailController
+);
+
+/**
+ * @route   POST /api/v1/users/forgot-password
+ * @desc    Send password reset email
+ * @access  Public
+ * @body    { email }
+ */
+router.post(
+    "/forgot-password",
+    rateLimiter(),
+    forgotPasswordController
+);
+
+/**
+ * @route   POST /api/v1/users/reset-password
+ * @desc    Reset password using reset token
+ * @access  Public
+ * @body    { token, newPassword, confirmPassword }
+ */
+router.post(
+    "/reset-password",
+    rateLimiter(),
+    resetPasswordController
+);
+
+/**
  * ==========================================
  * PROTECTED ROUTES (Authentication Required)
  * ==========================================
  */
+
+// Apply verifyJWT middleware to all routes below this line
+router.use(verifyJWT);
 
 /**
  * @route   POST /api/v1/users/logout
@@ -150,7 +198,6 @@ router.get(
  */
 router.post(
     "/logout",
-    verifyJWT, // Verify JWT token and attach user to req.user
     logoutUser // Controller function
 );
 
@@ -161,8 +208,27 @@ router.post(
  */
 router.get(
     "/current",
-    verifyJWT, // Verify JWT token
     getCurrentUser // Controller function
+);
+
+/**
+ * @route   GET /api/v1/users/profile
+ * @desc    Get current user profile
+ * @access  Private (All authenticated users)
+ */
+router.get(
+    "/profile",
+    getProfile
+);
+
+/**
+ * @route   PATCH /api/v1/users/profile
+ * @desc    Update current user profile
+ * @access  Private (All authenticated users)
+ */
+router.patch(
+    "/profile",
+    updateProfile
 );
 
 /**
@@ -173,7 +239,6 @@ router.get(
  */
 router.post(
     "/change-password",
-    verifyJWT, // Verify JWT token
     checkVerification, // Ensure email is verified for sensitive operations
     validateRequiredFields(['oldPassword', 'newPassword', 'confirmPassword']),
     changeCurrentPassword // Controller function
@@ -187,7 +252,6 @@ router.post(
  */
 router.patch(
     "/update-account",
-    verifyJWT, // Verify JWT token
     validatePhone, // Validate phone if provided
     validateDOB, // Validate date of birth if provided
     updateAccountDetails // Controller function
@@ -201,7 +265,6 @@ router.patch(
  */
 router.patch(
     "/avatar",
-    verifyJWT, // Verify JWT token
     uploadProfilePhoto.single('avatar'), // Handle single file upload with name 'avatar'
     handleUploadError, // Handle upload errors (file size, type, etc.)
     validateUploadedFiles, // Validate uploaded file
@@ -209,37 +272,67 @@ router.patch(
 );
 
 /**
+ * @route   POST /api/v1/users/resend-verification
+ * @desc    Resend email verification link
+ * @access  Private (All authenticated users)
+ */
+router.post(
+    "/resend-verification",
+    resendVerificationEmail
+);
+
+/**
+ * @route   DELETE /api/v1/users/delete-account
+ * @desc    Soft delete user account
+ * @access  Private (All authenticated users)
+ * @body    { password, reason }
+ */
+router.delete(
+    "/delete-account",
+    strictRateLimiter,
+    deleteAccountController
+);
+
+/**
  * ==========================================
- * ADDITIONAL ROUTES (To be implemented)
+ * ADMIN ROUTES (Admin Role Required)
  * ==========================================
  */
 
-// Email verification route
-// router.post("/verify-email", verifyEmailController);
+/**
+ * @route   GET /api/v1/users/statistics
+ * @desc    Get user statistics for admin dashboard
+ * @access  Private (Admin only)
+ */
+router.get(
+    "/statistics",
+    restrictTo('admin'),
+    getUserStatistics
+);
 
-// Resend verification email
-// router.post("/resend-verification", verifyJWT, resendVerificationEmail);
+/**
+ * @route   PATCH /api/v1/users/:userId/role
+ * @desc    Update user role (admin only)
+ * @access  Private (Admin only)
+ * @body    { role }
+ */
+router.patch(
+    "/:userId/role",
+    restrictTo('admin'),
+    updateUserRole
+);
 
-// Forgot password route
-// router.post("/forgot-password", forgotPasswordController);
-
-// Reset password route
-// router.post("/reset-password", resetPasswordController);
-
-// Phone verification route
-// router.post("/verify-phone", verifyJWT, verifyPhoneController);
-
-// Delete account route (soft delete)
-// router.delete("/delete-account", verifyJWT, strictRateLimiter, deleteAccountController);
-
-// Get user statistics (for admin dashboard)
-// router.get("/statistics", verifyJWT, restrictTo('admin'), getUserStatistics);
-
-// Update user role (admin only)
-// router.patch("/:userId/role", verifyJWT, restrictTo('admin'), updateUserRole);
-
-// Deactivate user account (admin only)
-// router.patch("/:userId/deactivate", verifyJWT, restrictTo('admin'), deactivateUser);
+/**
+ * @route   PATCH /api/v1/users/:userId/deactivate
+ * @desc    Deactivate user account (admin only)
+ * @access  Private (Admin only)
+ * @body    { reason }
+ */
+router.patch(
+    "/:userId/deactivate",
+    restrictTo('admin'),
+    deactivateUser
+);
 
 /**
  * ==========================================
@@ -265,7 +358,7 @@ router.patch(
  *    Headers: Authorization: Bearer {accessToken}
  * 
  * 5. Update Profile:
- *    PATCH http://localhost:8000/api/v1/users/update-account
+ *    PATCH http://localhost:8000/api/v1/users/profile
  *    Headers: Authorization: Bearer {accessToken}
  *    Body: { firstName, lastName, phoneNumber }
  * 
@@ -281,6 +374,18 @@ router.patch(
  *    POST http://localhost:8000/api/v1/users/change-password
  *    Headers: Authorization: Bearer {accessToken}
  *    Body: { oldPassword, newPassword, confirmPassword }
+ * 
+ * 9. Verify Email:
+ *    POST http://localhost:8000/api/v1/users/verify-email
+ *    Body: { token }
+ * 
+ * 10. Forgot Password:
+ *    POST http://localhost:8000/api/v1/users/forgot-password
+ *    Body: { email }
+ * 
+ * 11. Reset Password:
+ *    POST http://localhost:8000/api/v1/users/reset-password
+ *    Body: { token, newPassword, confirmPassword }
  */
 
 // Export router
@@ -289,26 +394,37 @@ export default router;
 /**
  * Route Summary:
  * 
- * Public Routes (5):
+ * Public Routes (8):
  * - POST   /register
  * - POST   /login
  * - POST   /refresh-token
  * - GET    /profile/:userId
  * - GET    /doctors
+ * - POST   /verify-email
+ * - POST   /forgot-password
+ * - POST   /reset-password
  * 
- * Protected Routes (5):
+ * Protected Routes (9):
  * - POST   /logout
  * - GET    /current
+ * - GET    /profile
+ * - PATCH  /profile
  * - POST   /change-password
  * - PATCH  /update-account
  * - PATCH  /avatar
+ * - POST   /resend-verification
+ * - DELETE /delete-account
  * 
- * Total Active Routes: 10
- * Additional Routes (Commented): 7
+ * Admin Routes (3):
+ * - GET    /statistics
+ * - PATCH  /:userId/role
+ * - PATCH  /:userId/deactivate
+ * 
+ * Total Active Routes: 20
  * 
  * Middleware Usage:
  * - Authentication: verifyJWT, optionalVerifyJWT
- * - Validation: validateEmail, validatePhone, validateDOB, validateRequiredFields
+ * - Validation: validateEmail, validatePhone, validateDOB, validateRequiredFields, sanitizePatient
  * - File Upload: uploadProfilePhoto, handleUploadError, validateUploadedFiles
  * - Rate Limiting: rateLimiter, loginRateLimiter, strictRateLimiter
  * - Authorization: restrictTo (for role-based access)
