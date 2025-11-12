@@ -12,11 +12,10 @@
  * - Emergency notifications
  * - Email audit logging
  * - Secure email handling
+ * - Error handling and retry mechanisms
  */
 
 import nodemailer from 'nodemailer';
-import path from 'path';
-import fs from 'fs';
 
 /**
  * Email Configuration for Healthcare System
@@ -26,12 +25,11 @@ const EMAIL_CONFIG = {
     FROM_EMAIL: process.env.EMAIL_FROM || 'noreply@healthcare-system.com',
     FROM_NAME: process.env.EMAIL_FROM_NAME || 'Healthcare Consultation System',
     
-    // Email templates directory
-    TEMPLATES_DIR: path.join(process.cwd(), 'templates', 'emails'),
-    
     // HIPAA compliance settings
     ENCRYPTION_ENABLED: process.env.EMAIL_ENCRYPTION === 'true',
     AUDIT_ENABLED: true,
+    MAX_RETRY_ATTEMPTS: 3,
+    RETRY_DELAY: 1000, // 1 second
     
     // Email categories for tracking
     CATEGORIES: {
@@ -40,7 +38,8 @@ const EMAIL_CONFIG = {
         MEDICAL_REPORT: 'medical-report',
         NOTIFICATION: 'notification',
         VERIFICATION: 'verification',
-        EMERGENCY: 'emergency'
+        EMERGENCY: 'emergency',
+        WELCOME: 'welcome'
     }
 };
 
@@ -51,6 +50,11 @@ const EMAIL_CONFIG = {
  */
 const createEmailTransporter = () => {
     try {
+        // Validate required environment variables
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            throw new Error('Email credentials are not configured. Please set EMAIL_USER and EMAIL_PASS environment variables.');
+        }
+
         const transportConfig = {
             service: EMAIL_CONFIG.SERVICE,
             auth: {
@@ -61,7 +65,11 @@ const createEmailTransporter = () => {
             tls: {
                 rejectUnauthorized: true,
                 minVersion: 'TLSv1.2'
-            }
+            },
+            // Connection pool settings
+            pool: true,
+            maxConnections: 5,
+            maxMessages: 100
         };
         
         // Use custom SMTP settings if configured
@@ -76,7 +84,7 @@ const createEmailTransporter = () => {
         // Verify transporter configuration
         transporter.verify((error, success) => {
             if (error) {
-                console.error('❌ Email transporter configuration failed:', error);
+                console.error('❌ Email transporter configuration failed:', error.message);
             } else {
                 console.log('✅ Healthcare email service ready');
             }
@@ -85,9 +93,22 @@ const createEmailTransporter = () => {
         return transporter;
         
     } catch (error) {
-        console.error('❌ Failed to create email transporter:', error);
+        console.error('❌ Failed to create email transporter:', error.message);
         throw new Error(`Email service initialization failed: ${error.message}`);
     }
+};
+
+// Create transporter instance
+let emailTransporter;
+
+/**
+ * Get or create email transporter with retry mechanism
+ */
+const getEmailTransporter = () => {
+    if (!emailTransporter) {
+        emailTransporter = createEmailTransporter();
+    }
+    return emailTransporter;
 };
 
 /**
@@ -105,81 +126,177 @@ const logEmailOperation = (emailData) => {
         recipientType: emailData.recipientType,
         status: emailData.status,
         templateUsed: emailData.template,
-        sentBy: emailData.sentBy || 'system'
+        sentBy: emailData.sentBy || 'system',
+        recipient: emailData.recipient ? emailData.recipient.replace(/(.{3}).*(@.*)/, '$1***$2') : 'unknown'
     };
     
     console.log('📧 HEALTHCARE EMAIL AUDIT:', logEntry);
 };
 
 /**
- * Generate appointment confirmation email template
- * 
- * @param {Object} appointmentData - Appointment details
- * @returns {string} - HTML email template
+ * Retry mechanism for email sending
  */
-const generateAppointmentEmailTemplate = (appointmentData) => {
+const sendWithRetry = async (sendFunction, maxAttempts = EMAIL_CONFIG.MAX_RETRY_ATTEMPTS) => {
+    let lastError;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await sendFunction();
+        } catch (error) {
+            lastError = error;
+            console.warn(`⚠️ Email send attempt ${attempt} failed:`, error.message);
+            
+            if (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, EMAIL_CONFIG.RETRY_DELAY * attempt));
+            }
+        }
+    }
+    
+    throw lastError;
+};
+
+/**
+ * Generate email template with common healthcare styling
+ */
+const generateEmailTemplate = (content, title, category = 'notification') => {
+    const backgroundColor = {
+        'appointment': '#2c5aa0',
+        'prescription': '#28a745',
+        'medical-report': '#17a2b8',
+        'verification': '#28a745',
+        'welcome': '#2c5aa0',
+        'notification': '#6c757d',
+        'emergency': '#dc3545'
+    }[category] || '#2c5aa0';
+
     return `
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
-        <title>Appointment Confirmation</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #2c5aa0; color: white; padding: 20px; text-align: center; }
-            .content { padding: 30px 20px; background: #f9f9f9; }
-            .appointment-details { background: white; padding: 20px; margin: 20px 0; border-radius: 5px; }
-            .footer { background: #333; color: white; padding: 20px; text-align: center; font-size: 14px; }
-            .highlight { background: #e8f4f8; padding: 15px; border-left: 4px solid #2c5aa0; }
-            .button { display: inline-block; background: #2c5aa0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+            body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                line-height: 1.6; 
+                color: #333; 
+                margin: 0; 
+                padding: 0; 
+                background-color: #f5f5f5;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: white;
+                border-radius: 10px;
+                overflow: hidden;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .header { 
+                background: ${backgroundColor}; 
+                color: white; 
+                padding: 30px 20px; 
+                text-align: center; 
+            }
+            .header h1 {
+                margin: 0;
+                font-size: 24px;
+                font-weight: 600;
+            }
+            .content { 
+                padding: 40px 30px; 
+            }
+            .footer { 
+                background: #2c3e50; 
+                color: white; 
+                padding: 20px; 
+                text-align: center; 
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            .button { 
+                display: inline-block; 
+                background: ${backgroundColor}; 
+                color: white; 
+                padding: 14px 32px; 
+                text-decoration: none; 
+                border-radius: 6px; 
+                font-weight: 600;
+                font-size: 16px;
+                margin: 10px 5px;
+                border: none;
+                cursor: pointer;
+            }
+            .button-secondary {
+                background: #6c757d;
+            }
+            .button-danger {
+                background: #dc3545;
+            }
+            .info-box {
+                background: #e8f4f8;
+                padding: 20px;
+                border-radius: 6px;
+                border-left: 4px solid ${backgroundColor};
+                margin: 20px 0;
+            }
+            .warning-box {
+                background: #fff3cd;
+                border: 1px solid #ffeaa7;
+                padding: 15px;
+                border-radius: 6px;
+                margin: 15px 0;
+            }
+            .security-notice {
+                background: #f8d7da;
+                border: 1px solid #f5c6cb;
+                padding: 15px;
+                border-radius: 6px;
+                margin: 20px 0;
+            }
+            .feature-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 15px;
+                margin: 25px 0;
+            }
+            .feature {
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                text-align: center;
+                border: 1px solid #e9ecef;
+            }
+            .feature h4 {
+                margin: 0 0 10px 0;
+                color: #2c5aa0;
+            }
+            @media (max-width: 600px) {
+                .content { padding: 30px 20px; }
+                .feature-grid { grid-template-columns: 1fr; }
+                .button { display: block; margin: 10px 0; }
+            }
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>🏥 Appointment Confirmation</h1>
+                <h1>${title}</h1>
                 <p>Healthcare Consultation System</p>
             </div>
             
             <div class="content">
-                <h2>Hello ${appointmentData.patientName},</h2>
-                <p>Your appointment has been successfully scheduled. Please find the details below:</p>
-                
-                <div class="appointment-details">
-                    <h3>📅 Appointment Details</h3>
-                    <p><strong>Date:</strong> ${appointmentData.appointmentDate}</p>
-                    <p><strong>Time:</strong> ${appointmentData.appointmentTime}</p>
-                    <p><strong>Doctor:</strong> Dr. ${appointmentData.doctorName}</p>
-                    <p><strong>Department:</strong> ${appointmentData.department}</p>
-                    <p><strong>Type:</strong> ${appointmentData.appointmentType}</p>
-                    <p><strong>Location:</strong> ${appointmentData.location}</p>
-                    <p><strong>Appointment ID:</strong> ${appointmentData.appointmentId}</p>
-                </div>
-                
-                <div class="highlight">
-                    <h4>📋 Important Reminders:</h4>
-                    <ul>
-                        <li>Please arrive 15 minutes before your appointment time</li>
-                        <li>Bring a valid ID and insurance card</li>
-                        <li>Bring any relevant medical records or test results</li>
-                        <li>If you need to reschedule, please contact us at least 24 hours in advance</li>
-                    </ul>
-                </div>
-                
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="${appointmentData.rescheduleLink || '#'}" class="button">Reschedule Appointment</a>
-                    <a href="${appointmentData.cancelLink || '#'}" class="button" style="background: #dc3545;">Cancel Appointment</a>
-                </div>
-                
-                <p>If you have any questions or concerns, please don't hesitate to contact us at:</p>
-                <p>📞 Phone: ${process.env.HEALTHCARE_PHONE || '1-800-HEALTHCARE'}</p>
-                <p>✉️ Email: ${process.env.HEALTHCARE_EMAIL || 'support@healthcare-system.com'}</p>
+                ${content}
             </div>
             
             <div class="footer">
-                <p>Healthcare Consultation System</p>
-                <p>This email contains confidential medical information. If you received this in error, please delete it immediately.</p>
+                <p><strong>Healthcare Consultation System</strong></p>
+                <p>This email contains confidential healthcare information. If you received this in error, please delete it immediately and notify us.</p>
+                <p>📞 ${process.env.HEALTHCARE_PHONE || '1-800-HEALTHCARE'} | ✉️ ${process.env.HEALTHCARE_EMAIL || 'support@healthcare-system.com'}</p>
+                <p style="font-size: 12px; opacity: 0.8; margin-top: 15px;">
+                    © ${new Date().getFullYear()} Healthcare Consultation System. All rights reserved.
+                </p>
             </div>
         </div>
     </body>
@@ -188,132 +305,88 @@ const generateAppointmentEmailTemplate = (appointmentData) => {
 };
 
 /**
- * Generate prescription notification email template
- * 
- * @param {Object} prescriptionData - Prescription details
- * @returns {string} - HTML email template
+ * Send email with enhanced error handling and retry mechanism
  */
-const generatePrescriptionEmailTemplate = (prescriptionData) => {
-    return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>New Prescription Available</title>
-        <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #28a745; color: white; padding: 20px; text-align: center; }
-            .content { padding: 30px 20px; background: #f9f9f9; }
-            .prescription-details { background: white; padding: 20px; margin: 20px 0; border-radius: 5px; }
-            .footer { background: #333; color: white; padding: 20px; text-align: center; font-size: 14px; }
-            .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 15px 0; }
-            .medication { background: #e8f5e8; padding: 10px; margin: 10px 0; border-radius: 5px; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>💊 New Prescription Available</h1>
-                <p>Healthcare Consultation System</p>
-            </div>
-            
-            <div class="content">
-                <h2>Hello ${prescriptionData.patientName},</h2>
-                <p>Dr. ${prescriptionData.doctorName} has issued a new prescription for you.</p>
-                
-                <div class="prescription-details">
-                    <h3>📋 Prescription Details</h3>
-                    <p><strong>Date Prescribed:</strong> ${prescriptionData.prescriptionDate}</p>
-                    <p><strong>Prescription ID:</strong> ${prescriptionData.prescriptionId}</p>
-                    <p><strong>Doctor:</strong> Dr. ${prescriptionData.doctorName}</p>
-                    
-                    <h4>Medications:</h4>
-                    ${prescriptionData.medications.map(med => `
-                        <div class="medication">
-                            <strong>${med.name}</strong><br>
-                            <strong>Dosage:</strong> ${med.dosage}<br>
-                            <strong>Instructions:</strong> ${med.instructions}<br>
-                            <strong>Quantity:</strong> ${med.quantity}<br>
-                            <strong>Refills:</strong> ${med.refills}
-                        </div>
-                    `).join('')}
-                </div>
-                
-                <div class="warning">
-                    <h4>⚠️ Important Medication Information:</h4>
-                    <ul>
-                        <li>Take medications exactly as prescribed</li>
-                        <li>Complete the full course of treatment, even if you feel better</li>
-                        <li>Do not share medications with others</li>
-                        <li>Contact your doctor if you experience any adverse effects</li>
-                        <li>Keep medications in their original containers</li>
-                    </ul>
-                </div>
-                
-                <p><strong>Pharmacy Information:</strong></p>
-                <p>You can fill this prescription at any licensed pharmacy. Present this email or your prescription ID: <strong>${prescriptionData.prescriptionId}</strong></p>
-                
-                <p>If you have any questions about your prescription, please contact:</p>
-                <p>📞 Dr. ${prescriptionData.doctorName}: ${prescriptionData.doctorPhone || 'Contact through main number'}</p>
-                <p>📞 Main Office: ${process.env.HEALTHCARE_PHONE || '1-800-HEALTHCARE'}</p>
-            </div>
-            
-            <div class="footer">
-                <p>Healthcare Consultation System</p>
-                <p>This email contains confidential medical information.</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    `;
+const sendEmail = async (mailOptions, emailData) => {
+    return await sendWithRetry(async () => {
+        const transporter = getEmailTransporter();
+        const result = await transporter.sendMail(mailOptions);
+        
+        logEmailOperation({
+            ...emailData,
+            status: 'sent',
+            messageId: result.messageId
+        });
+        
+        return result;
+    });
 };
 
 /**
  * Send appointment confirmation email
- * 
- * @param {string} patientEmail - Patient's email address
- * @param {Object} appointmentData - Appointment details
- * @param {Object} options - Additional options
- * @returns {Object} - Email send result
  */
 export const sendAppointmentConfirmation = async (patientEmail, appointmentData, options = {}) => {
     try {
-        const transporter = createEmailTransporter();
         const emailId = `APPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
+        const content = `
+            <h2>Hello ${appointmentData.patientName},</h2>
+            <p>Your appointment has been successfully scheduled. Please find the details below:</p>
+            
+            <div class="info-box">
+                <h3>📅 Appointment Details</h3>
+                <p><strong>Date:</strong> ${appointmentData.appointmentDate}</p>
+                <p><strong>Time:</strong> ${appointmentData.appointmentTime}</p>
+                <p><strong>Doctor:</strong> Dr. ${appointmentData.doctorName}</p>
+                <p><strong>Department:</strong> ${appointmentData.department}</p>
+                <p><strong>Type:</strong> ${appointmentData.appointmentType}</p>
+                <p><strong>Location:</strong> ${appointmentData.location}</p>
+                <p><strong>Appointment ID:</strong> ${appointmentData.appointmentId}</p>
+            </div>
+            
+            <div class="warning-box">
+                <h4>📋 Important Reminders:</h4>
+                <ul>
+                    <li>Please arrive 15 minutes before your appointment time</li>
+                    <li>Bring a valid ID and insurance card</li>
+                    <li>Bring any relevant medical records or test results</li>
+                    <li>If you need to reschedule, please contact us at least 24 hours in advance</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${appointmentData.rescheduleLink || '#'}" class="button">Reschedule Appointment</a>
+                <a href="${appointmentData.cancelLink || '#'}" class="button button-danger">Cancel Appointment</a>
+            </div>
+        `;
+
         const mailOptions = {
             from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
             to: patientEmail,
             subject: `Appointment Confirmation - ${appointmentData.appointmentDate}`,
-            html: generateAppointmentEmailTemplate(appointmentData),
+            html: generateEmailTemplate(content, 'Appointment Confirmation', 'appointment'),
             priority: 'normal',
-            
-            // Healthcare-specific headers
             headers: {
                 'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.APPOINTMENT,
                 'X-Email-ID': emailId,
-                'X-Patient-ID': appointmentData.patientId || 'unknown'
+                'X-Patient-ID': appointmentData.patientId || 'unknown',
+                'X-Appointment-ID': appointmentData.appointmentId
             }
         };
         
-        const result = await transporter.sendMail(mailOptions);
-        
-        // Log email operation for compliance
-        logEmailOperation({
+        const result = await sendEmail(mailOptions, {
             emailId,
             category: EMAIL_CONFIG.CATEGORIES.APPOINTMENT,
             recipientType: 'patient',
-            status: 'sent',
             template: 'appointment-confirmation',
-            sentBy: options.sentBy
+            sentBy: options.sentBy,
+            recipient: patientEmail
         });
         
         console.log('✅ Appointment confirmation email sent:', {
             emailId,
             patientEmail: patientEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
-            appointmentId: appointmentData.appointmentId,
-            messageId: result.messageId
+            appointmentId: appointmentData.appointmentId
         });
         
         return {
@@ -331,24 +404,56 @@ export const sendAppointmentConfirmation = async (patientEmail, appointmentData,
 
 /**
  * Send prescription notification email
- * 
- * @param {string} patientEmail - Patient's email address
- * @param {Object} prescriptionData - Prescription details
- * @param {Object} options - Additional options
- * @returns {Object} - Email send result
  */
 export const sendPrescriptionNotification = async (patientEmail, prescriptionData, options = {}) => {
     try {
-        const transporter = createEmailTransporter();
         const emailId = `PRESC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
+        const medicationsHtml = prescriptionData.medications.map(med => `
+            <div style="background: #e8f5e8; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 4px solid #28a745;">
+                <strong>${med.name}</strong><br>
+                <strong>Dosage:</strong> ${med.dosage}<br>
+                <strong>Instructions:</strong> ${med.instructions}<br>
+                <strong>Quantity:</strong> ${med.quantity}<br>
+                <strong>Refills:</strong> ${med.refills}
+            </div>
+        `).join('');
+
+        const content = `
+            <h2>Hello ${prescriptionData.patientName},</h2>
+            <p>Dr. ${prescriptionData.doctorName} has issued a new prescription for you.</p>
+            
+            <div class="info-box">
+                <h3>📋 Prescription Details</h3>
+                <p><strong>Date Prescribed:</strong> ${prescriptionData.prescriptionDate}</p>
+                <p><strong>Prescription ID:</strong> ${prescriptionData.prescriptionId}</p>
+                <p><strong>Doctor:</strong> Dr. ${prescriptionData.doctorName}</p>
+                
+                <h4 style="margin-top: 20px;">Medications:</h4>
+                ${medicationsHtml}
+            </div>
+            
+            <div class="warning-box">
+                <h4>⚠️ Important Medication Information:</h4>
+                <ul>
+                    <li>Take medications exactly as prescribed</li>
+                    <li>Complete the full course of treatment, even if you feel better</li>
+                    <li>Do not share medications with others</li>
+                    <li>Contact your doctor if you experience any adverse effects</li>
+                    <li>Keep medications in their original containers</li>
+                </ul>
+            </div>
+            
+            <p><strong>Pharmacy Information:</strong></p>
+            <p>You can fill this prescription at any licensed pharmacy. Present this email or your prescription ID: <strong>${prescriptionData.prescriptionId}</strong></p>
+        `;
+
         const mailOptions = {
             from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
             to: patientEmail,
             subject: `New Prescription from Dr. ${prescriptionData.doctorName}`,
-            html: generatePrescriptionEmailTemplate(prescriptionData),
-            priority: 'high', // Prescriptions are high priority
-            
+            html: generateEmailTemplate(content, 'New Prescription Available', 'prescription'),
+            priority: 'high',
             headers: {
                 'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.PRESCRIPTION,
                 'X-Email-ID': emailId,
@@ -357,23 +462,19 @@ export const sendPrescriptionNotification = async (patientEmail, prescriptionDat
             }
         };
         
-        const result = await transporter.sendMail(mailOptions);
-        
-        logEmailOperation({
+        const result = await sendEmail(mailOptions, {
             emailId,
             category: EMAIL_CONFIG.CATEGORIES.PRESCRIPTION,
             recipientType: 'patient',
-            status: 'sent',
             template: 'prescription-notification',
-            sentBy: options.sentBy
+            sentBy: options.sentBy,
+            recipient: patientEmail
         });
         
         console.log('✅ Prescription notification sent:', {
             emailId,
             patientEmail: patientEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
-            prescriptionId: prescriptionData.prescriptionId,
-            doctorName: prescriptionData.doctorName,
-            messageId: result.messageId
+            prescriptionId: prescriptionData.prescriptionId
         });
         
         return {
@@ -391,79 +492,45 @@ export const sendPrescriptionNotification = async (patientEmail, prescriptionDat
 
 /**
  * Send appointment reminder email
- * 
- * @param {string} patientEmail - Patient's email address
- * @param {Object} appointmentData - Appointment details
- * @param {Object} options - Additional options
- * @returns {Object} - Email send result
  */
 export const sendAppointmentReminder = async (patientEmail, appointmentData, options = {}) => {
     try {
-        const transporter = createEmailTransporter();
         const emailId = `REMIND-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
-        const reminderTemplate = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Appointment Reminder</title>
-            <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: #ffc107; color: #333; padding: 20px; text-align: center; }
-                .content { padding: 30px 20px; background: #f9f9f9; }
-                .reminder-box { background: #fff3cd; border: 2px solid #ffc107; padding: 20px; margin: 20px 0; border-radius: 5px; text-align: center; }
-                .appointment-info { background: white; padding: 20px; margin: 20px 0; border-radius: 5px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>⏰ Appointment Reminder</h1>
-                    <p>Healthcare Consultation System</p>
-                </div>
-                
-                <div class="content">
-                    <h2>Hello ${appointmentData.patientName},</h2>
-                    
-                    <div class="reminder-box">
-                        <h3>🚨 Don't Forget Your Upcoming Appointment!</h3>
-                        <p><strong>Tomorrow at ${appointmentData.appointmentTime}</strong></p>
-                    </div>
-                    
-                    <div class="appointment-info">
-                        <h3>📅 Appointment Details</h3>
-                        <p><strong>Date:</strong> ${appointmentData.appointmentDate}</p>
-                        <p><strong>Time:</strong> ${appointmentData.appointmentTime}</p>
-                        <p><strong>Doctor:</strong> Dr. ${appointmentData.doctorName}</p>
-                        <p><strong>Location:</strong> ${appointmentData.location}</p>
-                        <p><strong>Appointment ID:</strong> ${appointmentData.appointmentId}</p>
-                    </div>
-                    
-                    <div style="background: #e8f4f8; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <h4>📋 Please Remember:</h4>
-                        <ul>
-                            <li>Arrive 15 minutes early</li>
-                            <li>Bring your ID and insurance card</li>
-                            <li>Bring any medications you're currently taking</li>
-                        </ul>
-                    </div>
-                    
-                    <p>Need to reschedule? Contact us at ${process.env.HEALTHCARE_PHONE || '1-800-HEALTHCARE'}</p>
-                </div>
+        const content = `
+            <h2>Hello ${appointmentData.patientName},</h2>
+            
+            <div class="warning-box" style="text-align: center;">
+                <h3>🚨 Don't Forget Your Upcoming Appointment!</h3>
+                <p style="font-size: 18px; font-weight: bold;">Tomorrow at ${appointmentData.appointmentTime}</p>
             </div>
-        </body>
-        </html>
+            
+            <div class="info-box">
+                <h3>📅 Appointment Details</h3>
+                <p><strong>Date:</strong> ${appointmentData.appointmentDate}</p>
+                <p><strong>Time:</strong> ${appointmentData.appointmentTime}</p>
+                <p><strong>Doctor:</strong> Dr. ${appointmentData.doctorName}</p>
+                <p><strong>Location:</strong> ${appointmentData.location}</p>
+                <p><strong>Appointment ID:</strong> ${appointmentData.appointmentId}</p>
+            </div>
+            
+            <div class="info-box">
+                <h4>📋 Please Remember:</h4>
+                <ul>
+                    <li>Arrive 15 minutes early</li>
+                    <li>Bring your ID and insurance card</li>
+                    <li>Bring any medications you're currently taking</li>
+                    <li>Bring relevant medical records or test results</li>
+                </ul>
+            </div>
         `;
-        
+
         const mailOptions = {
             from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
             to: patientEmail,
             subject: `Reminder: Appointment Tomorrow with Dr. ${appointmentData.doctorName}`,
-            html: reminderTemplate,
+            html: generateEmailTemplate(content, 'Appointment Reminder', 'appointment'),
             priority: 'high',
-            
             headers: {
                 'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.APPOINTMENT,
                 'X-Email-ID': emailId,
@@ -471,15 +538,13 @@ export const sendAppointmentReminder = async (patientEmail, appointmentData, opt
             }
         };
         
-        const result = await transporter.sendMail(mailOptions);
-        
-        logEmailOperation({
+        const result = await sendEmail(mailOptions, {
             emailId,
             category: EMAIL_CONFIG.CATEGORIES.APPOINTMENT,
             recipientType: 'patient',
-            status: 'sent',
             template: 'appointment-reminder',
-            sentBy: options.sentBy || 'system-scheduler'
+            sentBy: options.sentBy || 'system-scheduler',
+            recipient: patientEmail
         });
         
         return {
@@ -496,186 +561,55 @@ export const sendAppointmentReminder = async (patientEmail, appointmentData, opt
 };
 
 /**
- * Send medical report email
- * 
- * @param {string} patientEmail - Patient's email address
- * @param {Object} reportData - Medical report details
- * @param {Object} options - Additional options
- * @returns {Object} - Email send result
- */
-export const sendMedicalReport = async (patientEmail, reportData, options = {}) => {
-    try {
-        const transporter = createEmailTransporter();
-        const emailId = `REPORT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        const reportTemplate = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Medical Report Available</title>
-            <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: #17a2b8; color: white; padding: 20px; text-align: center; }
-                .content { padding: 30px 20px; background: #f9f9f9; }
-                .report-details { background: white; padding: 20px; margin: 20px 0; border-radius: 5px; }
-                .security-notice { background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 5px; margin: 20px 0; }
-                .button { display: inline-block; background: #17a2b8; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>📊 Medical Report Available</h1>
-                    <p>Healthcare Consultation System</p>
-                </div>
-                
-                <div class="content">
-                    <h2>Hello ${reportData.patientName},</h2>
-                    <p>Your medical report is now available for review.</p>
-                    
-                    <div class="report-details">
-                        <h3>📋 Report Details</h3>
-                        <p><strong>Report Type:</strong> ${reportData.reportType}</p>
-                        <p><strong>Date:</strong> ${reportData.reportDate}</p>
-                        <p><strong>Doctor:</strong> Dr. ${reportData.doctorName}</p>
-                        <p><strong>Report ID:</strong> ${reportData.reportId}</p>
-                        ${reportData.summary ? `<p><strong>Summary:</strong> ${reportData.summary}</p>` : ''}
-                    </div>
-                    
-                    <div class="security-notice">
-                        <h4>🔒 Security Notice</h4>
-                        <p>This report contains confidential medical information. Please access it through our secure portal using your patient login credentials.</p>
-                    </div>
-                    
-                    <div style="text-align: center; margin: 30px 0;">
-                        <a href="${reportData.secureLink || '#'}" class="button">View Secure Report</a>
-                    </div>
-                    
-                    <p>If you have questions about this report, please contact your healthcare provider.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        `;
-        
-        const mailOptions = {
-            from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
-            to: patientEmail,
-            subject: `Medical Report Available - ${reportData.reportType}`,
-            html: reportTemplate,
-            priority: 'normal',
-            
-            headers: {
-                'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.MEDICAL_REPORT,
-                'X-Email-ID': emailId,
-                'X-Report-ID': reportData.reportId
-            }
-        };
-        
-        const result = await transporter.sendMail(mailOptions);
-        
-        logEmailOperation({
-            emailId,
-            category: EMAIL_CONFIG.CATEGORIES.MEDICAL_REPORT,
-            recipientType: 'patient',
-            status: 'sent',
-            template: 'medical-report',
-            sentBy: options.sentBy
-        });
-        
-        return {
-            success: true,
-            emailId,
-            messageId: result.messageId,
-            category: EMAIL_CONFIG.CATEGORIES.MEDICAL_REPORT
-        };
-        
-    } catch (error) {
-        console.error('❌ Failed to send medical report:', error);
-        throw new Error(`Medical report email failed: ${error.message}`);
-    }
-};
-
-/**
  * Send email verification for new users
- * 
- * @param {string} userEmail - User's email address
- * @param {Object} verificationData - Verification details
- * @returns {Object} - Email send result
  */
 export const sendEmailVerification = async (userEmail, verificationData) => {
     try {
-        const transporter = createEmailTransporter();
         const emailId = `VERIFY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
-        const verificationTemplate = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Verify Your Email</title>
-            <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: #28a745; color: white; padding: 20px; text-align: center; }
-                .content { padding: 30px 20px; background: #f9f9f9; }
-                .verification-box { background: white; padding: 30px; margin: 20px 0; border-radius: 5px; text-align: center; }
-                .button { display: inline-block; background: #28a745; color: white; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-size: 16px; }
-                .code { font-size: 24px; font-weight: bold; color: #28a745; background: #f8f9fa; padding: 15px; border-radius: 5px; letter-spacing: 5px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>✉️ Verify Your Email</h1>
-                    <p>Healthcare Consultation System</p>
-                </div>
-                
-                <div class="content">
-                    <h2>Welcome to Healthcare System!</h2>
-                    <p>Thank you for creating your account. Please verify your email address to complete your registration.</p>
-                    
-                    <div class="verification-box">
-                        <h3>Click the button below to verify your email:</h3>
-                        <a href="${verificationData.verificationLink}" class="button">Verify Email Address</a>
-                        
-                        <p style="margin-top: 30px;">Or use this verification code:</p>
-                        <div class="code">${verificationData.verificationCode}</div>
-                    </div>
-                    
-                    <p><strong>This verification link will expire in 24 hours.</strong></p>
-                    <p>If you didn't create this account, please ignore this email.</p>
+        const content = `
+            <h2>Welcome to Healthcare System!</h2>
+            <p>Thank you for creating your account. Please verify your email address to complete your registration.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${verificationData.verificationLink}" class="button">Verify Email Address</a>
+            </div>
+            
+            <div class="info-box" style="text-align: center;">
+                <p>Or use this verification code:</p>
+                <div style="font-size: 24px; font-weight: bold; color: #28a745; background: #f8f9fa; padding: 15px; border-radius: 6px; letter-spacing: 5px; margin: 15px 0;">
+                    ${verificationData.verificationCode}
                 </div>
             </div>
-        </body>
-        </html>
+            
+            <div class="security-notice">
+                <p><strong>This verification link will expire in 24 hours.</strong></p>
+                <p>If you didn't create this account, please ignore this email.</p>
+            </div>
         `;
-        
+
         const mailOptions = {
             from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
             to: userEmail,
             subject: 'Verify Your Healthcare System Account',
-            html: verificationTemplate,
+            html: generateEmailTemplate(content, 'Verify Your Email', 'verification'),
             priority: 'high',
-            
             headers: {
                 'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.VERIFICATION,
                 'X-Email-ID': emailId
             }
         };
         
-        const result = await transporter.sendMail(mailOptions);
-        
-        logEmailOperation({
+        const result = await sendEmail(mailOptions, {
             emailId,
             category: EMAIL_CONFIG.CATEGORIES.VERIFICATION,
             recipientType: 'user',
-            status: 'sent',
             template: 'email-verification',
-            sentBy: 'system'
+            sentBy: 'system',
+            recipient: userEmail
         });
+        
+        console.log('✅ Email verification sent to:', userEmail.replace(/(.{3}).*(@.*)/, '$1***$2'));
         
         return {
             success: true,
@@ -692,71 +626,36 @@ export const sendEmailVerification = async (userEmail, verificationData) => {
 
 /**
  * Send password reset email
- * 
- * @param {string} userEmail - User's email address
- * @param {Object} resetData - Password reset details
- * @returns {Object} - Email send result
  */
 export const sendPasswordReset = async (userEmail, resetData) => {
     try {
-        const transporter = createEmailTransporter();
         const emailId = `RESET-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
-        const resetTemplate = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Password Reset Request</title>
-            <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: #dc3545; color: white; padding: 20px; text-align: center; }
-                .content { padding: 30px 20px; background: #f9f9f9; }
-                .reset-box { background: white; padding: 30px; margin: 20px 0; border-radius: 5px; text-align: center; }
-                .button { display: inline-block; background: #dc3545; color: white; padding: 15px 40px; text-decoration: none; border-radius: 5px; }
-                .security-notice { background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 5px; margin: 20px 0; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🔒 Password Reset Request</h1>
-                    <p>Healthcare Consultation System</p>
-                </div>
-                
-                <div class="content">
-                    <h2>Password Reset Request</h2>
-                    <p>We received a request to reset the password for your healthcare account.</p>
-                    
-                    <div class="reset-box">
-                        <h3>Click the button below to reset your password:</h3>
-                        <a href="${resetData.resetLink}" class="button">Reset Password</a>
-                    </div>
-                    
-                    <div class="security-notice">
-                        <h4>🔐 Security Information</h4>
-                        <ul>
-                            <li>This link will expire in 30 minutes</li>
-                            <li>If you didn't request this reset, please ignore this email</li>
-                            <li>Your current password remains unchanged until you create a new one</li>
-                        </ul>
-                    </div>
-                    
-                    <p>For security reasons, if you continue to have trouble accessing your account, please contact our support team.</p>
-                </div>
+        const content = `
+            <h2>Password Reset Request</h2>
+            <p>We received a request to reset the password for your healthcare account.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${resetData.resetLink}" class="button">Reset Password</a>
             </div>
-        </body>
-        </html>
+            
+            <div class="security-notice">
+                <h4>🔐 Security Information</h4>
+                <ul>
+                    <li>This link will expire in 30 minutes</li>
+                    <li>If you didn't request this reset, please ignore this email</li>
+                    <li>Your current password remains unchanged until you create a new one</li>
+                    <li>For security reasons, do not share this link with anyone</li>
+                </ul>
+            </div>
         `;
-        
+
         const mailOptions = {
             from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
             to: userEmail,
             subject: 'Password Reset Request - Healthcare System',
-            html: resetTemplate,
+            html: generateEmailTemplate(content, 'Password Reset Request', 'notification'),
             priority: 'high',
-            
             headers: {
                 'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.NOTIFICATION,
                 'X-Email-ID': emailId,
@@ -764,16 +663,16 @@ export const sendPasswordReset = async (userEmail, resetData) => {
             }
         };
         
-        const result = await transporter.sendMail(mailOptions);
-        
-        logEmailOperation({
+        const result = await sendEmail(mailOptions, {
             emailId,
             category: EMAIL_CONFIG.CATEGORIES.NOTIFICATION,
             recipientType: 'user',
-            status: 'sent',
             template: 'password-reset',
-            sentBy: 'system'
+            sentBy: 'system',
+            recipient: userEmail
         });
+        
+        console.log('✅ Password reset email sent to:', userEmail.replace(/(.{3}).*(@.*)/, '$1***$2'));
         
         return {
             success: true,
@@ -789,65 +688,127 @@ export const sendPasswordReset = async (userEmail, resetData) => {
 };
 
 /**
- * Send bulk emails (for announcements, etc.)
- * 
- * @param {Array} recipients - Array of recipient email addresses
- * @param {Object} emailData - Email content and details
- * @param {Object} options - Additional options
- * @returns {Array} - Array of send results
+ * Send welcome email to new users
  */
-export const sendBulkEmail = async (recipients, emailData, options = {}) => {
-    const results = [];
-    const batchSize = options.batchSize || 50; // Limit batch size for rate limiting
-    
-    for (let i = 0; i < recipients.length; i += batchSize) {
-        const batch = recipients.slice(i, i + batchSize);
-        const batchPromises = batch.map(async (recipient) => {
-            try {
-                // Use appropriate email function based on type
-                let result;
-                switch (emailData.type) {
-                    case 'appointment-reminder':
-                        result = await sendAppointmentReminder(recipient, emailData.data, options);
-                        break;
-                    default:
-                        throw new Error(`Unsupported bulk email type: ${emailData.type}`);
-                }
-                return { recipient, success: true, result };
-            } catch (error) {
-                return { recipient, success: false, error: error.message };
+export const sendWelcomeEmail = async (userEmail, welcomeData) => {
+    try {
+        const emailId = `WELCOME-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const content = `
+            <h2>Hello ${welcomeData.firstName},</h2>
+            <p>Welcome to our healthcare family! We're excited to have you on board and look forward to helping you manage your health effectively.</p>
+            
+            <div class="info-box" style="text-align: center;">
+                <h3>Your account has been successfully created!</h3>
+                <p><strong>Role:</strong> ${welcomeData.role}</p>
+                <p><strong>Account ID:</strong> ${welcomeData.userId}</p>
+                
+                <div style="margin: 25px 0;">
+                    <a href="${welcomeData.dashboardLink || '#'}" class="button">Access Your Dashboard</a>
+                </div>
+            </div>
+            
+            <h3>🌟 What you can do with your account:</h3>
+            <div class="feature-grid">
+                <div class="feature">
+                    <h4>📅 Book Appointments</h4>
+                    <p>Schedule consultations with healthcare providers</p>
+                </div>
+                <div class="feature">
+                    <h4>💊 Manage Prescriptions</h4>
+                    <p>Access and track your medications</p>
+                </div>
+                <div class="feature">
+                    <h4>📊 View Medical Records</h4>
+                    <p>Access your health information securely</p>
+                </div>
+                <div class="feature">
+                    <h4>👨‍⚕️ Connect with Doctors</h4>
+                    <p>Communicate with healthcare professionals</p>
+                </div>
+            </div>
+            
+            <div class="info-box">
+                <h4>🔒 Security First</h4>
+                <p>Your health information is protected with enterprise-grade security and complies with healthcare privacy regulations including HIPAA.</p>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
+            to: userEmail,
+            subject: `Welcome to Healthcare System, ${welcomeData.firstName}!`,
+            html: generateEmailTemplate(content, 'Welcome to Healthcare System', 'welcome'),
+            priority: 'normal',
+            headers: {
+                'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.WELCOME,
+                'X-Email-ID': emailId,
+                'X-User-Role': welcomeData.role
             }
+        };
+        
+        const result = await sendEmail(mailOptions, {
+            emailId,
+            category: EMAIL_CONFIG.CATEGORIES.WELCOME,
+            recipientType: 'user',
+            template: 'welcome-email',
+            sentBy: 'system',
+            recipient: userEmail
         });
         
-        const batchResults = await Promise.allSettled(batchPromises);
-        results.push(...batchResults.map(r => r.value || { success: false, error: 'Unknown error' }));
+        console.log('✅ Welcome email sent to:', userEmail.replace(/(.{3}).*(@.*)/, '$1***$2'));
         
-        // Rate limiting delay between batches
-        if (i + batchSize < recipients.length) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
-        }
+        return {
+            success: true,
+            emailId,
+            messageId: result.messageId,
+            category: EMAIL_CONFIG.CATEGORIES.WELCOME
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to send welcome email:', error);
+        throw new Error(`Welcome email failed: ${error.message}`);
     }
-    
-    return results;
 };
 
 /**
  * Test email configuration
- * 
- * @returns {Object} - Test result
  */
 export const testEmailConfiguration = async () => {
     try {
-        const transporter = createEmailTransporter();
-        const testResult = await transporter.verify();
+        const transporter = getEmailTransporter();
+        await transporter.verify();
         
         console.log('✅ Email configuration test passed');
-        return { success: true, message: 'Email service is properly configured' };
+        return { 
+            success: true, 
+            message: 'Email service is properly configured',
+            service: EMAIL_CONFIG.SERVICE,
+            fromEmail: EMAIL_CONFIG.FROM_EMAIL
+        };
         
     } catch (error) {
         console.error('❌ Email configuration test failed:', error);
-        return { success: false, error: error.message };
+        return { 
+            success: false, 
+            error: error.message,
+            service: EMAIL_CONFIG.SERVICE
+        };
     }
+};
+
+/**
+ * Get email service status
+ */
+export const getEmailServiceStatus = () => {
+    return {
+        service: EMAIL_CONFIG.SERVICE,
+        fromEmail: EMAIL_CONFIG.FROM_EMAIL,
+        fromName: EMAIL_CONFIG.FROM_NAME,
+        encryptionEnabled: EMAIL_CONFIG.ENCRYPTION_ENABLED,
+        auditEnabled: EMAIL_CONFIG.AUDIT_ENABLED,
+        status: emailTransporter ? 'connected' : 'disconnected'
+    };
 };
 
 // Export email configuration for use in other modules

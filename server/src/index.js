@@ -28,18 +28,131 @@ dotenv.config({
     path: './.env'
 });
 
-// Import database utilities
-import { DB_NAME } from "./constants.js";
-import connectDB from "./db/index.js";
-
-// Import Express app configuration
-import { app } from "./app.js";
-
-// Import mongoose for connection monitoring
+// Import core dependencies
+import express from "express";
 import mongoose from "mongoose";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+
+// Import routes
+import patientRoutes from "./routes/patient.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
+import authRoutes from "./routes/auth.routes.js";
+import userRoutes from "./routes/user.routes.js";
+
+// Import middleware
+import { errorHandler } from "./middlewares/error.middleware.js";
 
 // ==========================================
-// CONFIGURATION
+// EXPRESS APP CONFIGURATION
+// ==========================================
+
+// Create Express application
+const app = express();
+
+// CORS configuration
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+}));
+
+// Body parsing middleware
+app.use(express.json({ limit: "16kb" }));
+app.use(express.urlencoded({ extended: true, limit: "16kb" }));
+app.use(cookieParser());
+
+// Static files middleware
+app.use(express.static("public"));
+
+// ==========================================
+// ROUTES CONFIGURATION
+// ==========================================
+
+// Health check endpoint
+app.get("/api/v1/health", (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Healthcare Consultation System is running healthy",
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || "development",
+        database: mongoose.connection.readyState === 1 ? "Connected" : "Disconnected"
+    });
+});
+
+// API information endpoint
+app.get("/api/v1", (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Welcome to Healthcare Consultation System API",
+        version: "1.0.0",
+        documentation: "https://github.com/your-repo/docs",
+        endpoints: {
+            auth: "/api/v1/auth",
+            users: "/api/v1/users",
+            patients: "/api/v1/patients",
+            admin: "/api/v1/admin"
+        }
+    });
+});
+
+// Main API routes
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/patients", patientRoutes);
+app.use("/api/v1/admin", adminRoutes);
+
+// 404 handler for undefined routes - FIXED: Remove the "*" route
+// This should be the last route defined
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `Route ${req.originalUrl} not found`,
+        suggestion: "Check the API documentation for available endpoints",
+        availableEndpoints: [
+            "GET /api/v1/health",
+            "GET /api/v1",
+            "POST /api/v1/auth/register",
+            "POST /api/v1/auth/login",
+            "GET /api/v1/users/profile",
+            "GET /api/v1/patients",
+            "GET /api/v1/admin/dashboard"
+        ]
+    });
+});
+
+// Global error handling middleware - MUST be after all routes
+app.use(errorHandler);
+
+// Export the app for testing and server startup
+export { app };
+
+// ==========================================
+// DATABASE CONNECTION
+// ==========================================
+
+/**
+ * Connect to MongoDB database
+ */
+const connectDB = async () => {
+    try {
+        const connectionInstance = await mongoose.connect(
+            process.env.MONGODB_URI || "mongodb://localhost:27017/healthcare-consultation"
+        );
+        
+        console.log(`✅ MongoDB connected: ${connectionInstance.connection.host}`);
+        console.log(`📊 Database name: ${connectionInstance.connection.name}`);
+        
+        return connectionInstance;
+    } catch (error) {
+        console.error("❌ MongoDB connection error:", error);
+        throw error;
+    }
+};
+
+// ==========================================
+// SERVER CONFIGURATION
 // ==========================================
 
 // Define the port for the healthcare system server
@@ -68,7 +181,7 @@ const logServerInfo = () => {
     console.log('='.repeat(60));
     console.log(`🚀 Server started successfully`);
     console.log(`🌐 Server URL: http://localhost:${PORT}`);
-    console.log(`📊 Database: ${DB_NAME}`);
+    console.log(`📊 Database: ${mongoose.connection.name}`);
     console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📅 Started at: ${SERVER_START_TIME.toLocaleString()}`);
     console.log(`⏱️  Uptime: 0 seconds`);
@@ -76,8 +189,10 @@ const logServerInfo = () => {
     console.log('✅ Available Endpoints:');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/health');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1');
-    console.log('   - POST http://localhost:' + PORT + '/api/v1/users/register');
-    console.log('   - POST http://localhost:' + PORT + '/api/v1/users/login');
+    console.log('   - POST http://localhost:' + PORT + '/api/v1/auth/register');
+    console.log('   - POST http://localhost:' + PORT + '/api/v1/auth/login');
+    console.log('   - GET  http://localhost:' + PORT + '/api/v1/patients');
+    console.log('   - GET  http://localhost:' + PORT + '/api/v1/admin/dashboard');
     console.log('='.repeat(60) + '\n');
 };
 
@@ -165,7 +280,7 @@ const connectWithRetry = async () => {
         
         await connectDB();
         
-        console.log(`✅ Successfully connected to MongoDB: ${DB_NAME}`);
+        console.log(`✅ Successfully connected to MongoDB: ${mongoose.connection.name}`);
         DB_RETRY_CONFIG.currentRetry = 0; // Reset retry counter on success
         
         return true;
@@ -409,12 +524,6 @@ startServer();
  * ACCESS_TOKEN_EXPIRY=15m
  * REFRESH_TOKEN_SECRET=your-super-secret-refresh-token-key-minimum-32-characters
  * REFRESH_TOKEN_EXPIRY=7d
- * JWT_SECRET=your-jwt-secret-key
- * JWT_EXPIRY=15m
- * JWT_REFRESH_SECRET=your-jwt-refresh-secret-key
- * MEDICAL_RECORD_SECRET=your-medical-record-secret-key
- * PASSWORD_RESET_SECRET=your-password-reset-secret-key
- * EMAIL_VERIFICATION_SECRET=your-email-verification-secret-key
  * 
  * # CORS
  * CORS_ORIGIN=http://localhost:3000,http://localhost:5173
@@ -428,22 +537,30 @@ startServer();
  * EMAIL_SERVICE=gmail
  * EMAIL_USER=your-email@gmail.com
  * EMAIL_PASS=your-app-specific-password
- * EMAIL_FROM=noreply@healthcare-system.com
- * EMAIL_FROM_NAME=Healthcare System
  * 
  * # Frontend URL
  * FRONTEND_URL=http://localhost:3000
  * 
  * ==========================================
- * PACKAGE.JSON SCRIPTS
+ * PACKAGE.JSON DEPENDENCIES NEEDED
  * ==========================================
  * 
- * Add these scripts to your package.json:
+ * Make sure you have these dependencies:
  * 
- * "scripts": {
- *   "dev": "nodemon -r dotenv/config src/index.js",
- *   "start": "node src/index.js",
- *   "prod": "NODE_ENV=production node src/index.js"
+ * "dependencies": {
+ *   "express": "^4.18.2",
+ *   "mongoose": "^7.5.0",
+ *   "bcryptjs": "^2.4.3",
+ *   "jsonwebtoken": "^9.0.2",
+ *   "cors": "^2.8.5",
+ *   "cookie-parser": "^1.4.6",
+ *   "dotenv": "^16.3.1",
+ *   "cloudinary": "^1.40.0",
+ *   "nodemailer": "^6.9.4"
+ * }
+ * 
+ * "devDependencies": {
+ *   "nodemon": "^3.0.1"
  * }
  * 
  * ==========================================
@@ -454,43 +571,34 @@ startServer();
  *   npm run dev
  * 
  * Production:
- *   npm run prod
+ *   npm start
  * 
  * ==========================================
- * FEATURES IMPLEMENTED
+ * PROJECT STRUCTURE
  * ==========================================
  * 
- * ✅ Environment variable validation
- * ✅ Database connection with retry logic (5 attempts)
- * ✅ Graceful shutdown (SIGTERM, SIGINT)
- * ✅ Uncaught exception handling
- * ✅ Unhandled promise rejection handling
- * ✅ MongoDB connection monitoring
- * ✅ Server error handling (port in use, permission denied)
- * ✅ Comprehensive logging with emojis
- * ✅ Server health monitoring (production)
- * ✅ Startup/shutdown statistics
- * ✅ Force exit timeout (prevents hanging)
- * ✅ Uptime tracking
- * ✅ Memory usage monitoring
- * 
- * ==========================================
- * IMPROVEMENTS FROM ORIGINAL CODE
- * ==========================================
- * 
- * 1. ✅ Added environment variable validation
- * 2. ✅ Added database retry logic (5 attempts with 5s delay)
- * 3. ✅ Added server error handling (EADDRINUSE, EACCES)
- * 4. ✅ Added MongoDB connection monitoring
- * 5. ✅ Added comprehensive logging functions
- * 6. ✅ Added server health monitoring for production
- * 7. ✅ Added force exit timeouts
- * 8. ✅ Added uptime and memory tracking
- * 9. ✅ Better error messages and formatting
- * 10. ✅ Added optional env variable warnings
- * 11. ✅ Removed commented retry logic (implemented properly)
- * 12. ✅ Added available endpoints display on startup
- * 13. ✅ Better organization with helper functions
- * 14. ✅ Added startup/shutdown statistics
- * 15. ✅ Production-ready with comprehensive error handling
+ * src/
+ * ├── index.js (this file)
+ * ├── app.js (Express app configuration)
+ * ├── routes/
+ * │   ├── auth.routes.js
+ * │   ├── user.routes.js
+ * │   ├── patient.routes.js
+ * │   └── admin.routes.js
+ * ├── controllers/
+ * │   ├── auth.controller.js
+ * │   ├── user.controller.js
+ * │   ├── patient.controller.js
+ * │   └── admin.controller.js
+ * ├── models/
+ * │   ├── user.model.js
+ * │   ├── patient.model.js
+ * │   └── auditLog.model.js
+ * ├── middlewares/
+ * │   ├── auth.middleware.js
+ * │   ├── roleAuth.middleware.js
+ * │   └── error.middleware.js
+ * └── utils/
+ *     ├── ApiResponse.js
+ *     └── ApiError.js
  */

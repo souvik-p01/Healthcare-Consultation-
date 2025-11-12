@@ -15,7 +15,7 @@ const paymentSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: [true, 'User reference is required'],
-            index: true
+            //index: true
         },
         patientId: {
             type: Schema.Types.ObjectId,
@@ -301,11 +301,11 @@ const paymentSchema = new Schema(
 /**
  * Indexes for optimized queries
  */
-paymentSchema.index({ userId: 1, createdAt: -1 });
-paymentSchema.index({ appointmentId: 1 });
+// paymentSchema.index({ userId: 1, createdAt: -1 });
+// paymentSchema.index({ appointmentId: 1 });
 paymentSchema.index({ status: 1, createdAt: -1 });
-paymentSchema.index({ transactionId: 1 });
-paymentSchema.index({ 'invoice.invoiceNumber': 1 });
+// paymentSchema.index({ transactionId: 1 });
+// paymentSchema.index({ 'invoice.invoiceNumber': 1 });
 paymentSchema.index({ createdAt: 1 });
 paymentSchema.index({ 'metadata.location': '2dsphere' });
 

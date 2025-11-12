@@ -16,7 +16,7 @@ const consultationSchema = new Schema(
             ref: 'Appointment',
             required: [true, 'Appointment reference is required'],
             unique: true,
-            index: true
+            //index: true
         },
         patientId: {
             type: Schema.Types.ObjectId,

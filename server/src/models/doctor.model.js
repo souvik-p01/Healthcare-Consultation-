@@ -16,7 +16,7 @@ const doctorSchema = new Schema(
             ref: 'User',
             required: [true, 'User reference is required'],
             unique: true,
-            index: true
+            //index: true
         },
         
         // Professional Information
