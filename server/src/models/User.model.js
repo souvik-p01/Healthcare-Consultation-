@@ -136,7 +136,7 @@ const userSchema = new Schema(
             required: function() {
                 return this.role === 'doctor';
             },
-            index: true
+            //index: true
         },
         qualification: {
             type: String,
@@ -266,7 +266,7 @@ const userSchema = new Schema(
  * Only define indexes here, not in schema fields
  */
 userSchema.index({ email: 1, role: 1 });
-// userSchema.index({ phoneNumber: 1 });
+userSchema.index({ phoneNumber: 1 });
 userSchema.index({ role: 1, isActive: 1 });
 userSchema.index({ specialization: 1 });
 userSchema.index({ department: 1 });

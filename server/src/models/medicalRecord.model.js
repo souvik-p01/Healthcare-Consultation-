@@ -15,7 +15,7 @@ const medicalRecordSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'Patient',
             required: [true, 'Patient reference is required'],
-            index: true
+            //index: true
         },
         
         // Doctor Information
@@ -23,14 +23,14 @@ const medicalRecordSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: [true, 'Doctor reference is required'],
-            index: true
+            //index: true
         },
         
         // Appointment Reference
         appointmentId: {
             type: Schema.Types.ObjectId,
             ref: 'Appointment',
-            index: true
+            //index: true
         },
         
         // Record Type and Category
@@ -47,7 +47,7 @@ const medicalRecordSchema = new Schema(
                 'general'
             ],
             required: true,
-            index: true
+            //index: true
         },
         category: {
             type: String,
@@ -312,7 +312,7 @@ const medicalRecordSchema = new Schema(
             type: String,
             enum: ['draft', 'finalized', 'amended', 'void'],
             default: 'finalized',
-            index: true
+            //index: true
         },
         
         // Audit Trail

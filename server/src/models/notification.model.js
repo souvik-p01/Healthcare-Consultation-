@@ -15,13 +15,13 @@ const notificationSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: [true, 'Recipient reference is required'],
-            index: true
+            //index: true
         },
         recipientType: {
             type: String,
             enum: ['patient', 'doctor', 'nurse', 'admin', 'all'],
             required: true,
-            index: true
+            //index: true
         },
         
         // Notification Content
@@ -59,7 +59,7 @@ const notificationSchema = new Schema(
                 'announcement'
             ],
             required: true,
-            index: true
+            //index: true
         },
         category: {
             type: String,
@@ -71,7 +71,7 @@ const notificationSchema = new Schema(
             type: String,
             enum: ['low', 'medium', 'high', 'urgent'],
             default: 'medium',
-            index: true
+            //index: true
         },
         isUrgent: {
             type: Boolean,
@@ -83,7 +83,7 @@ const notificationSchema = new Schema(
             type: String,
             enum: ['sent', 'delivered', 'read', 'failed', 'pending'],
             default: 'sent',
-            index: true
+            //index: true
         },
         deliveryStatus: {
             email: {
@@ -160,7 +160,7 @@ const notificationSchema = new Schema(
         isRead: {
             type: Boolean,
             default: false,
-            index: true
+            //index: true
         },
         readAt: Date,
         acknowledged: {
@@ -177,11 +177,11 @@ const notificationSchema = new Schema(
         // Scheduling and Expiry
         scheduledFor: {
             type: Date,
-            index: true
+            //index: true
         },
         sentAt: {
             type: Date,
-            index: true
+            //index: true
         },
         expiresAt: {
             type: Date,

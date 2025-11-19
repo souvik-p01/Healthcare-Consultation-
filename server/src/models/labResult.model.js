@@ -15,7 +15,7 @@ const labResultSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'Patient',
             required: [true, 'Patient reference is required'],
-            index: true
+            //index: true
         },
         
         // Ordering Physician
@@ -23,14 +23,14 @@ const labResultSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: [true, 'Ordering physician is required'],
-            index: true
+            //index: true
         },
         
         // Medical Record Reference
         medicalRecordId: {
             type: Schema.Types.ObjectId,
             ref: 'MedicalRecord',
-            index: true
+            //index: true
         },
         
         // Test Information
@@ -38,7 +38,7 @@ const labResultSchema = new Schema(
             type: String,
             required: [true, 'Test name is required'],
             trim: true,
-            index: true
+            //index: true
         },
         testCode: {
             type: String, // LOINC code
@@ -59,7 +59,7 @@ const labResultSchema = new Schema(
                 'other'
             ],
             required: true,
-            index: true
+            //index: true
         },
         testCategory: {
             type: String,
@@ -109,7 +109,7 @@ const labResultSchema = new Schema(
             enum: ['ordered', 'collected', 'in-progress', 'completed', 'cancelled', 'rejected'],
             default: 'ordered',
             required: true,
-            index: true
+            //index: true
         },
         orderDate: {
             type: Date,
@@ -121,7 +121,7 @@ const labResultSchema = new Schema(
         completedDate: Date,
         resultDate: {
             type: Date,
-            index: true
+            //index: true
         },
         
         // Specimen Information
