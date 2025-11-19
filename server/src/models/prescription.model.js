@@ -30,14 +30,14 @@ const prescriptionSchema = new Schema(
         medicalRecordId: {
             type: Schema.Types.ObjectId,
             ref: 'MedicalRecord',
-            index: true
+            //index: true
         },
         
         // Appointment Reference
         appointmentId: {
             type: Schema.Types.ObjectId,
             ref: 'Appointment',
-            index: true
+            //index: true
         },
         
         // Prescription Details

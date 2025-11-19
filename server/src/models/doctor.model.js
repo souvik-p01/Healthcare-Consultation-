@@ -26,7 +26,7 @@ const doctorSchema = new Schema(
             unique: true,
             trim: true,
             uppercase: true,
-            index: true
+            //index: true
         },
         
         // Specializations and Expertise
@@ -324,7 +324,7 @@ const doctorSchema = new Schema(
         isVerified: {
             type: Boolean,
             default: false,
-            index: true
+            //index: true
         },
         verificationStatus: {
             type: String,
@@ -337,7 +337,7 @@ const doctorSchema = new Schema(
             type: String,
             enum: ['active', 'inactive', 'on-leave', 'suspended'],
             default: 'active',
-            index: true
+            //index: true
         },
         
         // Metadata

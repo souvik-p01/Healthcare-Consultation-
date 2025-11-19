@@ -20,14 +20,14 @@ const paymentSchema = new Schema(
         patientId: {
             type: Schema.Types.ObjectId,
             ref: 'Patient',
-            index: true
+            //index: true
         },
         
         // Service Reference
         appointmentId: {
             type: Schema.Types.ObjectId,
             ref: 'Appointment',
-            index: true
+            //index: true
         },
         serviceType: {
             type: String,
@@ -72,7 +72,7 @@ const paymentSchema = new Schema(
             type: String,
             enum: ['card', 'cash', 'online', 'insurance', 'wallet', 'upi', 'net-banking'],
             required: true,
-            index: true
+            //index: true
         },
         paymentGateway: {
             type: String,
@@ -85,7 +85,7 @@ const paymentSchema = new Schema(
             trim: true,
             unique: true,
             sparse: true,
-            index: true
+            //index: true
         },
         gatewayTransactionId: {
             type: String,
@@ -111,7 +111,7 @@ const paymentSchema = new Schema(
             ],
             default: 'pending',
             required: true,
-            index: true
+            //index: true
         },
         
         // Timestamps for status changes
@@ -131,7 +131,7 @@ const paymentSchema = new Schema(
                 type: String,
                 unique: true,
                 sparse: true,
-                index: true
+                //index: true
             },
             invoiceDate: {
                 type: Date,
@@ -301,8 +301,8 @@ const paymentSchema = new Schema(
 /**
  * Indexes for optimized queries
  */
-// paymentSchema.index({ userId: 1, createdAt: -1 });
-// paymentSchema.index({ appointmentId: 1 });
+paymentSchema.index({ userId: 1, createdAt: -1 });
+paymentSchema.index({ appointmentId: 1 });
 paymentSchema.index({ status: 1, createdAt: -1 });
 // paymentSchema.index({ transactionId: 1 });
 // paymentSchema.index({ 'invoice.invoiceNumber': 1 });
