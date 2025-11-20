@@ -9,7 +9,7 @@ import jwt from "jsonwebtoken";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { verifyToken } from "../utils/jwtUtils.js";
-import { User } from "../models/user.model.js";
+import { User } from "../models/User.model.js";
 
 /**
  * Verify JWT token and authenticate user
