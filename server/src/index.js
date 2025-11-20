@@ -97,6 +97,21 @@ app.get("/api/v1", (req, res) => {
     });
 });
 
+// Root route handler
+app.get("/", (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Healthcare Consultation System API",
+        version: "1.0.0",
+        endpoints: {
+            health: "/api/v1/health",
+            users: "/api/v1/users",
+            patients: "/api/v1/patients",
+            admin: "/api/v1/admin"
+        }
+    });
+});
+
 // Main API routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
@@ -132,8 +147,8 @@ app.use((req, res) => {
         availableEndpoints: [
             "GET /api/v1/health",
             "GET /api/v1",
-            "POST /api/v1/auth/register",
-            "POST /api/v1/auth/login",
+            "POST /api/v1/users/register",
+            "POST /api/v1/users/login",
             "GET /api/v1/users/profile",
             "GET /api/v1/patients",
             "GET /api/v1/admin/dashboard"
@@ -208,8 +223,8 @@ const logServerInfo = () => {
     console.log('✅ Available Endpoints:');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/health');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1');
-    console.log('   - POST http://localhost:' + PORT + '/api/v1/auth/register');
-    console.log('   - POST http://localhost:' + PORT + '/api/v1/auth/login');
+    console.log('   - POST http://localhost:' + PORT + '/api/v1/users/register');
+    console.log('   - POST http://localhost:' + PORT + '/api/v1/users/login');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/patients');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/admin/dashboard');
     console.log('='.repeat(60) + '\n');

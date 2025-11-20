@@ -120,31 +120,58 @@ const LoginSignUpPage = () => {
     try {
       setLoading(true);
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const baseURL = 'http://localhost:8000';
       
       if (isSignUp) {
-        console.log('🚀 Signup attempt:', { 
-          name: name.trim(), 
-          email: email.trim(), 
-          password: password 
+        const response = await fetch(`${baseURL}/api/v1/users/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            email: email.trim(),
+            password: password
+          })
         });
-        alert('✅ Account created successfully! Welcome to HealthCarePlus!');
-        setIsSignUp(false);
-        clearForm();
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          alert('✅ Account created successfully! Welcome to HealthCarePlus!');
+          setIsSignUp(false);
+          clearForm();
+        } else {
+          alert(`❌ ${data.message || 'Registration failed'}`);
+          triggerShake();
+        }
       } else {
-        console.log('🔑 Login attempt:', { 
-          email: email.trim(), 
-          password: password 
+        const response = await fetch(`${baseURL}/api/v1/users/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email.trim(),
+            password: password
+          })
         });
-        alert('✅ Login successful! Redirecting to dashboard...');
-        clearForm();
-        navigate('/dashboard'); // Redirect to a dashboard page (you can define this route)
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          alert('✅ Login successful! Redirecting to dashboard...');
+          clearForm();
+          navigate('/dashboard');
+        } else {
+          alert(`❌ ${data.message || 'Login failed'}`);
+          triggerShake();
+        }
       }
       
     } catch (error) {
       console.error('Authentication error:', error);
-      alert('❌ An error occurred. Please try again.');
+      alert('❌ Network error. Please check your connection.');
       triggerShake();
     } finally {
       setLoading(false);
