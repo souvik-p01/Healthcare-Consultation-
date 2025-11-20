@@ -158,10 +158,17 @@ router.get("/", (req, res) => {
 router.use("*", (req, res) => {
     res.status(404).json({
         success: false,
-        message: "API endpoint not found",
-        requestedUrl: req.originalUrl,
-        availableEndpoints: "/api/v1",
-        documentation: process.env.API_DOCS_URL || "https://docs.yourhealthcareapi.com",
+        message: "Route / not found",
+        suggestion: "Check the API documentation for available endpoints",
+        availableEndpoints: [
+            "GET /api/v1/health",
+            "GET /api/v1",
+            "POST /api/v1/auth/register",
+            "POST /api/v1/auth/login",
+            "GET /api/v1/users/profile",
+            "GET /api/v1/patients",
+            "GET /api/v1/admin/dashboard"
+        ],
         timestamp: new Date().toISOString()
     });
 });

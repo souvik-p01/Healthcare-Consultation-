@@ -103,6 +103,25 @@ app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/patients", patientRoutes);
 app.use("/api/v1/admin", adminRoutes);
 
+// Root route handler
+app.get("/", (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Welcome to Healthcare Consultation System API",
+        version: "1.0.0",
+        documentation: "/api/v1",
+        availableEndpoints: [
+            "GET /api/v1/health",
+            "GET /api/v1",
+            "POST /api/v1/auth/register",
+            "POST /api/v1/auth/login",
+            "GET /api/v1/users/profile",
+            "GET /api/v1/patients",
+            "GET /api/v1/admin/dashboard"
+        ]
+    });
+});
+
 // 404 handler for undefined routes - FIXED: Remove the "*" route
 // This should be the last route defined
 app.use((req, res) => {
