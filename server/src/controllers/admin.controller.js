@@ -394,7 +394,7 @@ const updateUser = asyncHandler(async (req, res) => {
   if (status) {
     const validStatuses = ['active', 'inactive', 'suspended', 'banned'];
     if (!validStatuses.includes(status)) {
-      throw new ApiError(400, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+      throw new ApiError("400, Invalid status. Must be one of: "`${validStatuses.join(', ')}`);
     }
     updateFields.status = status;
     updateFields.isActive = status === 'active';
@@ -405,7 +405,7 @@ const updateUser = asyncHandler(async (req, res) => {
   if (role) {
     const validRoles = ['patient', 'provider', 'admin', 'nurse', 'staff'];
     if (!validRoles.includes(role)) {
-      throw new ApiError(400, `Invalid role. Must be one of: ${validRoles.join(', ')}`);
+      throw new ApiError("400, Invalid role. Must be one of: "`${validRoles.join(', ')}`);
     }
     updateFields.role = role;
     auditAction = 'USER_ROLE_UPDATE';
@@ -468,7 +468,7 @@ const deleteUser = asyncHandler(async (req, res) => {
   const { reason, permanent = false } = req.body;
   const adminId = req.user._id;
 
-  console.log("🗑️ Deleting user:", userId, "Permanent:", permanent);
+  console.log("🗑 Deleting user:", userId, "Permanent:", permanent);
 
   if (!userId) {
     throw new ApiError(400, "User ID is required");
@@ -525,8 +525,10 @@ const deleteUser = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         200,
-        { message: `User ${permanent ? 'permanently deleted' : 'soft deleted'} successfully` },
-        "User deleted successfully"
+         {
+        message: `User ${permanent ? 'permanently deleted' : 'soft deleted'} successfully`,
+      },
+      "User deleted successfully"
       )
     );
 });
@@ -719,9 +721,12 @@ const bulkOperations = asyncHandler(async (req, res) => {
   }
 
   const validOperations = ['activate', 'deactivate', 'suspend', 'send_notification', 'assign_role'];
-  if (!validOperations.includes(operation)) {
-    throw new ApiError(400, `Invalid operation. Must be one of: ${validOperations.join(', ')}`);
-  }
+ if (!validOperations.includes(operation)) {
+  throw new ApiError(
+    400,
+    `Invalid operation. Must be one of: ${validOperations.join(', ')}`
+  );
+}
 
   const results = {
     total: userIds.length,
@@ -780,8 +785,12 @@ const bulkOperations = asyncHandler(async (req, res) => {
           }
           const validRoles = ['patient', 'provider', 'admin', 'nurse', 'staff'];
           if (!validRoles.includes(data.role)) {
-            throw new ApiError(400, `Invalid role. Must be one of: ${validRoles.join(', ')}`);
-          }
+              throw new ApiError(
+                400,
+                `Invalid role. Must be one of: ${validRoles.join(', ')}`
+              );
+            }
+
           await User.findByIdAndUpdate(userId, {
             $set: {
               role: data.role,
@@ -806,16 +815,16 @@ const bulkOperations = asyncHandler(async (req, res) => {
 
       // Create audit log for each operation
       await AuditLog.create({
-        action: `BULK_${operation.toUpperCase()}`,
-        userId: userId,
-        performedBy: adminId,
-        details: {
-          operation,
-          data
-        },
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
-      });
+      action: `BULK_${operation.toUpperCase()}`,
+      userId: userId,
+      performedBy: adminId,
+      details: {
+        operation,
+        data
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     } catch (error) {
       results.failed++;
@@ -826,7 +835,10 @@ const bulkOperations = asyncHandler(async (req, res) => {
     }
   }
 
-  console.log(`✅ Bulk operation completed: ${results.successful} successful, ${results.failed} failed`);
+ console.log(
+  `✅ Bulk operation completed: ${results.successful} successful, ${results.failed} failed`
+  );
+
 
   return res
     .status(200)
@@ -965,12 +977,12 @@ const getUserGrowthAnalytics = async (dateRange) => {
   ]);
 
   return {
-    monthlyGrowth: monthlyGrowth.map(item => ({
-      period: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
-      total: item.total,
-      patients: item.patients,
-      providers: item.providers
-    }))
+  monthlyGrowth: monthlyGrowth.map(item => ({
+    period: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
+    total: item.total,
+    patients: item.patients,
+    providers: item.providers
+  }))
   };
 };
 
@@ -999,7 +1011,7 @@ const getRevenueAnalytics = async (dateRange) => {
     { $sort: { '_id.year': 1, '_id.month': 1 } }
   ]);
 
-  return {
+    return {
     monthlyRevenue: monthlyRevenue.map(item => ({
       period: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
       total: item.total,
@@ -1108,5 +1120,5 @@ export {
  * - manageContent (manage static content, FAQs, etc.)
  * - viewErrorLogs (access detailed error logs)
  * - manageApiKeys (manage API keys for integrations)
- * - systemMaintenance (put system in maintenance mode)
- */
+ * - systemMaintenance (put system in maintenance mode)
+ */
