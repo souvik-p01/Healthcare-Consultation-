@@ -97,6 +97,21 @@ app.get("/api/v1", (req, res) => {
     });
 });
 
+// Root route handler
+app.get("/", (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Healthcare Consultation System API",
+        version: "1.0.0",
+        endpoints: {
+            health: "/api/v1/health",
+            users: "/api/v1/users",
+            patients: "/api/v1/patients",
+            admin: "/api/v1/admin"
+        }
+    });
+});
+
 // Main API routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
@@ -113,8 +128,8 @@ app.use((req, res) => {
         availableEndpoints: [
             "GET /api/v1/health",
             "GET /api/v1",
-            "POST /api/v1/auth/register",
-            "POST /api/v1/auth/login",
+            "POST /api/v1/users/register",
+            "POST /api/v1/users/login",
             "GET /api/v1/users/profile",
             "GET /api/v1/patients",
             "GET /api/v1/admin/dashboard"
@@ -179,18 +194,18 @@ const logServerInfo = () => {
     console.log('\n' + '='.repeat(60));
     console.log('🏥 HEALTHCARE CONSULTATION SYSTEM');
     console.log('='.repeat(60));
-    console.log(`🚀 Server started successfully`);
+    console.log("🚀 Server started successfully");
     console.log(`🌐 Server URL: http://localhost:${PORT}`);
     console.log(`📊 Database: ${mongoose.connection.name}`);
     console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📅 Started at: ${SERVER_START_TIME.toLocaleString()}`);
-    console.log(`⏱️  Uptime: 0 seconds`);
+    console.log("⏱  Uptime: 0 seconds");
     console.log('='.repeat(60));
     console.log('✅ Available Endpoints:');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/health');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1');
-    console.log('   - POST http://localhost:' + PORT + '/api/v1/auth/register');
-    console.log('   - POST http://localhost:' + PORT + '/api/v1/auth/login');
+    console.log('   - POST http://localhost:' + PORT + '/api/v1/users/register');
+    console.log('   - POST http://localhost:' + PORT + '/api/v1/users/login');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/patients');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/admin/dashboard');
     console.log('='.repeat(60) + '\n');
@@ -205,7 +220,7 @@ const logServerShutdown = (reason) => {
     console.log('🛑 HEALTHCARE SYSTEM SHUTDOWN');
     console.log('='.repeat(60));
     console.log(`📋 Reason: ${reason}`);
-    console.log(`⏱️  Total uptime: ${uptime} seconds`);
+    console.log(`⏱  Total uptime: ${uptime} seconds`);
     console.log(`📅 Shutdown at: ${new Date().toLocaleString()}`);
     console.log('='.repeat(60) + '\n');
 };
@@ -258,7 +273,7 @@ const checkOptionalEnvVars = () => {
     }
 
     if (missingOptional.length > 0) {
-        console.warn('\n⚠️  Optional environment variables not set:');
+        console.warn('\n⚠  Optional environment variables not set:');
         missingOptional.forEach(({ varName, feature }) => {
             console.warn(`   - ${varName} (${feature})`);
         });
@@ -286,7 +301,7 @@ const connectWithRetry = async () => {
         return true;
         
     } catch (error) {
-        console.error(`❌ MongoDB connection failed:`, error.message);
+        console.error("❌ MongoDB connection failed:, error.message");
         
         DB_RETRY_CONFIG.currentRetry++;
         
@@ -344,17 +359,22 @@ const startServer = async () => {
             logServerInfo();
             
             // Log server performance info every hour (optional)
-            if (process.env.NODE_ENV === 'production') {
+           if (process.env.NODE_ENV === 'production') {
                 setInterval(() => {
-                    const uptime = Math.floor((Date.now() - SERVER_START_TIME.getTime()) / 1000);
-                    const memoryUsage = process.memoryUsage();
-                    console.log(`📊 Server Health Check:`, {
-                        uptime: `${uptime}s`,
-                        memory: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-                        connections: mongoose.connection.readyState === 1 ? 'Active' : 'Inactive'
-                    });
-                }, 3600000); // Every hour
+        const uptime = Math.floor((Date.now() - SERVER_START_TIME.getTime()) / 1000);
+        const memoryUsage = process.memoryUsage();
+
+        console.log(
+            "📊 Server Health Check:",
+            {
+                uptime: `${uptime}s`,
+                memory: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+                connections: mongoose.connection.readyState === 1 ? 'Active' : 'Inactive'
             }
+        );
+    }, 3600000); // Every hour
+}
+
         });
 
         // Step 4: Handle server-level errors
@@ -474,7 +494,7 @@ const startServer = async () => {
          * Helps detect connection issues in production
          */
         mongoose.connection.on('disconnected', () => {
-            console.warn('⚠️  MongoDB disconnected. Attempting to reconnect...');
+            console.warn('⚠  MongoDB disconnected. Attempting to reconnect...');
         });
 
         mongoose.connection.on('reconnected', () => {
@@ -600,5 +620,5 @@ startServer();
  * │   └── error.middleware.js
  * └── utils/
  *     ├── ApiResponse.js
- *     └── ApiError.js
- */
+ *     └── ApiError.js
+ */

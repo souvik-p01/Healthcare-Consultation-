@@ -247,12 +247,17 @@ app.get('/', (req, res) => {
 app.use('*', (req, res) => {
     res.status(404).json({
         success: false,
-        message: "API endpoint not found",
-        error: "The requested healthcare service endpoint does not exist",
-        requestedUrl: req.originalUrl,
-        availableEndpoints: "/api/v1",
-        requestId: req.requestId,
-        timestamp: new Date().toISOString()
+        message: "Route not found",
+        suggestion: "Check the API documentation for available endpoints",
+        availableEndpoints: [
+            "GET /api/v1/health",
+            "GET /api/v1",
+            "POST /api/v1/users/register",
+            "POST /api/v1/users/login",
+            "GET /api/v1/users/profile",
+            "GET /api/v1/patients",
+            "GET /api/v1/admin/dashboard"
+        ]
     });
 });
 
@@ -410,5 +415,5 @@ export { app };
  * 
  * READY TO USE:
  * This version works with your current project structure and will run without errors.
- * Uncomment optional features when you install the packages.
- */
+ * Uncomment optional features when you install the packages.
+ */

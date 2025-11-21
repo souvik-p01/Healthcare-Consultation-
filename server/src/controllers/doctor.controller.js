@@ -15,9 +15,9 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { User } from "../models/user.model.js";
+import { User } from "../models/User.model.js";
 import { Doctor } from "../models/doctor.model.js";
-import { Patient } from "../models/patient.model.js";
+import { Patient } from "../models/Patient.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { Prescription } from "../models/prescription.model.js";
 import { MedicalRecord } from "../models/medicalRecord.model.js";
@@ -107,7 +107,7 @@ const updateDoctorProfile = asyncHandler(async (req, res) => {
         treatmentApproach
     } = req.body;
 
-    console.log("✏️ Updating doctor profile for user:", userId);
+    console.log("✏ Updating doctor profile for user:", userId);
 
     // Get user to access doctorId
     const user = await User.findById(userId);
@@ -984,5 +984,5 @@ export {
  * - setVacationMode
  * - getDoctorReviews (when review system implemented)
  * - updateConsultationFee
- * - getDoctorEarnings (financial analytics)
- */
+ * - getDoctorEarnings (financial analytics)
+ */

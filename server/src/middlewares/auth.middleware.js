@@ -9,7 +9,7 @@ import jwt from "jsonwebtoken";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { verifyToken } from "../utils/jwtUtils.js";
-import { User } from "../models/user.model.js";
+import { User } from "../models/User.model.js";
 
 /**
  * Verify JWT token and authenticate user
@@ -83,7 +83,7 @@ export const optionalVerifyJWT = asyncHandler(async (req, res, next) => {
             }
         }
     } catch (error) {
-        console.log("ℹ️ Optional authentication failed:", error.message);
+        console.log("ℹ Optional authentication failed:", error.message);
     }
 
     next();

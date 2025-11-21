@@ -16,8 +16,8 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { User } from "../models/user.model.js";
-import { Patient } from "../models/patient.model.js";
+import { User } from "../models/User.model.js";
+import { Patient } from "../models/Patient.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { Prescription } from "../models/prescription.model.js";
 import { MedicalRecord } from "../models/medicalRecord.model.js";
@@ -78,7 +78,7 @@ export const getPatientProfile = asyncHandler(async (req, res) => {
 });
 
 /* ============================================================
-   ✏️ UPDATE PATIENT PROFILE
+   ✏ UPDATE PATIENT PROFILE
 ============================================================ */
 export const updatePatientProfile = asyncHandler(async (req, res) => {
   const userId = req.user._id;
