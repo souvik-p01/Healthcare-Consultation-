@@ -16,8 +16,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Prescription } from "../models/prescription.model.js";
-import { User } from "../models/user.model.js";
-import { Patient } from "../models/patient.model.js";
+import { User } from "../models/User.model.js";
+import { Patient } from "../models/Patient.model.js";
 import { Doctor } from "../models/doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { Medication } from "../models/medication.model.js";
@@ -208,7 +208,7 @@ const createPrescription = asyncHandler(async (req, res) => {
             instructions: instructions
         });
     } catch (emailError) {
-        console.error('⚠️ Prescription email sending failed:', emailError);
+        console.error('⚠ Prescription email sending failed:', emailError);
     }
 
     console.log('✅ Prescription created successfully:', prescriptionNumber);
@@ -584,7 +584,7 @@ const updatePrescriptionStatus = asyncHandler(async (req, res) => {
             );
         }
     } catch (notificationError) {
-        console.error('⚠️ Notification sending failed:', notificationError);
+        console.error('⚠ Notification sending failed:', notificationError);
     }
 
     console.log('✅ Prescription status updated:', prescription.prescriptionNumber, '->', status);
@@ -1047,4 +1047,4 @@ export {
  * - getPrescriptionHistory (timeline view)
  * - exportPrescription (PDF generation)
  * - bulkPrescriptionUpdate
- */
+ */

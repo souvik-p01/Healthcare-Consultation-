@@ -16,8 +16,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { MedicalRecord } from "../models/medicalRecord.model.js";
-import { User } from "../models/user.model.js";
-import { Patient } from "../models/patient.model.js";
+import { User } from "../models/User.model.js";
+import { Patient } from "../models/Patient.model.js";
 import { Doctor } from "../models/doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
@@ -440,7 +440,7 @@ const updateMedicalRecord = asyncHandler(async (req, res) => {
     const doctorId = req.user._id;
     const updateData = req.body;
 
-    console.log("✏️ Updating medical record:", recordId, "by doctor:", doctorId);
+    console.log("✏ Updating medical record:", recordId, "by doctor:", doctorId);
 
     if (!recordId) {
         throw new ApiError(400, "Medical record ID is required");
@@ -984,5 +984,5 @@ export {
  * - getRecordTimeline (chronological patient history)
  * - addVitalSigns (separate endpoint for vital tracking)
  * - updateLabResults (structured lab data entry)
- * - getCriticalAlerts (real-time critical record alerts)
- */
+ * - getCriticalAlerts (real-time critical record alerts)
+ */

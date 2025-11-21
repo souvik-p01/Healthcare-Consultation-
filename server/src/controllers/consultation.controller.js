@@ -16,8 +16,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Consultation } from "../models/consultation.model.js";
-import { User } from "../models/user.model.js";
-import { Patient } from "../models/patient.model.js";
+import { User } from "../models/User.model.js";
+import { Patient } from "../models/Patient.model.js";
 import { Doctor } from "../models/doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { Prescription } from "../models/prescription.model.js";
@@ -201,7 +201,7 @@ const initiateConsultation = asyncHandler(async (req, res) => {
             consultationNumber: consultationNumber
         });
     } catch (emailError) {
-        console.error('⚠️ Consultation email sending failed:', emailError);
+        console.error('⚠ Consultation email sending failed:', emailError);
     }
 
     console.log('✅ Consultation initiated successfully:', consultationNumber);
@@ -1106,5 +1106,5 @@ export {
  * - getConsultationRecording (for video consultations)
  * - rateConsultation (patient feedback)
  * - getWaitingConsultations (for doctors)
- * - transferConsultation (to another doctor)
- */
+ * - transferConsultation (to another doctor)
+ */

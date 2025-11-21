@@ -16,8 +16,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { LabResult } from "../models/labResult.model.js";
-import { User } from "../models/user.model.js";
-import { Patient } from "../models/patient.model.js";
+import { User } from "../models/User.model.js";
+import { Patient } from "../models/Patient.model.js";
 import { Doctor } from "../models/doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { MedicalRecord } from "../models/medicalRecord.model.js";
@@ -245,7 +245,7 @@ const createLabResult = asyncHandler(async (req, res) => {
             }
         }
     } catch (emailError) {
-        console.error('⚠️ Lab result email sending failed:', emailError);
+        console.error('⚠ Lab result email sending failed:', emailError);
     }
 
     console.log('✅ Lab result created successfully:', labResultNumber);
@@ -640,7 +640,7 @@ const updateLabResultStatus = asyncHandler(async (req, res) => {
             }
         }
     } catch (notificationError) {
-        console.error('⚠️ Lab result notification failed:', notificationError);
+        console.error('⚠ Lab result notification failed:', notificationError);
     }
 
     console.log('✅ Lab result status updated:', labResult.labResultNumber, '->', status);
@@ -1156,5 +1156,5 @@ export {
  * - bulkUploadLabResults (for lab systems integration)
  * - validateLabResult (quality control)
  * - getPendingLabResults (for lab technicians)
- * - reassignLabResult (to different technician)
- */
+ * - reassignLabResult (to different technician)
+ */
