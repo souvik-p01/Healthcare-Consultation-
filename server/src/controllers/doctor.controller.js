@@ -107,7 +107,7 @@ const updateDoctorProfile = asyncHandler(async (req, res) => {
         treatmentApproach
     } = req.body;
 
-    console.log("✏️ Updating doctor profile for user:", userId);
+    console.log("✏ Updating doctor profile for user:", userId);
 
     // Get user to access doctorId
     const user = await User.findById(userId);
@@ -984,5 +984,5 @@ export {
  * - setVacationMode
  * - getDoctorReviews (when review system implemented)
  * - updateConsultationFee
- * - getDoctorEarnings (financial analytics)
- */
+ * - getDoctorEarnings (financial analytics)
+ */

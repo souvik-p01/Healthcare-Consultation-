@@ -75,7 +75,7 @@ const LoginSignUpPage = () => {
   const validatePassword = (password) => {
     const hasUpperCase = /[A-Z]/.test(password);
     const hasSpecialChar = /[@$!%*?&]/.test(password);
-    const hasLength = password.length > 8;
+    const hasLength = password.length >= 8;
     return hasUpperCase && hasSpecialChar && hasLength;
   };
 
@@ -171,6 +171,7 @@ const LoginSignUpPage = () => {
     }
 
     try {
+<<<<<<< HEAD
       if (isSignUp) {
         await registerUser({
           firstName: formData.firstName.trim(),
@@ -191,8 +192,64 @@ const LoginSignUpPage = () => {
         clearForm();
         const returnUrl = location.state?.from?.pathname || '/dashboard';
         navigate(returnUrl);
+=======
+      setLoading(true);
+      
+      const baseURL = 'http://localhost:8000';
+      
+      if (isSignUp) {
+        const response = await fetch(`${baseURL}/api/v1/users/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            email: email.trim(),
+            password: password
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          alert('✅ Account created successfully! Welcome to HealthCarePlus!');
+          setIsSignUp(false);
+          clearForm();
+        } else {
+          alert(`❌ ${data.message || 'Registration failed'}`);
+          triggerShake();
+        }
+      } else {
+        const response = await fetch(`${baseURL}/api/v1/users/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email.trim(),
+            password: password
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          alert('✅ Login successful! Redirecting to dashboard...');
+          clearForm();
+          navigate('/dashboard');
+        } else {
+          alert(`❌ ${data.message || 'Login failed'}`);
+          triggerShake();
+        }
+>>>>>>> 67a4874 (corrected)
       }
     } catch (error) {
+<<<<<<< HEAD
+=======
+      console.error('Authentication error:', error);
+      alert('❌ Network error. Please check your connection.');
+>>>>>>> 67a4874 (corrected)
       triggerShake();
     }
   };

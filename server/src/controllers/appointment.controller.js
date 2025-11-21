@@ -157,31 +157,31 @@ const createAppointment = asyncHandler(async (req, res) => {
         .lean();
 
     // 11. Send confirmation emails (async - don't wait)
-    try {
-        // Send to patient
-        await sendAppointmentConfirmation(patientUser.email, {
-            patientName: `${patientUser.firstName} ${patientUser.lastName}`,
-            doctorName: `${doctor.firstName} ${doctor.lastName}`,
-            appointmentDate: appointmentDate,
-            appointmentTime: appointmentTime,
-            appointmentNumber: appointmentNumber,
-            type: type,
-            reason: reason
-        });
+   try {
+    // Send to patient
+    await sendAppointmentConfirmation(patientUser.email, {
+        patientName: `${patientUser.firstName} ${patientUser.lastName}`,
+        doctorName: `${doctor.firstName} ${doctor.lastName}`,
+        appointmentDate: appointmentDate,
+        appointmentTime: appointmentTime,
+        appointmentNumber: appointmentNumber,
+        type: type,
+        reason: reason
+    });
 
-        // Send to doctor
-        await sendAppointmentConfirmation(doctor.email, {
-            patientName: `${patientUser.firstName} ${patientUser.lastName}`,
-            doctorName: `${doctor.firstName} ${doctor.lastName}`,
-            appointmentDate: appointmentDate,
-            appointmentTime: appointmentTime,
-            appointmentNumber: appointmentNumber,
-            type: type,
-            reason: reason
-        });
+    // Send to doctor
+    await sendAppointmentConfirmation(doctor.email, {
+        patientName: `${patientUser.firstName} ${patientUser.lastName}`,
+        doctorName: `${doctor.firstName} ${doctor.lastName}`,
+        appointmentDate: appointmentDate,
+        appointmentTime: appointmentTime,
+        appointmentNumber: appointmentNumber,
+        type: type,
+        reason: reason
+    });
 
     } catch (emailError) {
-        console.error('⚠️ Email sending failed:', emailError);
+        console.error('⚠ Email sending failed:', emailError);
         // Don't throw error - appointment was created successfully
     }
 
@@ -481,7 +481,8 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
                     appointmentDate: appointment.appointmentDate,
                     appointmentTime: appointment.appointmentTime,
                     appointmentNumber: appointment.appointmentNumber,
-                    cancellationReason: cancellationReason
+                    cancellationReason
+
                 }
             );
         } else if (status === 'confirmed') {
@@ -497,7 +498,7 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
             );
         }
     } catch (notificationError) {
-        console.error('⚠️ Notification sending failed:', notificationError);
+        console.error('⚠ Notification sending failed:', notificationError);
     }
 
     console.log('✅ Appointment status updated:', appointment.appointmentNumber, '->', status);
@@ -663,7 +664,7 @@ const rescheduleAppointment = asyncHandler(async (req, res) => {
             }
         );
     } catch (notificationError) {
-        console.error('⚠️ Reschedule notification failed:', notificationError);
+        console.error('⚠ Reschedule notification failed:', notificationError);
     }
 
     console.log('✅ Appointment rescheduled successfully:', appointment.appointmentNumber);
@@ -736,6 +737,7 @@ const getDoctorAvailability = asyncHandler(async (req, res) => {
     const endTime = new Date(`${date}T${workingHours.end}`);
     const breakStart = new Date(`${date}T${workingHours.breakStart}`);
     const breakEnd = new Date(`${date}T${workingHours.breakEnd}`);
+
 
     let currentTime = new Date(startTime);
 
@@ -1008,4 +1010,4 @@ export {
  * - getAppointmentCalendar (calendar view)
  * - assignAppointmentToDoctor (admin function)
  * - getWaitlistAppointments
- */
+ **/
