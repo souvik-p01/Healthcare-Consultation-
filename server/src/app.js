@@ -77,27 +77,8 @@ const app = express();
  * Handles Cross-Origin Resource Sharing for healthcare client applications
  */
 app.use(cors({
-    origin: function (origin, callback) {
-        // Get allowed origins from environment variable or use defaults
-        const allowedOrigins = process.env.CORS_ORIGIN?.split(',') || [
-            'http://localhost:3000',
-            'http://localhost:5173', // Vite default
-            'http://localhost:8000'
-        ];
-        
-        // Allow requests with no origin (mobile apps, Postman, curl, etc.)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS policy - Healthcare system access restricted'));
-        }
-    },
-    credentials: true, // Essential for cookies/authentication
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Patient-ID'],
-    exposedHeaders: ['X-Total-Count', 'X-Page-Count'] // For pagination
+    origin: true,
+    credentials: true
 }));
 
 /**

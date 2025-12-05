@@ -8,10 +8,13 @@ import Contact from './Pages/Contact';
 import PatientPortal from './Pages/PatientPortal';
 import DoctorPortal from './Pages/DoctorPortal';
 import TechnicianPortal from './Pages/TechnicianPortal';
+import Dashboard from './Pages/Dashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 import './index.css'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import {toast, ToastContainer} from 'react-toastify'
 import LoginSignUpPage from './Pages/LoginSignUpPage';
+import ProfileCompletion from './Pages/ProfileCompletion';
 
 
 const App = () => {
@@ -19,7 +22,6 @@ const App = () => {
 
   return (
     <div className="w-full flex flex-col justify-center min-h-screen">
-      <ToastContainer position="bottom-right" toastStyle={{backgroundColor: "#000"}} />
       <Header isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
       <Routes>
         <Route path="/" element={<Home />} />
@@ -30,8 +32,18 @@ const App = () => {
         <Route path="/technician-portal" element={<TechnicianPortal />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/login" element={<LoginSignUpPage />} />
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/complete-profile" element={
+          <ProtectedRoute>
+            <ProfileCompletion />
+          </ProtectedRoute>
+        } />
       </Routes>
-      < ToastContainer />
+      <ToastContainer position="bottom-right" />
       <Footer />
     </div>
   );

@@ -48,7 +48,6 @@ const userSchema = new Schema(
         },
         phoneNumber: {
             type: String,
-            required: [true, "Phone number is required"],
             trim: true,
             match: [/^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/, "Please enter a valid phone number"],
             //index: true
@@ -92,12 +91,9 @@ const userSchema = new Schema(
         },
         dateOfBirth: {
             type: Date,
-            required: function() {
-                return this.role === 'patient';
-            },
             validate: {
                 validator: function(date) {
-                    if (!date) return this.role !== 'patient';
+                    if (!date) return true;
                     return date < new Date();
                 },
                 message: 'Date of birth must be in the past'
@@ -105,10 +101,7 @@ const userSchema = new Schema(
         },
         gender: {
             type: String,
-            enum: ['male', 'female', 'other', 'prefer-not-to-say'],
-            required: function() {
-                return this.role === 'patient';
-            }
+            enum: ['male', 'female', 'other', 'prefer-not-to-say']
         },
         
         // Address Information
@@ -123,27 +116,18 @@ const userSchema = new Schema(
         // Professional Information (for healthcare providers)
         specialization: {
             type: String,
-            trim: true,
-            required: function() {
-                return this.role === 'doctor';
-            }
+            trim: true
         },
         medicalLicense: {
             type: String,
             trim: true,
             unique: true,
             sparse: true,
-            required: function() {
-                return this.role === 'doctor';
-            },
             //index: true
         },
         qualification: {
             type: String,
-            trim: true,
-            required: function() {
-                return this.role === 'doctor';
-            }
+            trim: true
         },
         experience: {
             type: Number,
@@ -152,10 +136,7 @@ const userSchema = new Schema(
         },
         department: {
             type: String,
-            trim: true,
-            required: function() {
-                return ['doctor', 'nurse'].includes(this.role);
-            }
+            trim: true
         },
         
         // Consultation Fee (for doctors)
@@ -318,35 +299,7 @@ userSchema.pre("save", async function(next) {
     }
 });
 
-/**
- * Pre-save middleware: Validate role-specific fields
- */
-userSchema.pre("save", function(next) {
-    // Validate patient-specific fields
-    if (this.role === 'patient') {
-        if (!this.dateOfBirth) {
-            return next(new Error('Date of birth is required for patients'));
-        }
-        if (!this.gender) {
-            return next(new Error('Gender is required for patients'));
-        }
-    }
-    
-    // Validate doctor-specific fields
-    if (this.role === 'doctor') {
-        if (!this.specialization) {
-            return next(new Error('Specialization is required for doctors'));
-        }
-        if (!this.medicalLicense) {
-            return next(new Error('Medical license is required for doctors'));
-        }
-        if (!this.qualification) {
-            return next(new Error('Qualification is required for doctors'));
-        }
-    }
-    
-    next();
-});
+
 
 /**
  * Instance Method: Compare password
