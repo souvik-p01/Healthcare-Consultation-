@@ -12,7 +12,7 @@ export const AppContextProvider = ({ children }) => {
   const [userRole, setUserRole] = useState('Doctor')
   
   // You can set your backend URL here or use environment variables
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
   const value = {
     showLogin,
