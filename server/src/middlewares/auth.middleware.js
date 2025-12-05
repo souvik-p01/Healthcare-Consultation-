@@ -83,7 +83,7 @@ export const optionalVerifyJWT = asyncHandler(async (req, res, next) => {
             }
         }
     } catch (error) {
-        console.log("ℹ️ Optional authentication failed:", error.message);
+        console.log("ℹ Optional authentication failed:", error.message);
     }
 
     next();

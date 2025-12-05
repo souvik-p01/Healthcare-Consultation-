@@ -49,7 +49,7 @@ const LoginSignUpPage = () => {
   const validatePassword = (password) => {
     const hasUpperCase = /[A-Z]/.test(password);
     const hasSpecialChar = /[@$!%*?&]/.test(password);
-    const hasLength = password.length > 8;
+    const hasLength = password.length >= 8;
     return hasUpperCase && hasSpecialChar && hasLength;
   };
 

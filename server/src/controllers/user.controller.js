@@ -223,7 +223,7 @@ const registerUser = asyncHandler(async (req, res) => {
             verificationCode: Math.floor(100000 + Math.random() * 900000) // 6-digit code
         }).catch(err => console.error('Email sending failed:', err));
     } catch (error) {
-        console.error('⚠️ Email verification sending failed:', error);
+        console.error('⚠ Email verification sending failed:', error);
     }
 
     // 9. Send welcome email (async, don't wait)
@@ -235,7 +235,7 @@ const registerUser = asyncHandler(async (req, res) => {
             dashboardLink: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard`
         }).catch(err => console.error('Welcome email sending failed:', err));
     } catch (error) {
-        console.error('⚠️ Welcome email sending failed:', error);
+        console.error('⚠ Welcome email sending failed:', error);
     }
 
     // 10. Return success response
@@ -551,7 +551,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
         { new: true, runValidators: true }
     ).select("-password -refreshToken");
 
-    console.log('✏️ Account details updated for:', user.email);
+    console.log('✏ Account details updated for:', user.email);
 
     return res
         .status(200)
@@ -592,7 +592,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
             // Extract public_id from URL and delete
             await deleteFromCloudinary(oldUser.avatar);
         } catch (error) {
-            console.error('⚠️ Failed to delete old avatar:', error);
+            console.error('⚠ Failed to delete old avatar:', error);
         }
     }
 
@@ -708,7 +708,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
         { new: true, runValidators: true }
     ).select("-password -refreshToken");
 
-    console.log('✏️ Profile updated for:', user.email);
+    console.log('✏ Profile updated for:', user.email);
 
     return res
         .status(200)
@@ -989,7 +989,7 @@ export const deleteAccountController = asyncHandler(async (req, res) => {
     user.deletionReason = reason;
     await user.save({ validateBeforeSave: false });
 
-    console.log('🗑️ Account marked for deletion:', user.email);
+    console.log('🗑 Account marked for deletion:', user.email);
 
     // Clear cookies
     const cookieOptions = {

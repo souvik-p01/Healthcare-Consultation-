@@ -78,7 +78,7 @@ export const getPatientProfile = asyncHandler(async (req, res) => {
 });
 
 /* ============================================================
-   ✏️ UPDATE PATIENT PROFILE
+   ✏ UPDATE PATIENT PROFILE
 ============================================================ */
 export const updatePatientProfile = asyncHandler(async (req, res) => {
   const userId = req.user._id;

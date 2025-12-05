@@ -208,7 +208,7 @@ const createPrescription = asyncHandler(async (req, res) => {
             instructions: instructions
         });
     } catch (emailError) {
-        console.error('⚠️ Prescription email sending failed:', emailError);
+        console.error('⚠ Prescription email sending failed:', emailError);
     }
 
     console.log('✅ Prescription created successfully:', prescriptionNumber);
@@ -584,7 +584,7 @@ const updatePrescriptionStatus = asyncHandler(async (req, res) => {
             );
         }
     } catch (notificationError) {
-        console.error('⚠️ Notification sending failed:', notificationError);
+        console.error('⚠ Notification sending failed:', notificationError);
     }
 
     console.log('✅ Prescription status updated:', prescription.prescriptionNumber, '->', status);
@@ -1047,4 +1047,4 @@ export {
  * - getPrescriptionHistory (timeline view)
  * - exportPrescription (PDF generation)
  * - bulkPrescriptionUpdate
- */
+ */
