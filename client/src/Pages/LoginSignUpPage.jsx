@@ -10,27 +10,53 @@ import {
   EyeOff,
   Heart,
   ArrowLeft,
-  X
+  X,
+  Phone
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useAppContext } from '../context/AppContext';
 
 const LoginSignUpPage = () => {
-  // State management
+  // Context and navigation
+  const { 
+    registerUser, 
+    loginUser, 
+    forgotPassword, 
+    loading, 
+    user 
+  } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
+  
+  // State management
   const initialMode = location.state?.mode === 'signup' ? true : false;
   const [isSignUp, setIsSignUp] = useState(initialMode);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phoneNumber: '',
+    password: '',
+    confirmPassword: '',
+    role: 'patient',
+    dateOfBirth: '',
+    gender: ''
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [shaking, setShaking] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [captchaText, setCaptchaText] = useState('');
   const [userCaptchaInput, setUserCaptchaInput] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      const returnUrl = location.state?.from?.pathname || '/dashboard';
+      navigate(returnUrl);
+    }
+  }, [user, navigate, location.state]);
 
   // Generate captcha on component mount and mode change
   useEffect(() => {
@@ -77,11 +103,28 @@ const LoginSignUpPage = () => {
 
   // Clear all form fields
   const clearForm = () => {
-    setName('');
-    setEmail('');
-    setPassword('');
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phoneNumber: '',
+      password: '',
+      confirmPassword: '',
+      role: 'patient',
+      dateOfBirth: '',
+      gender: ''
+    });
     setUserCaptchaInput('');
     generateCaptcha();
+  };
+
+  // Handle input changes
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   // Main form submission handler
@@ -90,91 +133,67 @@ const LoginSignUpPage = () => {
 
     // Validate captcha first
     if (userCaptchaInput !== captchaText) {
-      alert('❌ Captcha does not match. Please try again.');
+      toast.error('Captcha does not match. Please try again.');
       triggerShake();
       generateCaptcha();
       setUserCaptchaInput('');
       return;
     }
 
-    // Validate password for signup
-    if (isSignUp && !validatePassword(password)) {
-      alert('❌ Password must be 8+ characters long, contain an uppercase letter and a special character (@, $, !, etc.).');
-      triggerShake();
-      return;
-    }
-
     // Validate required fields
-    if (isSignUp && !name.trim()) {
-      alert('❌ Please enter your full name.');
-      triggerShake();
-      return;
-    }
+    if (isSignUp) {
+      const requiredFields = ['firstName', 'lastName', 'email', 'password'];
+      const missingFields = requiredFields.filter(field => !formData[field]?.trim());
+      
+      if (missingFields.length > 0) {
+        toast.error(`Please fill in: ${missingFields.join(', ')}`);
+        triggerShake();
+        return;
+      }
 
-    if (!email.trim() || !password.trim()) {
-      alert('❌ Please fill in all required fields.');
-      triggerShake();
-      return;
+      if (formData.password !== formData.confirmPassword) {
+        toast.error('Passwords do not match');
+        triggerShake();
+        return;
+      }
+
+      if (!validatePassword(formData.password)) {
+        toast.error('Password must be 8+ characters long, contain an uppercase letter and a special character');
+        triggerShake();
+        return;
+      }
+    } else {
+      if (!formData.email.trim() || !formData.password.trim()) {
+        toast.error('Please fill in all required fields');
+        triggerShake();
+        return;
+      }
     }
 
     try {
-      setLoading(true);
-      
-      const baseURL = 'http://localhost:8000';
-      
       if (isSignUp) {
-        const response = await fetch(`${baseURL}/api/v1/users/register`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: name.trim(),
-            email: email.trim(),
-            password: password
-          })
+        await registerUser({
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          role: formData.role
         });
         
-        const data = await response.json();
-        
-        if (response.ok) {
-          alert('✅ Account created successfully! Welcome to HealthCarePlus!');
-          setIsSignUp(false);
-          clearForm();
-        } else {
-          alert(`❌ ${data.message || 'Registration failed'}`);
-          triggerShake();
-        }
+        setIsSignUp(false);
+        clearForm();
       } else {
-        const response = await fetch(`${baseURL}/api/v1/users/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: email.trim(),
-            password: password
-          })
+        await loginUser({
+          email: formData.email.trim(),
+          password: formData.password
         });
         
-        const data = await response.json();
-        
-        if (response.ok) {
-          alert('✅ Login successful! Redirecting to dashboard...');
-          clearForm();
-          navigate('/dashboard');
-        } else {
-          alert(`❌ ${data.message || 'Login failed'}`);
-          triggerShake();
-        }
+        clearForm();
+        const returnUrl = location.state?.from?.pathname || '/dashboard';
+        navigate(returnUrl);
       }
-      
     } catch (error) {
-      console.error('Authentication error:', error);
-      alert('❌ Network error. Please check your connection.');
       triggerShake();
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -183,22 +202,16 @@ const LoginSignUpPage = () => {
     e.preventDefault();
     
     if (!forgotEmail.trim()) {
-      alert('❌ Please enter your email address.');
+      toast.error('Please enter your email address');
       return;
     }
 
     try {
-      setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      console.log('📧 Password reset request for:', forgotEmail.trim());
-      alert('✅ Password reset link sent to your email!');
+      await forgotPassword(forgotEmail.trim());
       setForgotEmail('');
       setShowForgotPassword(false);
     } catch (error) {
-      console.error('Forgot password error:', error);
-      alert('❌ Error sending reset link. Please try again.');
-    } finally {
-      setLoading(false);
+      // Error is already handled in context
     }
   };
 
@@ -343,24 +356,43 @@ const LoginSignUpPage = () => {
 
           {/* Form Fields */}
           <form onSubmit={onSubmitHandler} className="space-y-4">
-            {/* Name Field (Sign Up Only) */}
+            {/* Name Fields (Sign Up Only) */}
             {isSignUp && (
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.4, delay: 0.3 }}
-                className="relative"
-              >
-                <User2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-600 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-blue-200 rounded-lg focus:border-blue-600 focus:outline-none transition-colors"
-                  required
-                />
-              </motion.div>
+              <>
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.4, delay: 0.3 }}
+                  className="grid grid-cols-2 gap-3"
+                >
+                  <div className="relative">
+                    <User2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-600 w-5 h-5" />
+                    <input
+                      type="text"
+                      name="firstName"
+                      placeholder="First Name"
+                      value={formData.firstName}
+                      onChange={handleInputChange}
+                      className="w-full pl-12 pr-4 py-3 border-2 border-blue-200 rounded-lg focus:border-blue-600 focus:outline-none transition-colors"
+                      required
+                    />
+                  </div>
+                  <div className="relative">
+                    <User2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-600 w-5 h-5" />
+                    <input
+                      type="text"
+                      name="lastName"
+                      placeholder="Last Name"
+                      value={formData.lastName}
+                      onChange={handleInputChange}
+                      className="w-full pl-12 pr-4 py-3 border-2 border-blue-200 rounded-lg focus:border-blue-600 focus:outline-none transition-colors"
+                      required
+                    />
+                  </div>
+                </motion.div>
+                
+
+              </>
             )}
 
             {/* Email Field */}
@@ -373,15 +405,16 @@ const LoginSignUpPage = () => {
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-600 w-5 h-5" />
               <input
                 type="email"
+                name="email"
                 placeholder="Enter your email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={formData.email}
+                onChange={handleInputChange}
                 className="w-full pl-12 pr-4 py-3 border-2 border-blue-200 rounded-lg focus:border-blue-600 focus:outline-none transition-colors"
                 required
               />
             </motion.div>
 
-            {/* Password Field */}
+            {/* Password Fields */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -391,9 +424,10 @@ const LoginSignUpPage = () => {
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-600 w-5 h-5" />
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="password"
                 placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={formData.password}
+                onChange={handleInputChange}
                 className="w-full pl-12 pr-12 py-3 border-2 border-blue-200 rounded-lg focus:border-blue-600 focus:outline-none transition-colors"
                 required
               />
@@ -405,7 +439,48 @@ const LoginSignUpPage = () => {
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </motion.div>
+            
+            {/* Confirm Password Field (Sign Up Only) */}
+            {isSignUp && (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 0.55 }}
+                className="relative"
+              >
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-600 w-5 h-5" />
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  placeholder="Confirm your password"
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  className="w-full pl-12 pr-4 py-3 border-2 border-blue-200 rounded-lg focus:border-blue-600 focus:outline-none transition-colors"
+                  required
+                />
+              </motion.div>
+            )}
 
+            {/* Role Selection (Sign Up Only) */}
+            {isSignUp && (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 0.58 }}
+                className="relative"
+              >
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg focus:border-blue-600 focus:outline-none transition-colors bg-white"
+                >
+                  <option value="patient">Patient</option>
+                  <option value="doctor">Doctor</option>
+                </select>
+              </motion.div>
+            )}
+            
             {/* Captcha Section */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -465,14 +540,14 @@ const LoginSignUpPage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.8 }}
-              onClick={onSubmitHandler}
+              type="submit"
               disabled={loading}
               className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center justify-center">
                   <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                  Processing...
+                  {isSignUp ? 'Creating Account...' : 'Signing In...'}
                 </span>
               ) : (
                 isSignUp ? 'Create Account' : 'Sign In'

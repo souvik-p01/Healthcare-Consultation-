@@ -99,7 +99,7 @@ const registerUser = asyncHandler(async (req, res) => {
     console.log("📝 Registration attempt for:", email);
 
     // 2. Validation - Check required fields
-    const requiredFields = ['firstName', 'lastName', 'email', 'phoneNumber', 'password'];
+    const requiredFields = ['firstName', 'lastName', 'email', 'password'];
     const missingFields = requiredFields.filter(field => !req.body[field]?.trim());
 
     if (missingFields.length > 0) {
@@ -109,21 +109,9 @@ const registerUser = asyncHandler(async (req, res) => {
         );
     }
 
-    // Role-specific validation
-    if (role === 'patient' && (!dateOfBirth || !gender)) {
-        throw new ApiError(400, "Date of birth and gender are required for patients");
-    }
-
-    if (role === 'doctor' && (!specialization || !medicalLicense || !qualification)) {
-        throw new ApiError(
-            400, 
-            "Specialization, medical license, and qualification are required for doctors"
-        );
-    }
-
     // 3. Check if user already exists
     const existingUser = await User.findOne({
-        $or: [{ email: email.toLowerCase() }, { phoneNumber }]
+        email: email.toLowerCase()
     });
 
     if (existingUser) {
@@ -133,13 +121,7 @@ const registerUser = asyncHandler(async (req, res) => {
         );
     }
 
-    // For doctors, check if medical license is unique
-    if (role === 'doctor') {
-        const existingDoctor = await User.findOne({ medicalLicense });
-        if (existingDoctor) {
-            throw new ApiError(409, "Medical license number already registered");
-        }
-    }
+
 
     // 4. Handle avatar upload (optional)
     let avatarUrl = null;
@@ -161,20 +143,21 @@ const registerUser = asyncHandler(async (req, res) => {
         firstName,
         lastName,
         email: email.toLowerCase(),
-        phoneNumber,
         password,
         role: role || 'patient',
-        avatar: avatarUrl,
-        dateOfBirth: role === 'patient' ? dateOfBirth : undefined,
-        gender: role === 'patient' ? gender : undefined,
-        // Doctor-specific fields
-        specialization: role === 'doctor' ? specialization : undefined,
-        medicalLicense: role === 'doctor' ? medicalLicense : undefined,
-        qualification: role === 'doctor' ? qualification : undefined,
-        department: role === 'doctor' ? department : undefined,
-        experience: role === 'doctor' ? experience : undefined,
-        consultationFee: role === 'doctor' ? consultationFee : undefined
+        avatar: avatarUrl
     };
+
+    // Add optional fields if provided
+    if (phoneNumber) userData.phoneNumber = phoneNumber;
+    if (dateOfBirth) userData.dateOfBirth = dateOfBirth;
+    if (gender) userData.gender = gender;
+    if (specialization) userData.specialization = specialization;
+    if (medicalLicense) userData.medicalLicense = medicalLicense;
+    if (qualification) userData.qualification = qualification;
+    if (department) userData.department = department;
+    if (experience) userData.experience = experience;
+    if (consultationFee) userData.consultationFee = consultationFee;
 
     const user = await User.create(userData);
 
@@ -249,6 +232,163 @@ const registerUser = asyncHandler(async (req, res) => {
             "User registered successfully"
         )
     );
+});
+
+/**
+ * COMPLETE PROFILE
+ * Complete user profile with role-specific information
+ * 
+ * PATCH /api/v1/users/complete-profile
+ */
+const completeProfile = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const {
+        // Common fields
+        phoneNumber,
+        dateOfBirth,
+        gender,
+        address,
+        
+        // Patient specific
+        emergencyContact,
+        medicalHistory,
+        allergies,
+        currentMedications,
+        
+        // Doctor specific
+        specialization,
+        qualification,
+        medicalLicense,
+        department,
+        experience,
+        consultationFee,
+        bio
+    } = req.body;
+
+    console.log("📝 Profile completion for user:", req.user.email);
+
+    try {
+        // Update user basic information
+        const updateData = {};
+        if (phoneNumber) updateData.phoneNumber = phoneNumber;
+        if (dateOfBirth) updateData.dateOfBirth = dateOfBirth;
+        if (gender) updateData.gender = gender;
+        if (address) updateData.address = address;
+        if (specialization) updateData.specialization = specialization;
+        if (qualification) updateData.qualification = qualification;
+        if (medicalLicense) updateData.medicalLicense = medicalLicense;
+        if (department) updateData.department = department;
+        if (experience) updateData.experience = experience;
+        if (consultationFee) updateData.consultationFee = consultationFee;
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            updateData,
+            { new: true, runValidators: true }
+        ).select("-password -refreshToken");
+
+        // Handle role-specific profile creation/update
+        if (req.user.role === 'patient') {
+            let patient = await Patient.findOne({ user: userId });
+            
+            if (!patient) {
+                // Create new patient profile
+                patient = await Patient.create({
+                    user: userId
+                });
+                
+                // Update user with patient reference
+                updatedUser.patientId = patient._id;
+                await updatedUser.save({ validateBeforeSave: false });
+            }
+            
+            // Update patient-specific information
+            const patientUpdateData = {};
+            if (emergencyContact) {
+                patientUpdateData.emergencyContacts = [{
+                    name: emergencyContact.name,
+                    relationship: emergencyContact.relationship,
+                    phone: emergencyContact.phoneNumber,
+                    isPrimary: true
+                }];
+            }
+            
+            if (medicalHistory || allergies || currentMedications) {
+                patientUpdateData.notes = {
+                    generalNotes: medicalHistory || '',
+                    carePreferences: currentMedications || ''
+                };
+                
+                if (allergies) {
+                    patientUpdateData.allergies = allergies.split(',').map(allergy => ({
+                        name: allergy.trim(),
+                        severity: 'mild',
+                        isActive: true
+                    }));
+                }
+            }
+            
+            if (Object.keys(patientUpdateData).length > 0) {
+                await Patient.findByIdAndUpdate(patient._id, patientUpdateData);
+            }
+        }
+        
+        if (req.user.role === 'doctor') {
+            let doctor = await Doctor.findOne({ userId: userId });
+            
+            if (!doctor) {
+                // Create new doctor profile
+                const doctorData = {
+                    userId: userId,
+                    medicalLicenseNumber: medicalLicense || `LIC${Date.now()}`,
+                    specializations: specialization ? [specialization] : [],
+                    consultationFee: consultationFee || 0
+                };
+                
+                if (qualification) {
+                    doctorData.qualifications = [{
+                        degree: qualification,
+                        institution: 'Not specified',
+                        year: new Date().getFullYear()
+                    }];
+                }
+                
+                if (experience) {
+                    doctorData.experience = {
+                        totalYears: parseInt(experience) || 0,
+                        workHistory: []
+                    };
+                }
+                
+                if (bio) {
+                    doctorData.bio = bio;
+                }
+                
+                doctor = await Doctor.create(doctorData);
+                
+                // Update user with doctor reference
+                updatedUser.doctorId = doctor._id;
+                await updatedUser.save({ validateBeforeSave: false });
+            }
+        }
+
+        console.log('✅ Profile completed successfully for:', updatedUser.email);
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                updatedUser,
+                "Profile completed successfully"
+            )
+        );
+
+    } catch (error) {
+        console.error("❌ Profile completion error:", error.message);
+        throw new ApiError(
+            500,
+            error.message || "Something went wrong while completing profile"
+        );
+    }
 });
 
 /**
@@ -649,7 +789,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
  * GET /api/v1/users/profile
  * Requires: verifyJWT middleware
  */
-export const getProfile = asyncHandler(async (req, res) => {
+const getProfile = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id)
         .select("-password -refreshToken")
         .populate('patientId')
@@ -674,7 +814,7 @@ export const getProfile = asyncHandler(async (req, res) => {
  * PATCH /api/v1/users/profile
  * Requires: verifyJWT middleware
  */
-export const updateProfile = asyncHandler(async (req, res) => {
+const updateProfile = asyncHandler(async (req, res) => {
     const { firstName, lastName, phoneNumber, dateOfBirth, gender } = req.body;
 
     // Build update object
@@ -772,7 +912,7 @@ const getAllDoctors = asyncHandler(async (req, res) => {
  * 
  * POST /api/v1/users/verify-email
  */
-export const verifyEmailController = asyncHandler(async (req, res) => {
+const verifyEmailController = asyncHandler(async (req, res) => {
     const { token } = req.body;
 
     if (!token) {
@@ -820,7 +960,7 @@ export const verifyEmailController = asyncHandler(async (req, res) => {
  * 
  * POST /api/v1/users/resend-verification
  */
-export const resendVerificationEmail = asyncHandler(async (req, res) => {
+const resendVerificationEmail = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (user.isEmailVerified) {
@@ -868,7 +1008,7 @@ export const resendVerificationEmail = asyncHandler(async (req, res) => {
  * 
  * POST /api/v1/users/forgot-password
  */
-export const forgotPasswordController = asyncHandler(async (req, res) => {
+const forgotPasswordController = asyncHandler(async (req, res) => {
     const { email } = req.body;
 
     if (!email) {
@@ -920,7 +1060,7 @@ export const forgotPasswordController = asyncHandler(async (req, res) => {
  * 
  * POST /api/v1/users/reset-password
  */
-export const resetPasswordController = asyncHandler(async (req, res) => {
+const resetPasswordController = asyncHandler(async (req, res) => {
     const { token, newPassword, confirmPassword } = req.body;
 
     if (!token || !newPassword || !confirmPassword) {
@@ -969,7 +1109,7 @@ export const resetPasswordController = asyncHandler(async (req, res) => {
  * 
  * DELETE /api/v1/users/delete-account
  */
-export const deleteAccountController = asyncHandler(async (req, res) => {
+const deleteAccountController = asyncHandler(async (req, res) => {
     const { password, reason } = req.body;
 
     if (!password) {
@@ -1012,7 +1152,7 @@ export const deleteAccountController = asyncHandler(async (req, res) => {
  * 
  * GET /api/v1/users/statistics
  */
-export const getUserStatistics = asyncHandler(async (req, res) => {
+const getUserStatistics = asyncHandler(async (req, res) => {
     // Only admin can access this
     if (req.user.role !== 'admin') {
         throw new ApiError(403, "Access denied. Admin role required.");
@@ -1056,7 +1196,7 @@ export const getUserStatistics = asyncHandler(async (req, res) => {
  * 
  * PATCH /api/v1/users/:userId/role
  */
-export const updateUserRole = asyncHandler(async (req, res) => {
+const updateUserRole = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const { role } = req.body;
 
@@ -1090,7 +1230,7 @@ export const updateUserRole = asyncHandler(async (req, res) => {
  * 
  * PATCH /api/v1/users/:userId/deactivate
  */
-export const deactivateUser = asyncHandler(async (req, res) => {
+const deactivateUser = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const { reason } = req.body;
 
@@ -1118,6 +1258,7 @@ export const deactivateUser = asyncHandler(async (req, res) => {
 // Export all controller functions
 export {
     registerUser,
+    completeProfile,
     loginUser,
     logoutUser,
     refreshAccessToken,
@@ -1126,5 +1267,15 @@ export {
     updateAccountDetails,
     updateUserAvatar,
     getUserProfile,
-    getAllDoctors
+    getAllDoctors,
+    getProfile,
+    updateProfile,
+    verifyEmailController,
+    resendVerificationEmail,
+    forgotPasswordController,
+    resetPasswordController,
+    deleteAccountController,
+    getUserStatistics,
+    updateUserRole,
+    deactivateUser
 };
