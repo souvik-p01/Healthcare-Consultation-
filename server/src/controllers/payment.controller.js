@@ -368,7 +368,7 @@ const confirmPayment = asyncHandler(async (req, res) => {
             });
         }
     } catch (emailError) {
-        console.error('⚠️ Payment confirmation email failed:', emailError);
+        console.error('⚠ Payment confirmation email failed:', emailError);
     }
 
     console.log('✅ Payment confirmed successfully:', paymentIntentId);
@@ -715,7 +715,7 @@ const processRefund = asyncHandler(async (req, res) => {
             serviceType: payment.serviceType
         });
     } catch (emailError) {
-        console.error('⚠️ Refund confirmation email failed:', emailError);
+        console.error('⚠ Refund confirmation email failed:', emailError);
     }
 
     console.log('✅ Refund processed successfully:', refund.id);
@@ -1031,7 +1031,7 @@ const createManualPayment = asyncHandler(async (req, res) => {
             ]
         });
     } catch (emailError) {
-        console.error('⚠️ Manual payment invoice email failed:', emailError);
+        console.error('⚠ Manual payment invoice email failed:', emailError);
     }
 
     console.log('✅ Manual payment created successfully');
@@ -1110,5 +1110,5 @@ export {
  * - handleWebhook (Stripe webhook handler)
  * - exportPayments (PDF/Excel export)
  * - getPendingPayments (for admin)
- * - validateCoupon (discount code validation)
- */
+ * - validateCoupon (discount code validation)
+ */

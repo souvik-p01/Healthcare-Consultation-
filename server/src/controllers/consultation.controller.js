@@ -201,7 +201,7 @@ const initiateConsultation = asyncHandler(async (req, res) => {
             consultationNumber: consultationNumber
         });
     } catch (emailError) {
-        console.error('⚠️ Consultation email sending failed:', emailError);
+        console.error('⚠ Consultation email sending failed:', emailError);
     }
 
     console.log('✅ Consultation initiated successfully:', consultationNumber);
@@ -1106,5 +1106,5 @@ export {
  * - getConsultationRecording (for video consultations)
  * - rateConsultation (patient feedback)
  * - getWaitingConsultations (for doctors)
- * - transferConsultation (to another doctor)
- */
+ * - transferConsultation (to another doctor)
+ */

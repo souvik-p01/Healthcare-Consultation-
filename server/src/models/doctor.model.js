@@ -363,7 +363,7 @@ const doctorSchema = new Schema(
 /**
  * Indexes for optimized queries
  */
-doctorSchema.index({ userId: 1 });
+//doctorSchema.index({ userId: 1 });
 doctorSchema.index({ specializations: 1 });
 doctorSchema.index({ 'affiliations.hospitalName': 1 });
 doctorSchema.index({ status: 1, isVerified: 1 });

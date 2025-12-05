@@ -415,5 +415,5 @@ export { app };
  * 
  * READY TO USE:
  * This version works with your current project structure and will run without errors.
- * Uncomment optional features when you install the packages.
- */
+ * Uncomment optional features when you install the packages.
+ */

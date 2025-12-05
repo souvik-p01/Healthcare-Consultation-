@@ -256,7 +256,7 @@ const deleteNotification = asyncHandler(async (req, res) => {
     const { notificationId } = req.params;
     const userId = req.user._id;
 
-    console.log("🗑️ Deleting notification:", notificationId);
+    console.log("🗑 Deleting notification:", notificationId);
 
     if (!notificationId) {
         throw new ApiError(400, "Notification ID is required");
@@ -329,7 +329,7 @@ const clearAllNotifications = asyncHandler(async (req, res) => {
 const getNotificationPreferences = asyncHandler(async (req, res) => {
     const userId = req.user._id;
 
-    console.log("⚙️ Fetching notification preferences for user:", userId);
+    console.log("⚙ Fetching notification preferences for user:", userId);
 
     const user = await User.findById(userId)
         .select('notificationPreferences email phoneNumber')
@@ -399,7 +399,7 @@ const updateNotificationPreferences = asyncHandler(async (req, res) => {
         quietHours
     } = req.body;
 
-    console.log("⚙️ Updating notification preferences for user:", userId);
+    console.log("⚙ Updating notification preferences for user:", userId);
 
     // Build update object
     const updateData = {
@@ -682,7 +682,7 @@ const createManualNotification = asyncHandler(async (req, res) => {
                     });
 
                 } catch (channelError) {
-                    console.error(`❌ Channel ${channel} failed for user ${user._id}:`, channelError);
+                    console.error(`❌ Channel ${channel} failed for user ${user._id}:, channelError`);
                     notificationResults.errors.push({
                         userId: user._id,
                         channel: channel,
@@ -698,7 +698,7 @@ const createManualNotification = asyncHandler(async (req, res) => {
             }
 
         } catch (userError) {
-            console.error(`❌ Notification creation failed for user ${user._id}:`, userError);
+            console.error(`❌ Notification creation failed for user ${user._id}:, userError`);
             notificationResults.errors.push({
                 userId: user._id,
                 error: userError.message
@@ -968,4 +968,4 @@ export {
  * - scheduleNotification (future-dated notifications)
  * - getNotificationAnalytics (advanced analytics)
  * - subscribeToPush (push notification subscription)
- */
+ */
