@@ -8,9 +8,9 @@ import './index.css'
 import AppContextProvider from './context/AppContext.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <AppContextProvider>
-    <BrowserRouter>
+  <BrowserRouter>
+    <AppContextProvider>
       <App />
-    </BrowserRouter>
-  </AppContextProvider>
+    </AppContextProvider>
+  </BrowserRouter>
 )
