@@ -16,13 +16,13 @@ import userRoutes from "./user.routes.js";
 import healthRoutes from "./management/health.routes.js";
 
 // Routes that will be added later (commented out for now)
-import patientRoutes from "./patient.routes.js";
-import doctorRoutes from "./history/doctor.routes.js";
-import appointmentRoutes from "./history/appointment.routes.js";
-import medicalRecordRoutes from "./management/medical-record.routes.js";
-import prescriptionRoutes from "./management/prescription.routes.js";
-import consultationRoutes from "./management/consultation.routes.js";
-import adminRoutes from "./admin.routes.js";
+// import patientRoutes from "./patient.routes.js";
+// import doctorRoutes from "./history/doctor.routes.js";
+// import appointmentRoutes from "./history/appointment.routes.js";
+// import medicalRecordRoutes from "./management/medical-record.routes.js";
+// import prescriptionRoutes from "./management/prescription.routes.js";
+// import consultationRoutes from "./management/consultation.routes.js";
+// import adminRoutes from "./admin.routes.js";
 
 // Initialize main router
 const router = Router();

@@ -18,6 +18,7 @@
 import { Router } from "express";
 import {
     registerUser,
+    completeProfile,
     loginUser,
     logoutUser,
     refreshAccessToken,
@@ -89,7 +90,7 @@ const router = Router();
 router.post(
     "/register",
     rateLimiter(), // Prevent spam registration
-    validateRequiredFields(['firstName', 'lastName', 'email', 'phoneNumber', 'password']),
+    validateRequiredFields(['firstName', 'lastName', 'email', 'password']),
     validateEmail, // Validate email format
     validatePhone, // Validate phone number format
     validateDOB, // Validate date of birth (if provided)
@@ -229,6 +230,17 @@ router.get(
 router.patch(
     "/profile",
     updateProfile
+);
+
+/**
+ * @route   PATCH /api/v1/users/complete-profile
+ * @desc    Complete user profile with role-specific information
+ * @access  Private (All authenticated users)
+ * @body    Role-specific fields for patients and doctors
+ */
+router.patch(
+    "/complete-profile",
+    completeProfile
 );
 
 /**

@@ -12,52 +12,69 @@ import {
   Bell
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { AppContext } from '../context/AppContext';
-import { tr } from 'framer-motion/client';
+import { useAppContext } from '../context/AppContext';
 
 const Header = ({ isMenuOpen, setIsMenuOpen }) => {
   const navigate = useNavigate();
-  const {showLogin, userRole} = useContext(AppContext)
-  const [userIconClick, setUserIconClick] = useState(false)
-  const location = useLocation()
-  const [showNotification, setShowNotification] = useState(false)
+  const { user, userRole, logoutUser, loading } = useAppContext();
+  const [userIconClick, setUserIconClick] = useState(false);
+  const location = useLocation();
+  const [showNotification, setShowNotification] = useState(false);
+  
+  // Check if user is logged in
+  const isLoggedIn = !!user;
 
   const handleUserRole = () => {
-    if(userRole === 'Patient'){
-      navigate('/patient-portal')
-      setShowNotification(true)
+    setUserIconClick(false);
+    
+    if (userRole === 'patient') {
+      navigate('/patient-portal');
+      setShowNotification(true);
+    } else if (userRole === 'doctor') {
+      navigate('/doctor-portal');
+      setShowNotification(true);
+    } else if (userRole === 'admin') {
+      navigate('/admin-dashboard');
+      setShowNotification(true);
+    } else {
+      navigate('/dashboard');
+      setShowNotification(true);
     }
-    else if(userRole === 'Doctor'){
-      navigate('/doctor-portal')
-      setShowNotification(true)
+    
+    if (isMenuOpen) {
+      setIsMenuOpen(false);
     }
-    else if(userRole === 'Technician'){
-      navigate('/technician-portal')
-      setShowNotification(true)
+  };
+  
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+      setUserIconClick(false);
+      setShowNotification(false);
+      navigate('/');
+      if (isMenuOpen) {
+        setIsMenuOpen(false);
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
     }
-    else return null;
-
-    if(userRole === 'Patient' && isMenuOpen){
-      navigate('/patient-portal')
-      setShowNotification(true)
-      setIsMenuOpen(false)
-    }
-    else if(userRole === 'Doctor' && isMenuOpen){
-      navigate('/doctor-portal')
-      setShowNotification(true)
-      setIsMenuOpen(false)
-    }
-    else if(userRole === 'Technician' && isMenuOpen){
-      navigate('/technician-portal')
-      setShowNotification(true)
-      setIsMenuOpen(false)
-    }
-    else return null;
-  }
+  };
 
   useEffect(() => {
-    setUserIconClick(false)
-  }, [location])
+    setUserIconClick(false);
+  }, [location]);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userIconClick && !event.target.closest('.user-dropdown')) {
+        setUserIconClick(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [userIconClick]);
 
   return (
     <header className="w-full flex justify-between bg-white shadow-lg sticky top-0 z-50">
@@ -115,22 +132,29 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
               </div>
             )}
 
-            {showLogin ? (
-              <div className='relative p-1 w-[30px] h-[30px] border cursor-pointer rounded-full flex items-center justify-center' onClick={() => setUserIconClick(true)}>
+            {isLoggedIn ? (
+              <div className='relative p-1 w-[30px] h-[30px] border cursor-pointer rounded-full flex items-center justify-center user-dropdown' onClick={() => setUserIconClick(!userIconClick)}>
                 <User className='w-full h-full' />
                 <div
-                  className={`absolute top-full right-0 mt-2 w-40 bg-white z-99 flex-col text-gray-700 ${userIconClick ? 'flex' : 'hidden'}`}
+                  className={`absolute top-full right-0 mt-2 w-48 bg-white shadow-lg rounded-lg border z-50 flex-col text-gray-700 user-dropdown ${userIconClick ? 'flex' : 'hidden'}`}
                 >
+                  <div className="px-4 py-2 border-b bg-gray-50">
+                    <p className="text-sm font-medium text-gray-900">{user?.firstName} {user?.lastName}</p>
+                    <p className="text-xs text-gray-500 capitalize">{userRole}</p>
+                  </div>
                   <button
                     onClick={handleUserRole}
-                    className="px-4 py-2 text-left hover:bg-blue-50 hover:text-blue-600"
+                    className="px-4 py-2 text-left hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2"
                   >
-                    Dashboard
+                    <Settings className="w-4 h-4" /> Dashboard
                   </button>
                   <button
-                    className="px-4 py-2 flex items-center gap-2 text-left hover:bg-blue-50 hover:text-red-600"
+                    onClick={handleLogout}
+                    disabled={loading}
+                    className="px-4 py-2 flex items-center gap-2 text-left hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                   >
-                    <LogOut className="w-4 h-4" /> Logout
+                    <LogOut className="w-4 h-4" /> 
+                    {loading ? 'Logging out...' : 'Logout'}
                   </button>
                 </div>
               </div>
@@ -196,18 +220,25 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
                 Contact
               </NavLink>
 
-              {showLogin ? (
-                <div className='flex flex-col gap-5 items-center justify-center text-white'>
+              {isLoggedIn ? (
+                <div className='flex flex-col gap-3 mt-4'>
+                  <div className="px-4 py-2 bg-gray-100 rounded-md">
+                    <p className="text-sm font-medium text-gray-900">{user?.firstName} {user?.lastName}</p>
+                    <p className="text-xs text-gray-500 capitalize">{userRole}</p>
+                  </div>
                   <button
                     onClick={handleUserRole}
-                    className="px-4 py-2 text-left hover:bg-blue-50 hover:text-blue-600 bg-[#155DFC] w-full cursor-pointer rounded-md "
+                    className="px-4 py-2 bg-blue-600 text-white w-full cursor-pointer rounded-md hover:bg-blue-700 transition-colors"
                   >
                     Dashboard
                   </button>
                   <button
-                    className="bg-[#155DFC] w-full cursor-pointer rounded-md px-4 py-2 flex items-center gap-2 text-left hover:bg-blue-50 hover:text-red-600"
+                    onClick={handleLogout}
+                    disabled={loading}
+                    className="px-4 py-2 bg-red-600 text-white w-full cursor-pointer rounded-md hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    <LogOut className="w-4 h-4" /> Logout
+                    <LogOut className="w-4 h-4" /> 
+                    {loading ? 'Logging out...' : 'Logout'}
                   </button>
                 </div>
                 ) : (
