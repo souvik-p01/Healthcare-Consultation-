@@ -254,7 +254,6 @@ const patientSchema = new Schema(
         // Unique Medical Record Number
         medicalRecordNumber: {
             type: String,
-            required: [true, 'Medical Record Number is required'],
             unique: true,
             uppercase: true,
             trim: true
@@ -476,9 +475,9 @@ patientSchema.virtual('needsFollowUp').get(function() {
  * Pre-save middleware: Generate Medical Record Number
  */
 patientSchema.pre('save', async function(next) {
-    if (this.isNew && !this.medicalRecordNumber) {
+    if (!this.medicalRecordNumber) {
         try {
-            const PatientModel = mongoose.model('Patient');
+            const PatientModel = this.constructor;
             const count = await PatientModel.countDocuments();
             this.medicalRecordNumber = `MRN${(count + 1).toString().padStart(6, '0')}`;
         } catch (error) {
