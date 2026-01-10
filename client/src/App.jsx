@@ -32,6 +32,12 @@ import PharmacyPage from './Pages/PharmacyPage'
 import MonitoringPage from './Pages/MonitoringPage'
 import RecordsPage from './Pages/RecordsPage'
 
+// In your App.jsx or routes.jsx
+import Telemedicine from './Pages/services/Telemedicine';
+import LabTests from './Pages/services/LabTests';
+import HealthReports from './Pages/services/HealthReports';
+import WellnessPrograms from './Pages/services/WellnessPrograms';
+
 
 
 const App = () => {
@@ -82,14 +88,20 @@ const App = () => {
           />
 
           {/* ===== AI Healthcare System ===== */}
-          <Route path="/ai" element={<HomePage />} />
-          <Route path="/ai/services" element={<ServicesPage />} />
-          <Route path="/ai/assistant" element={<AIAssistantPage />} />
-          <Route path="/ai/consultations" element={<ConsultationsPage />} />
-          <Route path="/ai/emergency" element={<EmergencyPage />} />
-          <Route path="/ai/pharmacy" element={<PharmacyPage />} />
-          <Route path="/ai/monitoring" element={<MonitoringPage />} />
-          <Route path="/ai/records" element={<RecordsPage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/services" element={<ServicesPage />} />
+          <Route path="/services/assistant" element={<AIAssistantPage />} />
+          <Route path="/services/consultations" element={<ConsultationsPage />} />
+          <Route path="/services/emergency" element={<EmergencyPage />} />
+          <Route path="/services/pharmacy" element={<PharmacyPage />} />
+          <Route path="/services/monitoring" element={<MonitoringPage />} />
+          <Route path="/services/records" element={<RecordsPage />} />
+
+          {/* ===== Add these routes services/Telemedicine.jsx LabTests.jsx HealthReports.jsx WellnessPrograms.jsx ===== */}
+          <Route path="/services/telemedicine" element={<Telemedicine />} />
+          <Route path="/services/lab-tests" element={<LabTests />} />
+          <Route path="/services/health-reports" element={<HealthReports />} />
+          <Route path="/services/wellness-programs" element={<WellnessPrograms />} />
 
         </Routes>
       </main>
