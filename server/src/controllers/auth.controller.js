@@ -27,7 +27,7 @@ const generateTokens = (user) => {
 
 export const register = async (req, res) => {
     try {
-        const { name, email, password, phone, role = 'patient' } = req.body;
+        const { firstName, lastName, name, email, password, phoneNumber, phone, role = 'patient' } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -38,12 +38,23 @@ export const register = async (req, res) => {
             });
         }
 
+        // Handle name fields - support both formats
+        let userFirstName = firstName;
+        let userLastName = lastName;
+        
+        if (!firstName && !lastName && name) {
+            const nameParts = name.trim().split(' ');
+            userFirstName = nameParts[0];
+            userLastName = nameParts.slice(1).join(' ') || 'User';
+        }
+
         // Create new user
         const user = await User.create({
-            name,
+            firstName: userFirstName,
+            lastName: userLastName,
             email,
             password,
-            phone,
+            phoneNumber: phoneNumber || phone,
             role
         });
 
@@ -64,9 +75,11 @@ export const register = async (req, res) => {
             data: {
                 user: {
                     _id: user._id,
-                    name: user.name,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    fullName: user.fullName,
                     email: user.email,
-                    phone: user.phone,
+                    phoneNumber: user.phoneNumber,
                     role: user.role
                 },
                 accessToken
@@ -88,7 +101,7 @@ export const login = async (req, res) => {
         const { email, password } = req.body;
 
         // Check if user exists
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email }).select('+password');
         if (!user) {
             return res.status(401).json({
                 success: false,
@@ -97,7 +110,7 @@ export const login = async (req, res) => {
         }
 
         // Check password
-        const isPasswordValid = await user.comparePassword(password);
+        const isPasswordValid = await user.isPasswordCorrect(password);
         if (!isPasswordValid) {
             return res.status(401).json({
                 success: false,
@@ -126,9 +139,11 @@ export const login = async (req, res) => {
             data: {
                 user: {
                     _id: user._id,
-                    name: user.name,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    fullName: user.fullName,
                     email: user.email,
-                    phone: user.phone,
+                    phoneNumber: user.phoneNumber,
                     role: user.role
                 },
                 accessToken
