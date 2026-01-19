@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
+    "@react-google-maps/api": "^2.20.8",
     "@tailwindcss/vite": "^4.1.11",
     "@types/node": "^24.3.0",
     "antd": "^5.27.3",
-    "axios": "^1.11.0",
+    "axios": "^1.13.2",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.536.0",
     "react": "^19.1.0",
