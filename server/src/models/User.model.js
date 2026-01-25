@@ -6,7 +6,7 @@
  * - Patients
  * - Doctors (Providers)
  * - Admins
- * - Nurses
+ * - Technician
  * - Support Staff
  * 
  * Features:
@@ -63,7 +63,7 @@ const userSchema = new Schema(
         role: {
             type: String,
             enum: {
-                values: ['patient', 'doctor', 'admin', 'nurse', 'staff'],
+                values: ['patient', 'doctor', 'admin', 'technician', 'staff'],
                 message: '{VALUE} is not a valid role'
             },
             default: 'patient',
@@ -155,7 +155,7 @@ const userSchema = new Schema(
                         return ['view-own-records', 'book-appointments'];
                     case 'doctor':
                         return ['view-patient-records', 'create-prescriptions', 'manage-appointments'];
-                    case 'nurse':
+                    case 'technician':
                         return ['view-patient-records', 'update-vital-signs'];
                     case 'admin':
                         return ['manage-all'];

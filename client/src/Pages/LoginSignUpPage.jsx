@@ -47,12 +47,12 @@ const LoginSignUpPage = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
 
-  /* ---------------- Redirect if logged in ---------------- */
+  /* ---------------- ✅ FIXED: Redirect only after login (not signup) ---------------- */
   useEffect(() => {
-    if (user) {
+    if (user && !isSignUp) {
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, navigate, isSignUp]);
 
   /* ---------------- Captcha ---------------- */
   useEffect(() => {
@@ -123,6 +123,7 @@ const LoginSignUpPage = () => {
           return;
         }
 
+        // ✅ Signup - doesn't set user state
         await registerUser({
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
@@ -131,17 +132,21 @@ const LoginSignUpPage = () => {
           role: formData.role
         });
 
-        toast.success('Account created successfully');
+        // ✅ Switch to login mode after successful signup
         setIsSignUp(false);
         clearForm();
+        
+        // ✅ DON'T redirect to dashboard here
+        // User must login explicitly
+        
       } else {
+        // ✅ Login - sets user state
         await loginUser({
           email: formData.email.trim(),
           password: formData.password
         });
 
-        toast.success('Login successful');
-        navigate('/dashboard');
+        // ✅ Redirect will happen via useEffect when user state updates
       }
     } catch {
       triggerShake();
@@ -174,9 +179,10 @@ const LoginSignUpPage = () => {
 
           <button
             onClick={handleForgotPassword}
-            className="w-full bg-blue-600 text-white py-3 rounded"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-3 rounded disabled:bg-blue-400"
           >
-            Send Reset Link
+            {loading ? 'Sending...' : 'Send Reset Link'}
           </button>
 
           <button
@@ -209,24 +215,39 @@ const LoginSignUpPage = () => {
 
           <form onSubmit={onSubmitHandler} className="space-y-4">
             {isSignUp && (
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  name="firstName"
-                  placeholder="First Name"
-                  value={formData.firstName}
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    name="firstName"
+                    placeholder="First Name"
+                    value={formData.firstName}
+                    onChange={handleInputChange}
+                    className="border p-3 rounded"
+                    required
+                  />
+                  <input
+                    name="lastName"
+                    placeholder="Last Name"
+                    value={formData.lastName}
+                    onChange={handleInputChange}
+                    className="border p-3 rounded"
+                    required
+                  />
+                </div>
+                
+                {/* ✅ ADDED: Role Selector */}
+                <select
+                  name="role"
+                  value={formData.role}
                   onChange={handleInputChange}
-                  className="border p-3 rounded"
+                  className="border p-3 rounded w-full"
                   required
-                />
-                <input
-                  name="lastName"
-                  placeholder="Last Name"
-                  value={formData.lastName}
-                  onChange={handleInputChange}
-                  className="border p-3 rounded"
-                  required
-                />
-              </div>
+                >
+                  <option value="patient">Patient</option>
+                  <option value="doctor">Doctor</option>
+                  <option value="technician">Technician</option>
+                </select>
+              </>
             )}
 
             <input
@@ -281,14 +302,17 @@ const LoginSignUpPage = () => {
                 className="border p-2 rounded flex-1"
                 required
               />
-              <RefreshCcw onClick={generateCaptcha} className="cursor-pointer" />
+              <RefreshCcw 
+                onClick={generateCaptcha} 
+                className="cursor-pointer hover:text-blue-600 transition-colors"
+              />
             </div>
 
             {!isSignUp && (
               <button
                 type="button"
                 onClick={() => setShowForgotPassword(true)}
-                className="text-blue-600 text-sm"
+                className="text-blue-600 text-sm hover:underline"
               >
                 Forgot Password?
               </button>
@@ -297,17 +321,20 @@ const LoginSignUpPage = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 rounded"
+              className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition-colors disabled:bg-blue-400"
             >
-              {isSignUp ? 'Create Account' : 'Sign In'}
+              {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
             </button>
           </form>
 
           <p className="text-center mt-4 text-gray-600">
             {isSignUp ? 'Already have an account?' : "Don't have an account?"}
             <button
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-blue-600 ml-2"
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                clearForm();
+              }}
+              className="text-blue-600 ml-2 hover:underline"
             >
               {isSignUp ? 'Sign In' : 'Sign Up'}
             </button>

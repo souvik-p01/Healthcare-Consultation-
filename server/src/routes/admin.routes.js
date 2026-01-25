@@ -19,7 +19,12 @@ import {
   getSystemAnalytics,
   getAuditLogs,
   bulkOperations,
-  getSystemHealth
+  getSystemHealth,
+  getUserAnalytics,      // Add this
+  getRevenueAnalytics,   // Add this
+  getProviderAnalytics,  // Add this
+  getSystemMetrics,      // Add this
+  sendBulkNotifications  // Add this
 } from "../controllers/admin.controller.js";
 
 const router = Router();
@@ -55,6 +60,34 @@ router.get("/dashboard", getDashboardStats);
 router.get("/analytics", getSystemAnalytics);
 
 /**
+ * @route   GET /api/v1/admin/analytics/users
+ * @desc    Get user analytics for charts
+ * @access  Admin only
+ */
+router.get("/analytics/users", getUserAnalytics);
+
+/**
+ * @route   GET /api/v1/admin/analytics/revenue
+ * @desc    Get revenue analytics
+ * @access  Admin only
+ */
+router.get("/analytics/revenue", getRevenueAnalytics);
+
+/**
+ * @route   GET /api/v1/admin/analytics/providers
+ * @desc    Get provider performance analytics
+ * @access  Admin only
+ */
+router.get("/analytics/providers", getProviderAnalytics);
+
+/**
+ * @route   GET /api/v1/admin/metrics
+ * @desc    Get system performance metrics
+ * @access  Admin only
+ */
+router.get("/metrics", getSystemMetrics);
+
+/**
  * @route   POST /api/v1/admin/reports/generate
  * @desc    Generate custom reports
  * @access  Admin only
@@ -81,7 +114,7 @@ router.post("/reports/generate", (req, res) => {
  * @access  Admin only
  * @query   {Number} page - Page number (default: 1)
  * @query   {Number} limit - Items per page (default: 20)
- * @query   {String} role - Filter by role (patient, provider, admin, nurse, staff)
+ * @query   {String} role - Filter by role (patient, provider, admin, technician, staff)
  * @query   {String} isActive - Filter by active status (true, false)
  * @query   {String} isVerified - Filter by verification status (true, false)
  * @query   {String} dateFrom - Filter by creation date start
@@ -102,7 +135,7 @@ router.get("/users/:userId", getUserById);
  * @desc    Update user information, status, or role
  * @access  Admin only
  * @body    {String} [status] - New status (active, inactive, suspended, banned)
- * @body    {String} [role] - New role (patient, provider, admin, nurse, staff)
+ * @body    {String} [role] - New role (patient, provider, admin, technician, staff)
  * @body    {String} [reason] - Reason for status/role change
  * @body    {String} [notes] - Additional notes
  * @body    {Object} [otherFields] - Other user fields to update
@@ -128,6 +161,13 @@ router.delete("/users/:userId", deleteUser);
  * @body    {Object} data - Additional data (e.g., role for assign_role, message for send_notification)
  */
 router.post("/bulk-operations", bulkOperations);
+
+/**
+ * @route   POST /api/v1/admin/notifications/bulk
+ * @desc    Send bulk notifications to users
+ * @access  Admin only
+ */
+router.post("/notifications/bulk", sendBulkNotifications);
 
 /**
  * ==========================================
@@ -341,91 +381,3 @@ router.get("/system-health", getSystemHealth);
  * ==========================================
  */
 export default router;
-
-/**
- * ==========================================
- * ROUTE SUMMARY
- * ==========================================
- * 
- * Dashboard & Analytics (3 routes):
- *   - GET  /dashboard              → Dashboard stats
- *   - GET  /analytics              → Detailed analytics
- *   - POST /reports/generate       → Generate reports (not implemented)
- * 
- * User Management (4 routes):
- *   - GET    /users                → List all users
- *   - GET    /users/:userId        → Get user details
- *   - PATCH  /users/:userId        → Update user (status, role, or other fields)
- *   - DELETE /users/:userId        → Delete user
- * 
- * Bulk Operations (1 route):
- *   - POST /bulk-operations        → Perform bulk user operations
- * 
- * Provider Management (3 routes, not implemented):
- *   - GET  /providers              → List all providers
- *   - POST /providers/:providerId/verify → Verify provider
- *   - POST /providers/:providerId/reject → Reject provider
- * 
- * Appointment Management (3 routes, not implemented):
- *   - GET  /appointments                      → List appointments
- *   - GET  /appointments/:appointmentId       → Get appointment details
- *   - POST /appointments/:appointmentId/cancel → Cancel appointment
- * 
- * System Management (3 routes, not implemented):
- *   - GET   /system/logs      → Get system logs
- *   - GET   /system/settings  → Get settings
- *   - PATCH /system/settings  → Update settings
- * 
- * Data Export (1 route, not implemented):
- *   - POST /export            → Export data
- * 
- * Audit Logs (1 route):
- *   - GET /audit-logs         → Get audit logs
- * 
- * System Health (1 route):
- *   - GET /system-health      → Get system health metrics
- * 
- * Total: 17 routes (7 implemented, 10 pending implementation)
- * 
- * ==========================================
- * TESTING WITH POSTMAN/CURL
- * ==========================================
- * 
- * 1. Get Dashboard Stats:
- *    GET http://localhost:8000/api/v1/admin/dashboard
- *    Headers: Authorization: Bearer <admin_token>
- * 
- * 2. Get All Users:
- *    GET http://localhost:8000/api/v1/admin/users?page=1&limit=10&role=patient
- *    Headers: Authorization: Bearer <admin_token>
- * 
- * 3. Update User:
- *    PATCH http://localhost:8000/api/v1/admin/users/:userId
- *    Headers: Authorization: Bearer <admin_token>
- *    Body: { 
- *      "status": "suspended", 
- *      "reason": "Violation of terms",
- *      "name": "New Name"
- *    }
- * 
- * 4. Delete User:
- *    DELETE http://localhost:8000/api/v1/admin/users/:userId
- *    Headers: Authorization: Bearer <admin_token>
- *    Body: { "reason": "Account cleanup", "permanent": false }
- * 
- * 5. Get Audit Logs:
- *    GET http://localhost:8000/api/v1/admin/audit-logs?page=1&limit=20
- *    Headers: Authorization: Bearer <admin_token>
- * 
- * 6. Bulk Operations:
- *    POST http://localhost:8000/api/v1/admin/bulk-operations
- *    Headers: Authorization: Bearer <admin_token>
- *    Body: { 
- *      "operation": "activate", 
- *      "userIds": ["userId1", "userId2"]
- *    }
- * 
- * 7. Get System Health:
- *    GET http://localhost:8000/api/v1/admin/system-health
- *    Headers: Authorization: Bearer <admin_token>
- */

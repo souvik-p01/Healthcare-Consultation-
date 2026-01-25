@@ -20,6 +20,10 @@ import {
   Stethoscope,
   Microscope
 } from 'lucide-react';
+import profImage1 from "../assets/aboutprofilepics/prof_subhashis_misra.jpg";
+import profImage2 from "../assets/aboutprofilepics/souvik-patra-pic.jpg";
+import profImage3 from "../assets/aboutprofilepics/sanchita-lakshman-pic.png";
+
 
 // Router simulation context
 const RouterContext = React.createContext();
@@ -56,41 +60,41 @@ const AboutSection = () => {
 
   const teamMembers = [
     {
-      name: "Dr. Sarah Johnson",
-      role: "Chief Medical Officer",
-      image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=400&q=80",
+      name: "Prof. Subhashis Misra",
+      role: "Assistant Professor",
+      image: profImage1,
       experience: "15+ years",
-      specialization: "Cardiology & Internal Medicine",
-      education: "MD, AIIMS Delhi",
-      funFact: "Published 50+ research papers"
+      specialization: "Master of Technology in SQL and Learning Systems",
+      education: "Jadavpur University",
+      funFact: "Cloud computing, Learning Management Systems enthusiast"
     },
     {
-      name: "Dr. Michael Chen",
-      role: "AI Research Director",
-      image: "https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=400&q=80",
-      experience: "12+ years",
-      specialization: "AI in Healthcare",
-      education: "PhD, Stanford University",
-      funFact: "Built first AI diagnostic tool at 24"
+      name: "Souvik Patra",
+      role: "Team Lead & Full-Stack Developer",
+      image: profImage2,
+      experience: "Full-stack development",
+      specialization: "Healthcare systems, APIs & databases",
+      education: "Computer Science Engineering",
+      funFact: "Handles backend, frontend, and database end-to-end"
     },
     {
-      name: "Dr. Priya Patel",
-      role: "Emergency Care Specialist",
-      image: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=400&q=80",
-      experience: "10+ years",
-      specialization: "Emergency Medicine",
-      education: "MD, CMC Vellore",
-      funFact: "Handled 5000+ emergency cases"
+      name: "Sanchita Lakshman",
+      role: "UI & System Design Contributor",
+      image: profImage3,
+      experience: "Project-based experience",
+      specialization: "UI design, system diagrams & frontend support",
+      education: "Computer Science Engineering",
+      funFact: "Created system diagrams and supported frontend development"
     },
-    {
-      name: "Alex Kumar",
-      role: "Tech Lead",
-      image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=400&q=80",
-      experience: "8+ years",
-      specialization: "Platform Development",
-      education: "MTech, IIT Bombay",
-      funFact: "Built scalable systems for 1M+ users"
-    }
+    // {
+    //   name: "Alex Kumar",
+    //   role: "Tech Lead",
+    //   image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=400&q=80",
+    //   experience: "8+ years",
+    //   specialization: "Platform Development",
+    //   education: "MTech, IIT Bombay",
+    //   funFact: "Built scalable systems for 1M+ users"
+    // }
   ];
 
   const achievements = [
