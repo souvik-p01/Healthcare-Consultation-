@@ -53,7 +53,7 @@ export const generateAccessToken = (payload) => {
             userId: payload.userId,
             email: payload.email,
             role: payload.role,
-            userType: payload.userType || 'general', // patient, doctor, admin, nurse
+            userType: payload.userType || 'general', // patient, doctor, admin, 
             permissions: payload.permissions || [],
             isHealthcareUser: true,
             type: TOKEN_CONFIG.TOKEN_TYPES.ACCESS,

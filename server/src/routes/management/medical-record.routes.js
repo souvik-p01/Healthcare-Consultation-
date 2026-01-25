@@ -20,7 +20,7 @@ router.patch("/:recordId", verifyJWT, restrictTo('doctor'), updateMedicalRecord)
 router.delete("/:recordId", verifyJWT, restrictTo('doctor', 'admin'), deleteMedicalRecord);
 
 // POST /api/v1/medical-records/:recordId/vital-signs - Add vital signs
-router.post("/:recordId/vital-signs", verifyJWT, restrictTo('doctor', 'nurse'), addVitalSigns);
+router.post("/:recordId/vital-signs", verifyJWT, restrictTo('doctor', 'technician'), addVitalSigns);
 
 // POST /api/v1/medical-records/:recordId/attachments - Upload documents
 router.post("/:recordId/attachments", verifyJWT, upload.array('documents', 5), handleUploadError, attachDocuments);

@@ -19,7 +19,7 @@ const notificationSchema = new Schema(
         },
         recipientType: {
             type: String,
-            enum: ['patient', 'doctor', 'nurse', 'admin', 'all'],
+            enum: ['patient', 'doctor', 'technician', 'admin', 'all'],
             required: true,
             //index: true
         },

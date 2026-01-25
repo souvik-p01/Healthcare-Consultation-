@@ -48,12 +48,16 @@ import {
     checkVerification 
 } from "../middlewares/auth.middleware.js";
 
+// Import validation middlewares
 import {
     validateEmail,
     validatePhone,
     validateDOB,
     validateRequiredFields,
-    sanitizePatient
+    sanitizePatient,
+    validateRole,  // ✅ Added role validation
+    validatePasswordStrength,  // ✅ Added password strength validation
+    validatePasswordMatch  // ✅ Added password match validation
 } from "../middlewares/validation.middleware.js";
 
 import {
@@ -94,6 +98,9 @@ router.post(
     validateEmail, // Validate email format
     validatePhone, // Validate phone number format
     validateDOB, // Validate date of birth (if provided)
+    validateRole, // ✅ Validate role (patient, doctor, nurse only)
+    validatePasswordStrength, // ✅ Validate password requirements
+    validatePasswordMatch, // ✅ Ensure password and confirmPassword match
     sanitizePatient, // Sanitize input data
     uploadProfilePhoto.single('avatar'), // Optional avatar upload
     handleUploadError, // Handle multer errors
@@ -253,6 +260,8 @@ router.post(
     "/change-password",
     checkVerification, // Ensure email is verified for sensitive operations
     validateRequiredFields(['oldPassword', 'newPassword', 'confirmPassword']),
+    validatePasswordStrength, // ✅ Add password strength validation
+    validatePasswordMatch, // ✅ Add password match validation
     changeCurrentPassword // Controller function
 );
 
@@ -346,99 +355,4 @@ router.patch(
     deactivateUser
 );
 
-/**
- * ==========================================
- * ROUTE TESTING & DEBUGGING
- * ==========================================
- * 
- * Test these routes using Postman or any API client:
- * 
- * 1. Register User:
- *    POST http://localhost:8000/api/v1/users/register
- *    Body: { firstName, lastName, email, phoneNumber, password, role }
- * 
- * 2. Login:
- *    POST http://localhost:8000/api/v1/users/login
- *    Body: { email, password }
- * 
- * 3. Get Current User:
- *    GET http://localhost:8000/api/v1/users/current
- *    Headers: Authorization: Bearer {accessToken}
- * 
- * 4. Logout:
- *    POST http://localhost:8000/api/v1/users/logout
- *    Headers: Authorization: Bearer {accessToken}
- * 
- * 5. Update Profile:
- *    PATCH http://localhost:8000/api/v1/users/profile
- *    Headers: Authorization: Bearer {accessToken}
- *    Body: { firstName, lastName, phoneNumber }
- * 
- * 6. Update Avatar:
- *    PATCH http://localhost:8000/api/v1/users/avatar
- *    Headers: Authorization: Bearer {accessToken}
- *    Body: multipart/form-data with 'avatar' file
- * 
- * 7. Get Doctors List:
- *    GET http://localhost:8000/api/v1/users/doctors?specialization=Cardiology&page=1&limit=10
- * 
- * 8. Change Password:
- *    POST http://localhost:8000/api/v1/users/change-password
- *    Headers: Authorization: Bearer {accessToken}
- *    Body: { oldPassword, newPassword, confirmPassword }
- * 
- * 9. Verify Email:
- *    POST http://localhost:8000/api/v1/users/verify-email
- *    Body: { token }
- * 
- * 10. Forgot Password:
- *    POST http://localhost:8000/api/v1/users/forgot-password
- *    Body: { email }
- * 
- * 11. Reset Password:
- *    POST http://localhost:8000/api/v1/users/reset-password
- *    Body: { token, newPassword, confirmPassword }
- */
-
-// Export router
 export default router;
-
-/**
- * Route Summary:
- * 
- * Public Routes (8):
- * - POST   /register
- * - POST   /login
- * - POST   /refresh-token
- * - GET    /profile/:userId
- * - GET    /doctors
- * - POST   /verify-email
- * - POST   /forgot-password
- * - POST   /reset-password
- * 
- * Protected Routes (9):
- * - POST   /logout
- * - GET    /current
- * - GET    /profile
- * - PATCH  /profile
- * - POST   /change-password
- * - PATCH  /update-account
- * - PATCH  /avatar
- * - POST   /resend-verification
- * - DELETE /delete-account
- * 
- * Admin Routes (3):
- * - GET    /statistics
- * - PATCH  /:userId/role
- * - PATCH  /:userId/deactivate
- * 
- * Total Active Routes: 20
- * 
- * Middleware Usage:
- * - Authentication: verifyJWT, optionalVerifyJWT
- * - Validation: validateEmail, validatePhone, validateDOB, validateRequiredFields, sanitizePatient
- * - File Upload: uploadProfilePhoto, handleUploadError, validateUploadedFiles
- * - Rate Limiting: rateLimiter, loginRateLimiter, strictRateLimiter
- * - Authorization: restrictTo (for role-based access)
- * - Verification: checkVerification (for email/phone verification)
- */

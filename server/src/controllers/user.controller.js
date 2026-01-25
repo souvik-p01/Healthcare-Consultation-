@@ -84,7 +84,7 @@ const registerUser = asyncHandler(async (req, res) => {
         email,
         phoneNumber,
         password,
-        role,
+        role = 'patient', // Default to patient
         dateOfBirth,
         gender,
         // Doctor-specific fields
@@ -98,7 +98,18 @@ const registerUser = asyncHandler(async (req, res) => {
 
     console.log("📝 Registration attempt for:", email);
 
-    // 2. Validation - Check required fields
+    // 2. ✅ ADDED: Backend Role Validation
+    // Only allow specific roles for public registration
+    const allowedRoles = ["patient", "doctor", "nurse"];
+    
+    if (!allowedRoles.includes(role)) {
+        throw new ApiError(
+            400, 
+            `Invalid role selection. Allowed roles: ${allowedRoles.join(', ')}`
+        );
+    }
+
+    // 3. Validation - Check required fields
     const requiredFields = ['firstName', 'lastName', 'email', 'password'];
     const missingFields = requiredFields.filter(field => !req.body[field]?.trim());
 
@@ -109,7 +120,28 @@ const registerUser = asyncHandler(async (req, res) => {
         );
     }
 
-    // 3. Check if user already exists
+    // 4. ✅ ADDED: Password Strength Validation
+    if (password.length < 8) {
+        throw new ApiError(400, "Password must be at least 8 characters long");
+    }
+    
+    if (!/[A-Z]/.test(password)) {
+        throw new ApiError(400, "Password must contain at least one uppercase letter");
+    }
+    
+    if (!/[a-z]/.test(password)) {
+        throw new ApiError(400, "Password must contain at least one lowercase letter");
+    }
+    
+    if (!/\d/.test(password)) {
+        throw new ApiError(400, "Password must contain at least one number");
+    }
+    
+    if (!/[@$!%*?&]/.test(password)) {
+        throw new ApiError(400, "Password must contain at least one special character (@$!%*?&)");
+    }
+
+    // 5. Check if user already exists
     const existingUser = await User.findOne({
         email: email.toLowerCase()
     });
@@ -117,13 +149,11 @@ const registerUser = asyncHandler(async (req, res) => {
     if (existingUser) {
         throw new ApiError(
             409, 
-            "User with this email or phone number already exists"
+            "User with this email already exists"
         );
     }
 
-
-
-    // 4. Handle avatar upload (optional)
+    // 6. Handle avatar upload (optional)
     let avatarUrl = null;
     if (req.file) {
         const avatarLocalPath = req.file.path;
@@ -138,30 +168,36 @@ const registerUser = asyncHandler(async (req, res) => {
         }
     }
 
-    // 5. Create user object - Create entry in database
+    // 7. Create user object - Create entry in database
     const userData = {
-        firstName,
-        lastName,
-        email: email.toLowerCase(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.toLowerCase().trim(),
         password,
-        role: role || 'patient',
-        avatar: avatarUrl
+        role, // ✅ Use validated role
+        avatar: avatarUrl,
+        isEmailVerified: false, // Email verification required
+        status: 'active'
     };
 
     // Add optional fields if provided
     if (phoneNumber) userData.phoneNumber = phoneNumber;
     if (dateOfBirth) userData.dateOfBirth = dateOfBirth;
     if (gender) userData.gender = gender;
-    if (specialization) userData.specialization = specialization;
-    if (medicalLicense) userData.medicalLicense = medicalLicense;
-    if (qualification) userData.qualification = qualification;
-    if (department) userData.department = department;
-    if (experience) userData.experience = experience;
-    if (consultationFee) userData.consultationFee = consultationFee;
+    
+    // Add doctor-specific fields only if role is doctor
+    if (role === 'doctor') {
+        if (specialization) userData.specialization = specialization;
+        if (medicalLicense) userData.medicalLicense = medicalLicense;
+        if (qualification) userData.qualification = qualification;
+        if (department) userData.department = department;
+        if (experience) userData.experience = experience;
+        if (consultationFee) userData.consultationFee = consultationFee;
+    }
 
     const user = await User.create(userData);
 
-    // 6. Create role-specific profile (Patient or Doctor)
+    // 8. Create role-specific profile (Patient or Doctor)
     if (role === 'patient') {
         const patient = await Patient.create({
             user: user._id,
@@ -183,22 +219,22 @@ const registerUser = asyncHandler(async (req, res) => {
         // await user.save({ validateBeforeSave: false });
     }
 
-    // 7. Get created user without sensitive fields
+    // 9. Get created user without sensitive fields
     const createdUser = await User.findById(user._id)
-        .select("-password -refreshToken")
+        .select("-password -refreshToken -emailVerificationToken -passwordResetToken")
         .lean();
 
     if (!createdUser) {
         throw new ApiError(500, "Something went wrong while registering user");
     }
 
-    // 8. Send verification email (async, don't wait)
+    // 10. ✅ UPDATED: Send verification email (async, don't wait)
     try {
         const verificationToken = generateEmailVerificationToken(
             user._id.toString(), 
             user.email
         );
-        const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+        const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
         
         sendEmailVerification(user.email, {
             firstName: user.firstName,
@@ -209,25 +245,27 @@ const registerUser = asyncHandler(async (req, res) => {
         console.error('⚠ Email verification sending failed:', error);
     }
 
-    // 9. Send welcome email (async, don't wait)
+    // 11. ✅ UPDATED: Send welcome email (async, don't wait)
     try {
         sendWelcomeEmail(user.email, {
             firstName: user.firstName,
             role: user.role,
             userId: user._id.toString(),
-            dashboardLink: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard`
+            loginLink: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`
         }).catch(err => console.error('Welcome email sending failed:', err));
     } catch (error) {
         console.error('⚠ Welcome email sending failed:', error);
     }
 
-    // 10. Return success response
+    // 12. ✅ UPDATED: Return success response WITHOUT authentication tokens
     return res.status(201).json(
         new ApiResponse(
             201, 
             {
                 user: createdUser,
-                message: "Registration successful! Please verify your email."
+                message: "Account created successfully! Please check your email to verify your account.",
+                nextStep: "verify_email",
+                loginRequired: true
             }, 
             "User registered successfully"
         )
@@ -424,6 +462,11 @@ const loginUser = asyncHandler(async (req, res) => {
         throw new ApiError(404, "User not found with provided credentials");
     }
 
+    // ✅ Check if email is verified (if email verification is enabled)
+    if (process.env.REQUIRE_EMAIL_VERIFICATION === 'true' && !user.isEmailVerified) {
+        throw new ApiError(403, "Please verify your email before logging in");
+    }
+
     // Check if account is active
     if (!user.isActive) {
         throw new ApiError(403, "Account is inactive. Please contact support.");
@@ -601,8 +644,25 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
         throw new ApiError(400, "New password and confirm password do not match");
     }
 
+    // ✅ ADDED: Password strength validation
     if (newPassword.length < 8) {
         throw new ApiError(400, "New password must be at least 8 characters long");
+    }
+    
+    if (!/[A-Z]/.test(newPassword)) {
+        throw new ApiError(400, "New password must contain at least one uppercase letter");
+    }
+    
+    if (!/[a-z]/.test(newPassword)) {
+        throw new ApiError(400, "New password must contain at least one lowercase letter");
+    }
+    
+    if (!/\d/.test(newPassword)) {
+        throw new ApiError(400, "New password must contain at least one number");
+    }
+    
+    if (!/[@$!%*?&]/.test(newPassword)) {
+        throw new ApiError(400, "New password must contain at least one special character (@$!%*?&)");
     }
 
     // Get user with password field
@@ -866,7 +926,7 @@ const updateProfile = asyncHandler(async (req, res) => {
 const getAllDoctors = asyncHandler(async (req, res) => {
     const { specialization, department, page = 1, limit = 10 } = req.query;
 
-    const query = { role: 'doctor', isActive: true };
+    const query = { role: 'doctor', isActive: true, isEmailVerified: true };
 
     if (specialization) {
         query.specialization = specialization;
@@ -1071,8 +1131,25 @@ const resetPasswordController = asyncHandler(async (req, res) => {
         throw new ApiError(400, "New password and confirm password do not match");
     }
 
+    // ✅ ADDED: Password strength validation
     if (newPassword.length < 8) {
         throw new ApiError(400, "Password must be at least 8 characters long");
+    }
+    
+    if (!/[A-Z]/.test(newPassword)) {
+        throw new ApiError(400, "Password must contain at least one uppercase letter");
+    }
+    
+    if (!/[a-z]/.test(newPassword)) {
+        throw new ApiError(400, "Password must contain at least one lowercase letter");
+    }
+    
+    if (!/\d/.test(newPassword)) {
+        throw new ApiError(400, "Password must contain at least one number");
+    }
+    
+    if (!/[@$!%*?&]/.test(newPassword)) {
+        throw new ApiError(400, "Password must contain at least one special character (@$!%*?&)");
     }
 
     try {
@@ -1204,8 +1281,10 @@ const updateUserRole = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Role is required");
     }
 
-    if (!['patient', 'doctor', 'nurse', 'staff', 'admin'].includes(role)) {
-        throw new ApiError(400, "Invalid role");
+    // ✅ Only allow valid roles
+    const validRoles = ['patient', 'doctor', 'nurse', 'technician', 'staff', 'admin'];
+    if (!validRoles.includes(role)) {
+        throw new ApiError(400, `Invalid role. Valid roles: ${validRoles.join(', ')}`);
     }
 
     const user = await User.findByIdAndUpdate(
