@@ -10,27 +10,36 @@ import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
 const labResultSchema = new Schema(
     {
+        // Identification
+        labResultNumber: {
+            type: String,
+            required: true,
+            unique: true,
+            trim: true,
+            index: true
+        },
+        
         // Patient Information
         patientId: {
             type: Schema.Types.ObjectId,
             ref: 'Patient',
             required: [true, 'Patient reference is required'],
-            //index: true
+            index: true
         },
         
-        // Ordering Physician
+        // Appointment Reference
+        appointmentId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Appointment',
+            index: true
+        },
+        
+        // Ordering Information
         orderedBy: {
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: [true, 'Ordering physician is required'],
-            //index: true
-        },
-        
-        // Medical Record Reference
-        medicalRecordId: {
-            type: Schema.Types.ObjectId,
-            ref: 'MedicalRecord',
-            //index: true
+            index: true
         },
         
         // Test Information
@@ -38,16 +47,23 @@ const labResultSchema = new Schema(
             type: String,
             required: [true, 'Test name is required'],
             trim: true,
-            //index: true
-        },
-        testCode: {
-            type: String, // LOINC code
-            trim: true,
-            uppercase: true
+            index: true
         },
         testType: {
             type: String,
             enum: [
+                'blood_test',
+                'urine_test', 
+                'imaging',
+                'biopsy',
+                'culture',
+                'genetic_test',
+                'hormone_test',
+                'allergy_test',
+                'cancer_screening',
+                'infectious_disease',
+                'metabolic_panel',
+                'cardiac_marker',
                 'hematology', 
                 'biochemistry', 
                 'microbiology', 
@@ -59,32 +75,40 @@ const labResultSchema = new Schema(
                 'other'
             ],
             required: true,
-            //index: true
+            index: true
         },
-        testCategory: {
+        labTestCode: {
             type: String,
-            trim: true
+            trim: true,
+            uppercase: true,
+            index: true
         },
         
-        // Test Results
+        // Test Results Data
         results: [{
             parameter: {
                 type: String,
                 required: true,
                 trim: true
             },
+            testItem: {
+                type: String,
+                required: true,
+                trim: true
+            },
             value: {
-                type: Schema.Types.Mixed, // Can be number, string, or boolean
+                type: Schema.Types.Mixed,
                 required: true
             },
             unit: {
                 type: String,
                 trim: true
             },
+            referenceRange: String,
             normalRange: {
                 low: Schema.Types.Mixed,
                 high: Schema.Types.Mixed,
-                text: String // For non-numeric ranges
+                text: String
             },
             flag: {
                 type: String,
@@ -92,37 +116,82 @@ const labResultSchema = new Schema(
                 default: 'normal'
             },
             interpretation: String,
+            isAbnormal: {
+                type: Boolean,
+                default: false
+            },
+            isCritical: {
+                type: Boolean,
+                default: false
+            },
             notes: String
         }],
         
-        // Overall Result Summary
-        overallResult: {
-            summary: String,
-            interpretation: String,
-            clinicalSignificance: String,
-            recommendations: [String]
+        // Reference Ranges
+        referenceRanges: {
+            type: Map,
+            of: String
         },
         
-        // Test Status and Timeline
+        // Units
+        units: {
+            type: Map,
+            of: String
+        },
+        
+        // Overall Interpretation
+        interpretation: {
+            type: String,
+            trim: true
+        },
+        clinicalSignificance: {
+            type: String,
+            trim: true
+        },
+        recommendations: [{
+            type: String,
+            trim: true
+        }],
+        
+        // Status and Timeline
         status: {
             type: String,
-            enum: ['ordered', 'collected', 'in-progress', 'completed', 'cancelled', 'rejected'],
-            default: 'ordered',
+            enum: ['pending', 'collected', 'in_progress', 'completed', 'verified', 'cancelled'],
+            default: 'pending',
             required: true,
-            //index: true
+            index: true
         },
-        orderDate: {
+        isCritical: {
+            type: Boolean,
+            default: false,
+            index: true
+        },
+        hasAbnormalValues: {
+            type: Boolean,
+            default: false,
+            index: true
+        },
+        
+        // Dates
+        orderedDate: {
             type: Date,
             required: true,
             default: Date.now
         },
-        collectionDate: Date,
-        receivedDate: Date,
-        completedDate: Date,
-        resultDate: {
+        collectedDate: {
             type: Date,
-            //index: true
+            index: true
         },
+        receivedDate: {
+            type: Date,
+            required: true,
+            default: Date.now
+        },
+        reportedDate: {
+            type: Date,
+            index: true
+        },
+        verifiedDate: Date,
         
         // Specimen Information
         specimen: {
@@ -156,25 +225,26 @@ const labResultSchema = new Schema(
             accreditations: [String]
         },
         
-        // Performing Technologist
+        // Personnel
         performedBy: {
-            name: String,
-            license: String,
-            signature: String
+            type: Schema.Types.ObjectId,
+            ref: 'User'
         },
-        
-        // Verifying Pathologist/Doctor
         verifiedBy: {
             type: Schema.Types.ObjectId,
             ref: 'User'
         },
-        verificationDate: Date,
-        
-        // Critical Results
-        isCritical: {
-            type: Boolean,
-            default: false
+        createdBy: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            required: true
         },
+        updatedBy: {
+            type: Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        
+        // Critical Result Handling
         criticalValue: String,
         criticalAlertSent: {
             type: Boolean,
@@ -185,6 +255,51 @@ const labResultSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User'
         },
+        acknowledgmentNotes: String,
+        actionTaken: String,
+        
+        // Attachments
+        labReportFiles: [{
+            fileName: String,
+            fileUrl: String,
+            fileType: String,
+            description: String,
+            uploadedAt: {
+                type: Date,
+                default: Date.now
+            },
+            uploadedBy: {
+                type: Schema.Types.ObjectId,
+                ref: 'User'
+            }
+        }],
+        reportUrl: String,
+        
+        // Notes and Comments
+        notes: {
+            type: String,
+            trim: true
+        },
+        verificationNotes: {
+            type: String,
+            trim: true
+        },
+        technicianNotes: {
+            type: String,
+            trim: true
+        },
+        pathologistNotes: {
+            type: String,
+            trim: true
+        },
+        
+        // Follow-up
+        followUpRequired: {
+            type: Boolean,
+            default: false
+        },
+        followUpTest: String,
+        followUpDate: Date,
         
         // Quality Control
         qualityControl: {
@@ -193,56 +308,18 @@ const labResultSchema = new Schema(
             correctiveActions: [String]
         },
         
-        // Attachments and Reports
-        reportUrl: String, // Cloudinary URL for PDF report
-        attachments: [{
-            name: String,
-            url: String,
-            type: String
-        }],
-        
-        // Comments and Notes
-        technicianNotes: String,
-        pathologistNotes: String,
-        clinicalCorrelation: String,
-        
-        // Follow-up and Repeat Testing
-        followUpRequired: {
-            type: Boolean,
-            default: false
-        },
-        followUpTest: String,
-        followUpDate: Date,
-        repeatTest: {
-            required: Boolean,
-            reason: String,
-            scheduledDate: Date
-        },
-        
-        // Cost and Billing
+        // Billing
         testCost: Number,
         billingStatus: {
             type: String,
-            enum: ['billed', 'paid', 'pending', 'insurance'],
+            enum: ['pending', 'billed', 'paid', 'insurance_pending', 'rejected'],
             default: 'pending'
         },
         
-        // Privacy and Access
-        sensitivity: {
-            type: String,
-            enum: ['normal', 'confidential', 'restricted'],
-            default: 'normal'
-        },
-        
-        // Audit Trail
-        createdBy: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true
-        },
-        modifiedBy: {
-            type: Schema.Types.ObjectId,
-            ref: 'User'
+        // Metadata
+        metadata: {
+            type: Map,
+            of: Schema.Types.Mixed
         }
     },
     {
@@ -253,11 +330,13 @@ const labResultSchema = new Schema(
 /**
  * Indexes for optimized queries
  */
-labResultSchema.index({ patientId: 1, resultDate: -1 });
-labResultSchema.index({ orderedBy: 1, orderDate: -1 });
-labResultSchema.index({ testType: 1, status: 1 });
-labResultSchema.index({ status: 1, completedDate: 1 });
+labResultSchema.index({ patientId: 1, reportedDate: -1 });
+labResultSchema.index({ orderedBy: 1, reportedDate: -1 });
+labResultSchema.index({ labResultNumber: 1 }, { unique: true });
+labResultSchema.index({ status: 1, reportedDate: -1 });
+labResultSchema.index({ isCritical: 1, reportedDate: -1 });
 labResultSchema.index({ 'results.flag': 1 });
+labResultSchema.index({ createdBy: 1, createdAt: -1 });
 
 /**
  * Add aggregation pagination plugin
@@ -265,54 +344,58 @@ labResultSchema.index({ 'results.flag': 1 });
 labResultSchema.plugin(mongooseAggregatePaginate);
 
 /**
- * Virtual: Has Abnormal Results
+ * Virtual: Age of result in days
  */
-labResultSchema.virtual('hasAbnormalResults').get(function() {
-    return this.results.some(result => 
-        result.flag && result.flag !== 'normal'
-    );
-});
-
-/**
- * Virtual: Has Critical Results
- */
-labResultSchema.virtual('hasCriticalResults').get(function() {
-    return this.results.some(result => result.flag === 'critical') || this.isCritical;
-});
-
-/**
- * Virtual: Test Age (days since completion)
- */
-labResultSchema.virtual('testAgeInDays').get(function() {
-    if (!this.completedDate) return null;
+labResultSchema.virtual('resultAgeInDays').get(function() {
+    if (!this.reportedDate) return null;
     const today = new Date();
-    const diffTime = today - this.completedDate;
+    const diffTime = today - this.reportedDate;
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 });
 
 /**
- * Virtual: Turnaround Time (days from order to completion)
+ * Virtual: Turnaround time in hours
  */
-labResultSchema.virtual('turnaroundTime').get(function() {
-    if (!this.orderDate || !this.completedDate) return null;
-    const diffTime = this.completedDate - this.orderDate;
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+labResultSchema.virtual('turnaroundTimeHours').get(function() {
+    if (!this.orderedDate || !this.reportedDate) return null;
+    const diffTime = this.reportedDate - this.orderedDate;
+    return Math.floor(diffTime / (1000 * 60 * 60));
 });
 
 /**
- * Pre-save middleware: Set result date when completed
+ * Virtual: Is verified
+ */
+labResultSchema.virtual('isVerified').get(function() {
+    return this.status === 'verified' && this.verifiedBy && this.verifiedDate;
+});
+
+/**
+ * Virtual: Has attachments
+ */
+labResultSchema.virtual('hasAttachments').get(function() {
+    return (this.labReportFiles && this.labReportFiles.length > 0) || this.reportUrl;
+});
+
+/**
+ * Pre-save middleware
  */
 labResultSchema.pre('save', function(next) {
-    if (this.status === 'completed' && !this.resultDate) {
-        this.resultDate = new Date();
+    // Set reported date when completed or verified
+    if ((this.status === 'completed' || this.status === 'verified') && !this.reportedDate) {
+        this.reportedDate = new Date();
     }
     
-    // Auto-detect critical values
-    if (this.results && this.results.length > 0) {
-        const hasCritical = this.results.some(result => result.flag === 'critical');
-        if (hasCritical && !this.isCritical) {
-            this.isCritical = true;
-        }
+    // Set verified date when verified
+    if (this.status === 'verified' && !this.verifiedDate) {
+        this.verifiedDate = new Date();
+    }
+    
+    // Ensure labResultNumber is set
+    if (!this.labResultNumber && this.isNew) {
+        // Generate if not provided
+        const timestamp = Date.now().toString().slice(-6);
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        this.labResultNumber = `LAB-${timestamp}-${random}`;
     }
     
     next();
@@ -321,33 +404,52 @@ labResultSchema.pre('save', function(next) {
 /**
  * Instance Method: Mark as collected
  */
-labResultSchema.methods.markCollected = async function(collectionDate = new Date()) {
+labResultSchema.methods.markAsCollected = async function(collectionDate = new Date(), collectorId = null) {
     this.status = 'collected';
-    this.collectionDate = collectionDate;
+    this.collectedDate = collectionDate;
+    if (collectorId) {
+        this.performedBy = collectorId;
+    }
     return await this.save();
 };
 
 /**
  * Instance Method: Mark as completed
  */
-labResultSchema.methods.markCompleted = async function(results, completedDate = new Date()) {
+labResultSchema.methods.markAsCompleted = async function(completedDate = new Date()) {
     this.status = 'completed';
-    this.results = results;
-    this.completedDate = completedDate;
-    this.resultDate = completedDate;
+    this.reportedDate = completedDate;
+    return await this.save();
+};
+
+/**
+ * Instance Method: Verify result
+ */
+labResultSchema.methods.verify = async function(verifiedById, notes = '') {
+    this.status = 'verified';
+    this.verifiedBy = verifiedById;
+    this.verifiedDate = new Date();
+    this.verificationNotes = notes;
     return await this.save();
 };
 
 /**
  * Instance Method: Add critical alert
  */
-labResultSchema.methods.addCriticalAlert = async function(acknowledgedBy = null) {
+labResultSchema.methods.addCriticalAlert = async function() {
     this.isCritical = true;
     this.criticalAlertSent = true;
     this.criticalAlertDate = new Date();
-    if (acknowledgedBy) {
-        this.criticalAcknowledgedBy = acknowledgedBy;
-    }
+    return await this.save();
+};
+
+/**
+ * Instance Method: Acknowledge critical result
+ */
+labResultSchema.methods.acknowledgeCritical = async function(acknowledgedById, notes = '', action = '') {
+    this.criticalAcknowledgedBy = acknowledgedById;
+    this.acknowledgmentNotes = notes;
+    this.actionTaken = action;
     return await this.save();
 };
 
@@ -355,27 +457,48 @@ labResultSchema.methods.addCriticalAlert = async function(acknowledgedBy = null)
  * Instance Method: Get abnormal results
  */
 labResultSchema.methods.getAbnormalResults = function() {
-    return this.results.filter(result => 
-        result.flag && result.flag !== 'normal'
-    );
+    return this.results.filter(result => result.isAbnormal || result.flag !== 'normal');
 };
 
 /**
- * Static Method: Find results by patient
+ * Instance Method: Get critical results
+ */
+labResultSchema.methods.getCriticalResults = function() {
+    return this.results.filter(result => result.isCritical || result.flag === 'critical');
+};
+
+/**
+ * Static Method: Find by patient with pagination
  */
 labResultSchema.statics.findByPatient = async function(patientId, options = {}) {
-    const { testType, status, limit = 50, page = 1 } = options;
+    const { 
+        status, 
+        testType, 
+        startDate, 
+        endDate,
+        page = 1, 
+        limit = 20 
+    } = options;
     
     const query = { patientId };
-    if (testType) query.testType = testType;
+    
     if (status) query.status = status;
+    if (testType) query.testType = testType;
+    if (startDate || endDate) {
+        query.reportedDate = {};
+        if (startDate) query.reportedDate.$gte = new Date(startDate);
+        if (endDate) query.reportedDate.$lte = new Date(endDate);
+    }
+    
+    const skip = (page - 1) * limit;
     
     return await this.find(query)
         .populate('orderedBy', 'firstName lastName specialization')
         .populate('verifiedBy', 'firstName lastName')
-        .sort({ orderDate: -1 })
-        .limit(limit)
-        .skip((page - 1) * limit);
+        .populate('createdBy', 'firstName lastName')
+        .sort({ reportedDate: -1 })
+        .skip(skip)
+        .limit(limit);
 };
 
 /**
@@ -383,47 +506,63 @@ labResultSchema.statics.findByPatient = async function(patientId, options = {}) 
  */
 labResultSchema.statics.findPendingResults = async function() {
     return await this.find({
-        status: { $in: ['ordered', 'collected', 'in-progress'] }
+        status: { $in: ['pending', 'collected', 'in_progress'] }
     })
     .populate('patientId', 'userId')
     .populate({
         path: 'patientId',
-        populate: { path: 'userId', select: 'firstName lastName phoneNumber' }
+        populate: { 
+            path: 'userId', 
+            select: 'firstName lastName phoneNumber email' 
+        }
     })
-    .populate('orderedBy', 'firstName lastName')
-    .sort({ orderDate: 1 });
+    .populate('orderedBy', 'firstName lastName phoneNumber')
+    .sort({ orderedDate: 1 });
 };
 
 /**
- * Static Method: Find critical results
+ * Static Method: Find critical unacknowledged results
  */
-labResultSchema.statics.findCriticalResults = async function() {
+labResultSchema.statics.findUnacknowledgedCritical = async function() {
     return await this.find({
         isCritical: true,
-        criticalAlertSent: false
+        criticalAcknowledgedBy: { $exists: false }
     })
     .populate('patientId', 'userId')
     .populate({
         path: 'patientId',
-        populate: { path: 'userId', select: 'firstName lastName phoneNumber' }
+        populate: { 
+            path: 'userId', 
+            select: 'firstName lastName phoneNumber' 
+        }
     })
-    .populate('orderedBy', 'firstName lastName phoneNumber');
+    .populate('orderedBy', 'firstName lastName phoneNumber email')
+    .sort({ reportedDate: -1 });
 };
 
 /**
- * Static Method: Get lab statistics
+ * Static Method: Get statistics
  */
-labResultSchema.statics.getStatistics = async function(labName = null, startDate, endDate) {
-    const matchStage = {
-        orderDate: {
-            $gte: new Date(startDate),
-            $lte: new Date(endDate)
-        }
-    };
+labResultSchema.statics.getStatistics = async function(options = {}) {
+    const { 
+        startDate, 
+        endDate, 
+        patientId, 
+        orderedBy,
+        testType 
+    } = options;
     
-    if (labName) {
-        matchStage['laboratory.name'] = labName;
+    const matchStage = {};
+    
+    if (startDate || endDate) {
+        matchStage.reportedDate = {};
+        if (startDate) matchStage.reportedDate.$gte = new Date(startDate);
+        if (endDate) matchStage.reportedDate.$lte = new Date(endDate);
     }
+    
+    if (patientId) matchStage.patientId = patientId;
+    if (orderedBy) matchStage.orderedBy = orderedBy;
+    if (testType) matchStage.testType = testType;
     
     return await this.aggregate([
         { $match: matchStage },
@@ -436,24 +575,96 @@ labResultSchema.statics.getStatistics = async function(labName = null, startDate
                 byTestType: [
                     { $group: { _id: '$testType', count: { $sum: 1 } } }
                 ],
-                abnormalResults: [
-                    { $unwind: '$results' },
-                    { $match: { 'results.flag': { $in: ['low', 'high', 'critical', 'abnormal'] } } },
-                    { $count: 'count' }
+                criticalStats: [
+                    { $group: { 
+                        _id: null,
+                        totalCritical: { $sum: { $cond: ['$isCritical', 1, 0] } },
+                        totalAbnormal: { $sum: { $cond: ['$hasAbnormalValues', 1, 0] } }
+                    } }
                 ],
-                turnaroundTime: [
-                    { $match: { status: 'completed' } },
+                turnaroundStats: [
+                    { $match: { status: { $in: ['completed', 'verified'] } } },
                     {
                         $group: {
                             _id: null,
-                            avgTurnaround: { $avg: { $subtract: ['$completedDate', '$orderDate'] } },
-                            maxTurnaround: { $max: { $subtract: ['$completedDate', '$orderDate'] } },
-                            minTurnaround: { $min: { $subtract: ['$completedDate', '$orderDate'] } }
+                            avgTurnaroundHours: { 
+                                $avg: { 
+                                    $divide: [
+                                        { $subtract: ['$reportedDate', '$orderedDate'] },
+                                        1000 * 60 * 60
+                                    ]
+                                }
+                            },
+                            maxTurnaroundHours: {
+                                $max: {
+                                    $divide: [
+                                        { $subtract: ['$reportedDate', '$orderedDate'] },
+                                        1000 * 60 * 60
+                                    ]
+                                }
+                            }
                         }
                     }
+                ],
+                monthlyTrend: [
+                    {
+                        $group: {
+                            _id: {
+                                year: { $year: '$reportedDate' },
+                                month: { $month: '$reportedDate' }
+                            },
+                            count: { $sum: 1 },
+                            criticalCount: { $sum: { $cond: ['$isCritical', 1, 0] } }
+                        }
+                    },
+                    { $sort: { '_id.year': 1, '_id.month': 1 } },
+                    { $limit: 12 }
                 ]
             }
         }
+    ]);
+};
+
+/**
+ * Static Method: Search lab results
+ */
+labResultSchema.statics.search = async function(searchTerm, options = {}) {
+    const { page = 1, limit = 20 } = options;
+    const skip = (page - 1) * limit;
+    
+    return await this.aggregate([
+        {
+            $lookup: {
+                from: 'patients',
+                localField: 'patientId',
+                foreignField: '_id',
+                as: 'patient'
+            }
+        },
+        {
+            $lookup: {
+                from: 'users',
+                localField: 'patient.userId',
+                foreignField: '_id',
+                as: 'patientUser'
+            }
+        },
+        {
+            $match: {
+                $or: [
+                    { labResultNumber: { $regex: searchTerm, $options: 'i' } },
+                    { testName: { $regex: searchTerm, $options: 'i' } },
+                    { labTestCode: { $regex: searchTerm, $options: 'i' } },
+                    { 'patientUser.firstName': { $regex: searchTerm, $options: 'i' } },
+                    { 'patientUser.lastName': { $regex: searchTerm, $options: 'i' } }
+                ]
+            }
+        },
+        { $unwind: '$patient' },
+        { $unwind: '$patientUser' },
+        { $sort: { reportedDate: -1 } },
+        { $skip: skip },
+        { $limit: limit }
     ]);
 };
 

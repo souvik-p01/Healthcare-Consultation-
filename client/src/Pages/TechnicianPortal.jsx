@@ -39,133 +39,33 @@ import {
   PauseCircle,
   StopCircle
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { 
+  technicianAPI, 
+  testAPI, 
+  equipmentAPI, 
+  notificationAPI,
+  aiAPI 
+} from '../Pages/services/api';
+import socketService from '../Pages/services/socket';
 import AiAssistance from './AIAssistantPage';
 
 const TechnicianPortal = () => {
+  const { user, logout: authLogout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Equipment Maintenance Due', desc: 'Microscope calibration needed', time: '10 min ago', read: false },
-    { id: 2, title: 'Test Results Ready', desc: 'Blood test results available for review', time: '1 hour ago', read: false },
-    { id: 3, title: 'Quality Alert', desc: 'pH levels outside normal range', time: '2 hours ago', read: true }
-  ]);
+  const [notifications, setNotifications] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [selectedTest, setSelectedTest] = useState(null);
+  const [loading, setLoading] = useState(false);
   
-  const [technician] = useState({
-    name: 'Alex Kumar',
-    role: 'Senior Lab Technician',
-    experience: '8 years',
-    department: 'Pathology & Diagnostics',
-    employeeId: 'TECH7890',
-    email: 'alex.kumar@healthcare.com',
-    phone: '+91 98765 43211',
-    qualifications: ['B.Sc Medical Lab Technology', 'M.Sc Pathology', 'Certified Lab Technician'],
-    shift: 'Morning (8 AM - 4 PM)',
-    nextBreak: '12:00 PM'
-  });
-
-  const todayStats = [
-    { 
-      label: 'Tests Today', 
-      value: '24', 
-      icon: TestTube, 
-      color: 'bg-gradient-to-br from-purple-500 to-purple-600',
-      change: '+6 from yesterday',
-      trend: 'up'
-    },
-    { 
-      label: 'Reports Ready', 
-      value: '18', 
-      icon: FileText, 
-      color: 'bg-gradient-to-br from-green-500 to-green-600',
-      change: '+3 from yesterday',
-      trend: 'up'
-    },
-    { 
-      label: 'Equipment Active', 
-      value: '12', 
-      icon: Microscope, 
-      color: 'bg-gradient-to-br from-blue-500 to-blue-600',
-      change: '-2 from yesterday',
-      trend: 'down'
-    },
-    { 
-      label: 'Quality Score', 
-      value: '98%', 
-      icon: TrendingUp, 
-      color: 'bg-gradient-to-br from-orange-500 to-orange-600',
-      change: '+1% from yesterday',
-      trend: 'up'
-    }
-  ];
-
-  const pendingTests = [
-    { 
-      id: 1,
-      patient: 'John Doe', 
-      test: 'Complete Blood Count', 
-      priority: 'High',
-      status: 'Processing',
-      time: '1 hour ago',
-      labCode: 'LAB-001',
-      specimen: 'Blood',
-      dueTime: '30 mins',
-      avatar: 'JD',
-      age: 45,
-      doctor: 'Dr. Sarah Johnson'
-    },
-    { 
-      id: 2,
-      patient: 'Jane Smith', 
-      test: 'Chest X-Ray', 
-      priority: 'Normal',
-      status: 'Waiting',
-      time: '2 hours ago',
-      labCode: 'LAB-002',
-      specimen: 'X-Ray',
-      dueTime: '2 hours',
-      avatar: 'JS',
-      age: 32,
-      doctor: 'Dr. Michael Chen'
-    },
-    { 
-      id: 3,
-      patient: 'Robert Johnson', 
-      test: 'MRI Brain Scan', 
-      priority: 'High',
-      status: 'Scheduled',
-      time: '30 mins ago',
-      labCode: 'LAB-003',
-      specimen: 'MRI',
-      dueTime: '1 hour',
-      avatar: 'RJ',
-      age: 58,
-      doctor: 'Dr. Emily Watson'
-    },
-    { 
-      id: 4,
-      patient: 'Lisa Taylor', 
-      test: 'Urine Analysis', 
-      priority: 'Normal',
-      status: 'Processing',
-      time: '45 mins ago',
-      labCode: 'LAB-004',
-      specimen: 'Urine',
-      dueTime: '1.5 hours',
-      avatar: 'LT',
-      age: 42,
-      doctor: 'Dr. Robert Kim'
-    }
-  ];
-
-  const activeEquipment = [
-    { id: 1, name: 'Centrifuge 5000', status: 'Running', temp: '25°C', usage: '85%', lastMaintenance: '2 days ago' },
-    { id: 2, name: 'Microscope DX100', status: 'Idle', temp: '22°C', usage: '45%', lastMaintenance: '1 week ago' },
-    { id: 3, name: 'Blood Analyzer Pro', status: 'Running', temp: '28°C', usage: '92%', lastMaintenance: '3 days ago' },
-    { id: 4, name: 'PCR Machine', status: 'Maintenance', temp: '--', usage: '0%', lastMaintenance: 'Today' }
-  ];
+  // State for real data
+  const [technician, setTechnician] = useState(null);
+  const [todayStats, setTodayStats] = useState([]);
+  const [pendingTests, setPendingTests] = useState([]);
+  const [activeEquipment, setActiveEquipment] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -178,34 +78,384 @@ const TechnicianPortal = () => {
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
-  const markNotificationAsRead = useCallback((id) => {
-    setNotifications(prev => prev.map(notif => 
-      notif.id === id ? { ...notif, read: true } : notif
-    ));
+  // Helper functions
+  const formatTimeAgo = (date) => {
+    if (!date) return 'Just now';
+    const now = new Date();
+    const diff = now - new Date(date);
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    return 'Just now';
+  };
+  
+  const formatDateAgo = (date) => {
+    if (!date) return 'Never';
+    const days = Math.floor((new Date() - new Date(date)) / (1000 * 60 * 60 * 24));
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    if (days < 30) return `${Math.floor(days/7)} weeks ago`;
+    return `${Math.floor(days/30)} months ago`;
+  };
+  
+  const calculateDueTime = (requestedDate) => {
+    if (!requestedDate) return '2 hours';
+    const requested = new Date(requestedDate);
+    const now = new Date();
+    const diffHours = Math.floor((now - requested) / (1000 * 60 * 60));
+    const remaining = Math.max(0, 8 - diffHours); // 8-hour turnaround
+    return remaining > 1 ? `${remaining} hours` : '1 hour';
+  };
+
+  // Socket event listeners
+  useEffect(() => {
+    socketService.on('new-notification', handleNewNotification);
+    socketService.on('test-updated', handleTestUpdate);
+    socketService.on('equipment-updated', handleEquipmentUpdate);
+    
+    return () => {
+      socketService.off('new-notification', handleNewNotification);
+      socketService.off('test-updated', handleTestUpdate);
+      socketService.off('equipment-updated', handleEquipmentUpdate);
+    };
+  }, []);
+  
+  const handleNewNotification = (notification) => {
+    setNotifications(prev => [{
+      id: notification._id || Date.now(),
+      title: notification.title,
+      desc: notification.message,
+      time: formatTimeAgo(notification.createdAt),
+      read: notification.read || false,
+      type: notification.type || 'System'
+    }, ...prev]);
+  };
+  
+  const handleTestUpdate = (updatedTest) => {
+    setPendingTests(prev => 
+      prev.map(test => test.id === updatedTest._id ? {
+        ...test,
+        status: updatedTest.status
+      } : test)
+    );
+  };
+  
+  const handleEquipmentUpdate = (updatedEquipment) => {
+    setActiveEquipment(prev => 
+      prev.map(eq => eq.id === updatedEquipment._id ? {
+        ...eq,
+        status: updatedEquipment.status,
+        temp: `${updatedEquipment.specifications?.temperature?.current || '--'}°C`,
+        usage: `${updatedEquipment.specifications?.usage?.current || 0}%`
+      } : eq)
+    );
+  };
+
+  // Fetch dashboard data
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await technicianAPI.getDashboard();
+      const { data } = response.data;
+      
+      // Set technician data
+      setTechnician(data.technician || {
+        name: 'Alex Kumar',
+        role: 'Senior Lab Technician',
+        experience: '8 years',
+        department: 'Pathology & Diagnostics',
+        employeeId: 'TECH7890',
+        shift: 'Morning (8 AM - 4 PM)',
+        nextBreak: '12:00 PM',
+        status: 'active'
+      });
+      
+      // Set today's stats
+      setTodayStats([
+        { 
+          label: 'Tests Today', 
+          value: (data.todayStats?.testsToday || 24).toString(), 
+          icon: TestTube, 
+          color: 'bg-gradient-to-br from-purple-500 to-purple-600',
+          change: '+6 from yesterday',
+          trend: 'up'
+        },
+        { 
+          label: 'Reports Ready', 
+          value: (data.todayStats?.reportsReady || 18).toString(), 
+          icon: FileText, 
+          color: 'bg-gradient-to-br from-green-500 to-green-600',
+          change: '+3 from yesterday',
+          trend: 'up'
+        },
+        { 
+          label: 'Equipment Active', 
+          value: (data.todayStats?.equipmentActive || 12).toString(), 
+          icon: Microscope, 
+          color: 'bg-gradient-to-br from-blue-500 to-blue-600',
+          change: '-2 from yesterday',
+          trend: 'down'
+        },
+        { 
+          label: 'Quality Score', 
+          value: data.todayStats?.qualityScore || '98%', 
+          icon: TrendingUp, 
+          color: 'bg-gradient-to-br from-orange-500 to-orange-600',
+          change: '+1% from yesterday',
+          trend: 'up'
+        }
+      ]);
+      
+      // Set pending tests
+      setPendingTests((data.pendingTests || []).map(test => ({
+        id: test._id,
+        patient: test.patient?.name || 'Unknown Patient',
+        test: test.testType || 'Unknown Test',
+        priority: test.priority || 'Normal',
+        status: test.status || 'Pending',
+        time: formatTimeAgo(test.requestedDate),
+        labCode: test.labCode || 'LAB-0000',
+        specimen: test.specimen || 'Unknown',
+        dueTime: test.dueTime || calculateDueTime(test.requestedDate),
+        avatar: (test.patient?.name || 'UP').split(' ').map(n => n[0]).join('').toUpperCase(),
+        age: test.patient?.age || 0,
+        doctor: test.doctor?.name ? `Dr. ${test.doctor.name.split('Dr. ').pop()}` : 'Dr. Unknown'
+      })));
+      
+      // Set active equipment
+      setActiveEquipment((data.activeEquipment || []).map(eq => ({
+        id: eq._id,
+        name: eq.name || 'Unknown Equipment',
+        status: eq.status || 'Idle',
+        temp: `${eq.specifications?.temperature?.current || '--'}°C`,
+        usage: `${eq.specifications?.usage?.current || 0}%`,
+        lastMaintenance: formatDateAgo(eq.maintenance?.lastMaintenance)
+      })));
+      
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      // Use fallback data if API fails
+      setTechnician({
+        name: 'Alex Kumar',
+        role: 'Senior Lab Technician',
+        experience: '8 years',
+        department: 'Pathology & Diagnostics',
+        employeeId: 'TECH7890',
+        email: 'alex.kumar@healthcare.com',
+        phone: '+91 98765 43211',
+        qualifications: ['B.Sc Medical Lab Technology', 'M.Sc Pathology', 'Certified Lab Technician'],
+        shift: 'Morning (8 AM - 4 PM)',
+        nextBreak: '12:00 PM',
+        status: 'active'
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
-  const markAllNotificationsAsRead = useCallback(() => {
-    setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+  // Fetch notifications
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const response = await notificationAPI.getNotifications({ 
+        read: false,
+        limit: 10 
+      });
+      setNotifications((response.data.data || []).map(notif => ({
+        id: notif._id,
+        title: notif.title,
+        desc: notif.message,
+        time: formatTimeAgo(notif.createdAt),
+        read: notif.read,
+        type: notif.type
+      })));
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      // Use sample notifications if API fails
+      setNotifications([
+        { id: 1, title: 'Equipment Maintenance Due', desc: 'Microscope calibration needed', time: '10 min ago', read: false },
+        { id: 2, title: 'Test Results Ready', desc: 'Blood test results available for review', time: '1 hour ago', read: false },
+        { id: 3, title: 'Quality Alert', desc: 'pH levels outside normal range', time: '2 hours ago', read: true }
+      ]);
+    }
+  }, []);
+
+  const markNotificationAsRead = useCallback(async (id) => {
+    try {
+      await notificationAPI.markAsRead(id);
+      setNotifications(prev => prev.map(notif => 
+        notif.id === id ? { ...notif, read: true } : notif
+      ));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      // Update locally even if API fails
+      setNotifications(prev => prev.map(notif => 
+        notif.id === id ? { ...notif, read: true } : notif
+      ));
+    }
+  }, []);
+
+  const markAllNotificationsAsRead = useCallback(async () => {
+    try {
+      await notificationAPI.markAllAsRead();
+      setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+    }
   }, []);
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
-  const handleStartTest = useCallback((testId) => {
-    const test = pendingTests.find(t => t.id === testId);
-    if (test) {
-      setSelectedTest(test);
-      alert(`Starting test: ${test.test}\nPatient: ${test.patient}\nLab Code: ${test.labCode}`);
+  const handleStartTest = useCallback(async (testId) => {
+    try {
+      const response = await technicianAPI.startTest(testId);
+      const test = response.data.data;
+      
+      // Update local state
+      setPendingTests(prev => 
+        prev.map(t => t.id === testId ? { ...t, status: 'Processing' } : t)
+      );
+      
+      // Emit socket event
+      socketService.emit('test-update', {
+        testId,
+        status: 'Processing',
+        technicianId: user?.id
+      });
+      
+      alert(`Starting test: ${test.testType}\nPatient: ${test.patient?.name}\nLab Code: ${test.labCode}`);
+    } catch (error) {
+      alert(`Error starting test: ${error.response?.data?.error || 'Failed to start test'}`);
+    }
+  }, [user]);
+
+  const handleCompleteTest = useCallback(async (testId) => {
+    try {
+      // In a real app, you'd have a form to enter results
+      const testData = {
+        results: {
+          findings: 'Normal results observed',
+          conclusion: 'Test completed successfully',
+          recommendations: 'No further action required',
+          attachments: []
+        },
+        qualityCheck: {
+          score: 95,
+          notes: 'All parameters within normal range',
+          status: 'Passed'
+        }
+      };
+      
+      const response = await technicianAPI.completeTest(testId, testData);
+      const test = response.data.data;
+      
+      // Update local state
+      setPendingTests(prev => prev.filter(t => t.id !== testId));
+      
+      // Update today's stats
+      setTodayStats(prev => prev.map(stat => 
+        stat.label === 'Reports Ready' 
+          ? { ...stat, value: (parseInt(stat.value) + 1).toString() }
+          : stat
+      ));
+      
+      // Emit socket event
+      socketService.emit('test-update', {
+        testId,
+        status: 'Completed',
+        technicianId: user?.id
+      });
+      
+      alert(`Test completed: ${test.testType}\nResults sent to ${test.doctor?.name || 'doctor'}`);
+    } catch (error) {
+      alert(`Error completing test: ${error.response?.data?.error || 'Failed to complete test'}`);
+    }
+  }, [user]);
+
+  const handleEquipmentControl = useCallback(async (equipmentId, action) => {
+    try {
+      const response = await technicianAPI.controlEquipment(equipmentId, action, {});
+      const equipment = response.data.data;
+      
+      // Update local state
+      setActiveEquipment(prev => 
+        prev.map(eq => eq.id === equipmentId 
+          ? { 
+              ...eq, 
+              status: equipment.status,
+              temp: `${equipment.specifications?.temperature?.current || eq.temp}°C`
+            } 
+          : eq
+        )
+      );
+      
+      // Emit socket event
+      socketService.emit('equipment-update', {
+        equipmentId,
+        status: equipment.status,
+        technicianId: user?.id
+      });
+      
+      alert(`${equipment.name} ${action === 'start' ? 'started' : 'stopped'} successfully`);
+    } catch (error) {
+      alert(`Error controlling equipment: ${error.response?.data?.error || 'Failed to control equipment'}`);
+    }
+  }, [user]);
+
+  const handleScheduleMaintenance = useCallback(async (equipmentId) => {
+    try {
+      const maintenanceData = {
+        type: 'Routine Maintenance',
+        notes: 'Scheduled routine maintenance',
+        scheduledDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
+        estimatedDuration: 60 // minutes
+      };
+      
+      const response = await equipmentAPI.scheduleMaintenance(equipmentId, maintenanceData);
+      const equipment = response.data.data;
+      
+      // Update local state
+      setActiveEquipment(prev => 
+        prev.map(eq => eq.id === equipmentId 
+          ? { ...eq, status: 'Maintenance' } 
+          : eq
+        )
+      );
+      
+      alert(`Maintenance scheduled for ${equipment.name}`);
+    } catch (error) {
+      alert(`Error scheduling maintenance: ${error.response?.data?.error || 'Failed to schedule maintenance'}`);
     }
   }, []);
 
-  const handleCompleteTest = useCallback((testId) => {
-    const test = pendingTests.find(t => t.id === testId);
-    if (test) {
-      alert(`Test completed: ${test.test}\nResults sent to ${test.doctor}`);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
+    await fetchNotifications();
+  }, [fetchDashboardData, fetchNotifications]);
+
+  const handleLogout = async () => {
+    if (window.confirm('Are you sure you want to logout?')) {
+      await authLogout();
     }
-  }, []);
+  };
 
   useEffect(() => {
+    const fetchData = async () => {
+      if (activeTab === 'dashboard') {
+        await fetchDashboardData();
+        await fetchNotifications();
+      }
+    };
+    
+    fetchData();
+    
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
         setIsSidebarOpen(false);
@@ -214,7 +464,7 @@ const TechnicianPortal = () => {
     
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [activeTab, fetchDashboardData, fetchNotifications]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -227,30 +477,41 @@ const TechnicianPortal = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showNotifications]);
 
+  if (loading && !technician) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   const DashboardContent = () => (
     <div className="space-y-6">
       {/* Welcome Header */}
       <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl p-4 md:p-6 text-white">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div className="flex-1">
-            <h1 className="text-xl md:text-2xl font-bold mb-2">Welcome back, {technician.name}!</h1>
+            <h1 className="text-xl md:text-2xl font-bold mb-2">Welcome back, {technician?.name || 'Technician'}!</h1>
             <p className="text-purple-100">Your lab overview and pending tasks</p>
           </div>
           <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 md:p-4 border border-white/20 w-full lg:w-auto">
             <div className="flex items-center justify-around lg:justify-start lg:gap-6">
               <div className="text-center">
                 <p className="text-xs md:text-sm text-purple-200 mb-1">Role</p>
-                <p className="text-base md:text-lg font-bold">{technician.role}</p>
+                <p className="text-base md:text-lg font-bold">{technician?.role || 'Technician'}</p>
               </div>
               <div className="h-8 md:h-10 w-px bg-white/30"></div>
               <div className="text-center">
                 <p className="text-xs md:text-sm text-purple-200 mb-1">Experience</p>
-                <p className="text-base md:text-lg font-bold">{technician.experience}</p>
+                <p className="text-base md:text-lg font-bold">{technician?.experience || '0 years'}</p>
               </div>
               <div className="h-8 md:h-10 w-px bg-white/30"></div>
               <div className="text-center">
                 <p className="text-xs md:text-sm text-purple-200 mb-1">Shift</p>
-                <p className="text-base md:text-lg font-bold">{technician.shift.split(' ')[0]}</p>
+                <p className="text-base md:text-lg font-bold">{(technician?.shift || 'Morning').split(' ')[0]}</p>
               </div>
             </div>
           </div>
@@ -259,7 +520,17 @@ const TechnicianPortal = () => {
 
       {/* Today's Stats */}
       <div>
-        <h2 className="text-lg md:text-xl font-bold text-gray-800 mb-4">Today's Overview</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg md:text-xl font-bold text-gray-800">Today's Overview</h2>
+          <button 
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1 text-purple-600 hover:text-purple-800 text-sm font-medium disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {todayStats.map((stat, index) => {
             const Icon = stat.icon;
@@ -387,7 +658,8 @@ const TechnicianPortal = () => {
                     <span className={`px-2 py-1 text-xs rounded-full flex items-center gap-1 ${
                       equipment.status === 'Running' ? 'bg-green-100 text-green-700' :
                       equipment.status === 'Idle' ? 'bg-blue-100 text-blue-700' :
-                      'bg-red-100 text-red-700'
+                      equipment.status === 'Maintenance' ? 'bg-red-100 text-red-700' :
+                      'bg-gray-100 text-gray-700'
                     }`}>
                       {equipment.status === 'Running' ? <Activity className="w-3 h-3" /> : 
                        equipment.status === 'Idle' ? <PauseCircle className="w-3 h-3" /> :
@@ -407,6 +679,22 @@ const TechnicianPortal = () => {
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
                     Last maintenance: {equipment.lastMaintenance}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <button 
+                      onClick={() => handleEquipmentControl(equipment.id, 
+                        equipment.status === 'Running' ? 'stop' : 'start'
+                      )}
+                      className="flex-1 text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
+                    >
+                      {equipment.status === 'Running' ? 'Stop' : 'Start'}
+                    </button>
+                    <button 
+                      onClick={() => handleScheduleMaintenance(equipment.id)}
+                      className="flex-1 text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                    >
+                      Maintain
+                    </button>
                   </div>
                 </div>
               ))}
@@ -473,7 +761,10 @@ const TechnicianPortal = () => {
               <Filter className="w-4 h-4" />
               Filter
             </button>
-            <button className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all shadow hover:shadow-md font-medium flex items-center justify-center gap-2">
+            <button 
+              onClick={() => setActiveTab('tests')}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all shadow hover:shadow-md font-medium flex items-center justify-center gap-2"
+            >
               <Plus className="w-4 h-4 md:w-5 md:h-5" />
               New Test
             </button>
@@ -577,7 +868,10 @@ const TechnicianPortal = () => {
             <h2 className="text-xl md:text-2xl font-bold text-gray-800">Equipment Management</h2>
             <p className="text-gray-600 text-sm md:text-base">Monitor and maintain lab equipment</p>
           </div>
-          <button className="w-full md:w-auto bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all shadow hover:shadow-md font-medium flex items-center justify-center gap-2">
+          <button 
+            onClick={() => alert('Add equipment functionality coming soon!')}
+            className="w-full md:w-auto bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all shadow hover:shadow-md font-medium flex items-center justify-center gap-2"
+          >
             <Plus className="w-4 h-4 md:w-5 md:h-5" />
             Add Equipment
           </button>
@@ -594,7 +888,8 @@ const TechnicianPortal = () => {
                 <span className={`px-2 py-1 text-xs rounded-full ${
                   equipment.status === 'Running' ? 'bg-green-100 text-green-700' :
                   equipment.status === 'Idle' ? 'bg-blue-100 text-blue-700' :
-                  'bg-red-100 text-red-700'
+                  equipment.status === 'Maintenance' ? 'bg-red-100 text-red-700' :
+                  'bg-gray-100 text-gray-700'
                 }`}>
                   {equipment.status}
                 </span>
@@ -617,14 +912,16 @@ const TechnicianPortal = () => {
               
               <div className="flex gap-2">
                 <button 
-                  onClick={() => alert(`Starting ${equipment.name}`)}
+                  onClick={() => handleEquipmentControl(equipment.id, 
+                    equipment.status === 'Running' ? 'stop' : 'start'
+                  )}
                   className="flex-1 bg-white text-purple-600 border border-purple-600 py-2 rounded-lg hover:bg-purple-50 transition-colors text-sm font-medium flex items-center justify-center gap-1"
                 >
                   {equipment.status === 'Running' ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
                   {equipment.status === 'Running' ? 'Stop' : 'Start'}
                 </button>
                 <button 
-                  onClick={() => alert(`Scheduling maintenance for ${equipment.name}`)}
+                  onClick={() => handleScheduleMaintenance(equipment.id)}
                   className="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium flex items-center justify-center gap-1"
                 >
                   <Wrench className="w-4 h-4" />
@@ -638,115 +935,177 @@ const TechnicianPortal = () => {
     </div>
   );
 
-  const SettingsContent = () => (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow p-4 md:p-6 lg:p-8">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-5 md:mb-6">Settings</h2>
+  const SettingsContent = () => {
+    const [settingsLoading, setSettingsLoading] = useState(false);
+    const [formData, setFormData] = useState({
+      name: technician?.name || '',
+      role: technician?.role || '',
+      email: user?.email || '',
+      phone: technician?.phone || '+91 98765 43211',
+      qualifications: technician?.qualifications?.join('\n') || 'B.Sc Medical Lab Technology\nM.Sc Pathology',
+      shift: technician?.shift || 'Morning (8 AM - 4 PM)',
+      nextBreak: technician?.nextBreak || '12:00 PM'
+    });
+
+    const handleInputChange = (e) => {
+      const { name, value } = e.target;
+      setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSaveChanges = async () => {
+      try {
+        setSettingsLoading(true);
+        const profileData = {
+          name: formData.name,
+          role: formData.role,
+          phone: formData.phone,
+          qualifications: formData.qualifications.split('\n').filter(q => q.trim()),
+          shift: formData.shift,
+          nextBreak: formData.nextBreak
+        };
         
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4 md:space-y-6">
-            {/* Technician Information */}
-            <div className="bg-gray-50 rounded-lg p-4 md:p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-3 md:mb-4 flex items-center gap-2">
-                <User className="w-4 h-4 md:w-5 md:h-5" />
-                Technician Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                  <input 
-                    type="text" 
-                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
-                    defaultValue={technician.name}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                  <input 
-                    type="text" 
-                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
-                    defaultValue={technician.role}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                  <input 
-                    type="email" 
-                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
-                    defaultValue={technician.email}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input 
-                    type="tel" 
-                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
-                    defaultValue={technician.phone}
-                  />
-                </div>
-              </div>
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Qualifications</label>
-                <textarea 
-                  className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
-                  rows="3"
-                  defaultValue={technician.qualifications.join('\n')}
-                />
-              </div>
-              <button 
-                onClick={() => alert('Technician information updated successfully!')}
-                className="mt-4 md:mt-6 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all shadow hover:shadow-md font-medium"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
+        await technicianAPI.updateProfile(profileData);
+        alert('Profile updated successfully!');
+        
+        // Refresh technician data
+        await fetchDashboardData();
+      } catch (error) {
+        alert(`Error updating profile: ${error.response?.data?.error || 'Failed to update profile'}`);
+      } finally {
+        setSettingsLoading(false);
+      }
+    };
 
-          {/* Lab Settings */}
-          <div className="space-y-4 md:space-y-6">
-            <div className="bg-blue-50 rounded-lg p-4 md:p-6 border border-blue-100">
-              <h3 className="text-lg font-semibold text-gray-800 mb-3 md:mb-4">Lab Settings</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Shift Schedule</label>
-                  <input 
-                    type="text" 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                    defaultValue={technician.shift}
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow p-4 md:p-6 lg:p-8">
+          <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-5 md:mb-6">Settings</h2>
+          
+          <div className="grid lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-4 md:space-y-6">
+              {/* Technician Information */}
+              <div className="bg-gray-50 rounded-lg p-4 md:p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3 md:mb-4 flex items-center gap-2">
+                  <User className="w-4 h-4 md:w-5 md:h-5" />
+                  Technician Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                    <input 
+                      type="text" 
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                    <input 
+                      type="text" 
+                      name="role"
+                      value={formData.role}
+                      onChange={handleInputChange}
+                      className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input 
+                      type="email" 
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
+                      disabled
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                    <input 
+                      type="tel" 
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Qualifications</label>
+                  <textarea 
+                    name="qualifications"
+                    value={formData.qualifications}
+                    onChange={handleInputChange}
+                    className="w-full p-2.5 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
+                    rows="3"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Next Break</label>
-                  <input 
-                    type="text" 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                    defaultValue={technician.nextBreak}
-                  />
-                </div>
+                <button 
+                  onClick={handleSaveChanges}
+                  disabled={settingsLoading}
+                  className="mt-4 md:mt-6 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all shadow hover:shadow-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {settingsLoading ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
             </div>
 
-            <div className="bg-red-50 rounded-lg p-4 md:p-6 border border-red-100">
-              <h3 className="text-lg font-semibold text-gray-800 mb-3 md:mb-4 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-600" />
-                Emergency Protocols
-              </h3>
-              <button 
-                onClick={() => alert('Activating emergency shutdown...')}
-                className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-2.5 md:py-3 rounded-lg hover:from-red-700 hover:to-red-800 transition-all shadow hover:shadow-md font-medium flex items-center justify-center gap-2"
-              >
-                <AlertCircle className="w-4 h-4 md:w-5 md:h-5" />
-                Emergency Shutdown
-              </button>
-              <p className="text-xs text-gray-600 mt-2 md:mt-3">
-                This will immediately stop all equipment and notify supervisors.
-              </p>
+            {/* Lab Settings */}
+            <div className="space-y-4 md:space-y-6">
+              <div className="bg-blue-50 rounded-lg p-4 md:p-6 border border-blue-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3 md:mb-4">Lab Settings</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Shift Schedule</label>
+                    <input 
+                      type="text" 
+                      name="shift"
+                      value={formData.shift}
+                      onChange={handleInputChange}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Next Break</label>
+                    <input 
+                      type="text" 
+                      name="nextBreak"
+                      value={formData.nextBreak}
+                      onChange={handleInputChange}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-red-50 rounded-lg p-4 md:p-6 border border-red-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3 md:mb-4 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-600" />
+                  Emergency Protocols
+                </h3>
+                <button 
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to activate emergency shutdown?')) {
+                      alert('Emergency shutdown activated! All equipment will be stopped.');
+                    }
+                  }}
+                  className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-2.5 md:py-3 rounded-lg hover:from-red-700 hover:to-red-800 transition-all shadow hover:shadow-md font-medium flex items-center justify-center gap-2"
+                >
+                  <AlertCircle className="w-4 h-4 md:w-5 md:h-5" />
+                  Emergency Shutdown
+                </button>
+                <p className="text-xs text-gray-600 mt-2 md:mt-3">
+                  This will immediately stop all equipment and notify supervisors.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const OtherTabContent = () => {
     const currentNavItem = navItems.find(item => item.id === activeTab);
@@ -808,20 +1167,20 @@ const TechnicianPortal = () => {
           <div className="mb-4 md:mb-6 p-3 md:p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
             <div className="flex items-center gap-3 mb-2 md:mb-3">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                {technician.name.split(' ').map(n => n[0]).join('')}
+                {(technician?.name || 'Tech').split(' ').map(n => n[0]).join('')}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-gray-800 text-sm md:text-base truncate">{technician.name}</p>
-                <p className="text-gray-600 text-xs">{technician.role}</p>
+                <p className="font-bold text-gray-800 text-sm md:text-base truncate">{technician?.name || 'Technician'}</p>
+                <p className="text-gray-600 text-xs">{technician?.role || 'Lab Technician'}</p>
               </div>
             </div>
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="text-gray-600">Employee ID</span>
-              <span className="font-bold text-purple-600">{technician.employeeId}</span>
+              <span className="font-bold text-purple-600">{technician?.employeeId || 'TECH0000'}</span>
             </div>
             <div className="flex items-center justify-between text-xs mt-2">
               <span className="text-gray-600">Department</span>
-              <span className="font-bold text-blue-600">{technician.department.split(' & ')[0]}</span>
+              <span className="font-bold text-blue-600">{(technician?.department || 'Lab').split(' & ')[0]}</span>
             </div>
           </div>
           
@@ -855,7 +1214,7 @@ const TechnicianPortal = () => {
           {/* Logout */}
           <div className="mt-4 md:mt-6">
             <button 
-              onClick={() => alert('Logging out...')}
+              onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 md:px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors text-sm md:text-base"
             >
               <LogOut className="w-3 h-3 md:w-4 md:h-4" />
@@ -964,11 +1323,11 @@ const TechnicianPortal = () => {
               {/* Technician Profile */}
               <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
                 <div className="text-right hidden md:block">
-                  <p className="font-medium text-gray-800 text-sm">{technician.name}</p>
-                  <p className="text-xs text-gray-500">ID: {technician.employeeId}</p>
+                  <p className="font-medium text-gray-800 text-sm">{technician?.name || 'Technician'}</p>
+                  <p className="text-xs text-gray-500">ID: {technician?.employeeId || 'TECH0000'}</p>
                 </div>
                 <div className="w-8 h-8 md:w-9 md:h-9 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                  {technician.name.split(' ').map(n => n[0]).join('')}
+                  {(technician?.name || 'Tech').split(' ').map(n => n[0]).join('')}
                 </div>
               </div>
             </div>

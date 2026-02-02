@@ -70,9 +70,44 @@ const HeroSection = () => {
     };
   }, [showVideo]);
 
+  // Add fade-in and scale-in animation styles
+  const animationStyles = `
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes scaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .animate-fadeIn {
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .animate-scaleIn {
+      animation: scaleIn 0.4s ease-out;
+    }
+  `;
+
   return (
     <>
-      <section id="home" className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white py-20">
+      <section 
+        id="home" 
+        className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white py-20"
+        data-section="hero"
+      >
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
@@ -87,13 +122,17 @@ const HeroSection = () => {
               <div className="flex flex-col sm:flex-row gap-4">
                 <button 
                   onClick={handleClick} 
-                  className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
+                  className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold hover:bg-blue-50 transition-colors duration-300"
+                  type="button"
+                  aria-label="Get Started"
                 >
                   Get Started
                 </button>
                 <button 
                   onClick={handleWatchDemo}
-                  className="flex items-center justify-center text-white border-2 border-white px-8 py-4 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors"
+                  className="flex items-center justify-center text-white border-2 border-white px-8 py-4 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors duration-300"
+                  type="button"
+                  aria-label="Watch Demo Video"
                 >
                   <Play className="w-5 h-5 mr-2" />
                   Watch Demo
@@ -104,8 +143,13 @@ const HeroSection = () => {
               <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-2xl p-8">
                 <img 
                   src="../../src/assets/CoverPhoto.png" 
-                  alt="Healthcare professionals" 
-                  className="rounded-lg shadow-2xl w-full"
+                  alt="Healthcare professionals using digital tablets and medical equipment" 
+                  className="rounded-lg shadow-2xl w-full h-auto"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = 'https://via.placeholder.com/800x500/1e40af/ffffff?text=Healthcare+Professionals';
+                  }}
                 />
               </div>
             </div>
@@ -116,18 +160,24 @@ const HeroSection = () => {
       {/* Video Popup Modal */}
       {showVideo && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90"
+          style={{ animation: 'fadeIn 0.3s ease-out' }}
           onClick={handleCloseVideo}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="video-modal-title"
         >
           <div 
-            className="relative w-full max-w-5xl mx-4 animate-scaleIn"
+            className="relative w-full max-w-5xl mx-4"
+            style={{ animation: 'scaleIn 0.4s ease-out' }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
             <button
               onClick={handleCloseVideo}
-              className="absolute -top-12 left-0 text-white hover:text-blue-400 transition-colors flex items-center gap-2 bg-black bg-opacity-50 px-4 py-2 rounded-lg"
-              aria-label="Close video"
+              className="absolute -top-12 left-0 text-white hover:text-blue-400 transition-colors duration-300 flex items-center gap-2 bg-black bg-opacity-50 px-4 py-2 rounded-lg backdrop-blur-sm"
+              type="button"
+              aria-label="Close video player"
             >
               <X className="w-6 h-6" />
               <span className="font-semibold">Close</span>
@@ -141,8 +191,18 @@ const HeroSection = () => {
                 controls
                 autoPlay
                 playsInline
+                aria-label="Healthcare platform demo video"
+                poster="../../src/assets/video-poster.jpg"
               >
                 <source src="../../src/assets/video.mp4" type="video/mp4" />
+                <source src="../../src/assets/video.webm" type="video/webm" />
+                <track
+                  kind="captions"
+                  src="../../src/assets/video-captions.vtt"
+                  srcLang="en"
+                  label="English"
+                  default
+                />
                 Your browser does not support the video tag.
               </video>
             </div>
@@ -150,35 +210,16 @@ const HeroSection = () => {
         </div>
       )}
 
-      <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        @keyframes scaleIn {
-          from {
-            opacity: 0;
-            transform: scale(0.9);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-
-        .animate-scaleIn {
-          animation: scaleIn 0.4s ease-out;
-        }
-      `}</style>
+      {/* Add animation styles to document head */}
+      {useEffect(() => {
+        const styleElement = document.createElement('style');
+        styleElement.textContent = animationStyles;
+        document.head.appendChild(styleElement);
+        
+        return () => {
+          document.head.removeChild(styleElement);
+        };
+      }, [])}
     </>
   );
 };
