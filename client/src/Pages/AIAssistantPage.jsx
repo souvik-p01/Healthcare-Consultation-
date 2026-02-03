@@ -41,7 +41,7 @@ import {
 const FREE_AI_API_KEY = 'your-free-api-key-here'; // Replace with your free API key
 const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-const AIAssistantPage = () => {
+const AIAssistantPage = ({ role }) => {
   const [messages, setMessages] = useState([
     { 
       id: 1, 
@@ -73,6 +73,12 @@ const AIAssistantPage = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const roleGreeting = {
+    technician: 'Lab diagnostics & equipment assistance',
+    doctor: 'Clinical decision & patient analysis',
+    patient: 'Symptom analysis & health guidance'
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -350,7 +356,9 @@ const AIAssistantPage = () => {
                   </h1>
                   <div className="flex items-center gap-2 text-purple-100 text-sm md:text-base">
                     <Zap className="w-4 h-4" />
-                    <span>24/7 Medical Support • Symptom Analysis • Report Review</span>
+                    <p className="text-purple-100">
+                      {roleGreeting[role] || 'AI Health Assistant'}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -728,5 +736,7 @@ const AIAssistantPage = () => {
     </div>
   );
 };
+
+
 
 export default AIAssistantPage;

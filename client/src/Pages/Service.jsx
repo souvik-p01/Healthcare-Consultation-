@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
   Brain, 
   Stethoscope, 
@@ -8,8 +8,6 @@ import {
   Shield, 
   Video, 
   Calendar,
-  Phone,
-  MapPin,
   Clock,
   Users,
   Heart,
@@ -21,9 +19,15 @@ import {
   CheckCircle,
   Sparkles,
   Zap,
-  ArrowRight
+  Bot,
+  UserCheck,
+  ShoppingCart,
+  HeartPulse,
+  Fingerprint,
+  Apple,
+  FileCheck
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { useNavigate } from "react-router-dom";
 
@@ -68,13 +72,14 @@ const ServicesSection = () => {
     6: "/services/records"
   };
 
-  // Main services data
+  // Main services data with logos
   const services = [
     {
       id: 1,
       title: "AI Health Assistant",
       category: "ai",
       icon: <Brain className="w-8 h-8" />,
+      logo: <Bot className="w-16 h-16 text-purple-600" />,
       shortDesc: "Get instant health advice powered by advanced AI technology.",
       fullDesc: "Our AI Health Assistant provides 24/7 intelligent health consultations, symptom analysis, and personalized health recommendations using cutting-edge machine learning algorithms.",
       features: ["24/7 Availability", "Symptom Analysis", "Health Recommendations", "Medical History Integration"],
@@ -82,13 +87,15 @@ const ServicesSection = () => {
       color: "from-purple-500 to-indigo-600",
       bgColor: "bg-purple-50",
       textColor: "text-purple-600",
-      gradient: "bg-gradient-to-r from-purple-500 to-indigo-600"
+      gradient: "bg-gradient-to-r from-purple-500 to-indigo-600",
+      logoBg: "bg-purple-100"
     },
     {
       id: 2,
       title: "Expert Consultations",
       category: "consultation",
       icon: <Stethoscope className="w-8 h-8" />,
+      logo: <UserCheck className="w-16 h-16 text-blue-600" />,
       shortDesc: "Connect with certified doctors through video calls and appointments.",
       fullDesc: "Book appointments with our network of 150+ certified specialists. Choose from video consultations, phone calls, or in-person visits at your convenience.",
       features: ["150+ Specialists", "Video Consultations", "In-person Visits", "Same-day Booking"],
@@ -96,13 +103,15 @@ const ServicesSection = () => {
       color: "from-blue-500 to-cyan-600",
       bgColor: "bg-blue-50",
       textColor: "text-blue-600",
-      gradient: "bg-gradient-to-r from-blue-500 to-cyan-600"
+      gradient: "bg-gradient-to-r from-blue-500 to-cyan-600",
+      logoBg: "bg-blue-100"
     },
     {
       id: 3,
       title: "Emergency Services",
       category: "emergency",
       icon: <Ambulance className="w-8 h-8" />,
+      logo: <Ambulance className="w-16 h-16 text-red-600" />,
       shortDesc: "24/7 emergency response with real-time ambulance tracking.",
       fullDesc: "Immediate emergency medical response with GPS-tracked ambulances, direct hospital coordination, and real-time updates for your family.",
       features: ["24/7 Response", "GPS Tracking", "Hospital Network", "Family Alerts"],
@@ -110,13 +119,15 @@ const ServicesSection = () => {
       color: "from-red-500 to-pink-600",
       bgColor: "bg-red-50",
       textColor: "text-red-600",
-      gradient: "bg-gradient-to-r from-red-500 to-pink-600"
+      gradient: "bg-gradient-to-r from-red-500 to-pink-600",
+      logoBg: "bg-red-100"
     },
     {
       id: 4,
       title: "Pharmacy Network",
       category: "pharmacy",
       icon: <Pill className="w-8 h-8" />,
+      logo: <ShoppingCart className="w-16 h-16 text-green-600" />,
       shortDesc: "Find nearby pharmacies and get medicines delivered to your door.",
       fullDesc: "Access our network of 500+ partner pharmacies. Compare prices, check availability, and get medicines delivered to your doorstep within hours.",
       features: ["500+ Pharmacies", "Price Comparison", "Home Delivery", "Prescription Management"],
@@ -124,13 +135,15 @@ const ServicesSection = () => {
       color: "from-green-500 to-emerald-600",
       bgColor: "bg-green-50",
       textColor: "text-green-600",
-      gradient: "bg-gradient-to-r from-green-500 to-emerald-600"
+      gradient: "bg-gradient-to-r from-green-500 to-emerald-600",
+      logoBg: "bg-green-100"
     },
     {
       id: 5,
       title: "Health Monitoring",
       category: "monitoring",
       icon: <Activity className="w-8 h-8" />,
+      logo: <HeartPulse className="w-16 h-16 text-orange-600" />,
       shortDesc: "Track your vitals and health progress with smart reminders.",
       fullDesc: "Comprehensive health tracking with IoT device integration, medication reminders, vital signs monitoring, and progress analytics.",
       features: ["Vital Signs Tracking", "Medication Reminders", "Progress Analytics", "IoT Integration"],
@@ -138,13 +151,15 @@ const ServicesSection = () => {
       color: "from-orange-500 to-yellow-600",
       bgColor: "bg-orange-50",
       textColor: "text-orange-600",
-      gradient: "bg-gradient-to-r from-orange-500 to-yellow-600"
+      gradient: "bg-gradient-to-r from-orange-500 to-yellow-600",
+      logoBg: "bg-orange-100"
     },
     {
       id: 6,
       title: "Secure Records",
       category: "records",
       icon: <Shield className="w-8 h-8" />,
+      logo: <Fingerprint className="w-16 h-16 text-gray-600" />,
       shortDesc: "Your medical data encrypted and securely stored with easy access.",
       fullDesc: "Military-grade encryption for your medical records with blockchain verification, easy sharing with healthcare providers, and lifetime storage.",
       features: ["Military-grade Encryption", "Blockchain Verification", "Easy Sharing", "Lifetime Storage"],
@@ -152,35 +167,40 @@ const ServicesSection = () => {
       color: "from-gray-500 to-slate-600",
       bgColor: "bg-gray-50",
       textColor: "text-gray-600",
-      gradient: "bg-gradient-to-r from-gray-500 to-slate-600"
+      gradient: "bg-gradient-to-r from-gray-500 to-slate-600",
+      logoBg: "bg-gray-100"
     }
   ];
 
-  // Additional services
+  // Additional services with logos
   const additionalServices = [
     {
       icon: <Video className="w-6 h-6" />,
+      logo: <Video className="w-10 h-10 text-blue-500" />,
       title: "Telemedicine",
       desc: "Remote consultations with doctors",
-      route: "/services/telemedicine"  // Add this
+      route: "/services/telemedicine"
     },
     {
       icon: <Microscope className="w-6 h-6" />,
+      logo: <Microscope className="w-10 h-10 text-green-500" />,
       title: "Lab Tests",
       desc: "Home sample collection and analysis",
-      route: "/services/lab-tests"  // Add this
+      route: "/services/lab-tests"
     },
     {
       icon: <FileText className="w-6 h-6" />,
+      logo: <FileCheck className="w-10 h-10 text-purple-500" />,
       title: "Health Reports",
       desc: "Detailed health analysis and insights",
-      route: "/services/health-reports"  // Add this
+      route: "/services/health-reports"
     },
     {
       icon: <Heart className="w-6 h-6" />,
+      logo: <Apple className="w-10 h-10 text-pink-500" />,
       title: "Wellness Programs",
       desc: "Personalized fitness and nutrition plans",
-      route: "/services/wellness-programs"  // Add this
+      route: "/services/wellness-programs"
     }
   ];
 
@@ -269,11 +289,40 @@ const ServicesSection = () => {
           </motion.p>
         </motion.div>
 
+        {/* Service Logos Preview Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.7, delay: 0.5 }}
+          className="mb-12 md:mb-16"
+        >
+          <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-6 md:mb-8 text-center">Our Services at a Glance</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6">
+            {services.map((service) => (
+              <motion.div
+                key={service.id}
+                whileHover={{ y: -5, scale: 1.05 }}
+                className="text-center group cursor-pointer"
+                onClick={() => setSelectedCategory(service.category === 'all' ? 'all' : service.category)}
+              >
+                <motion.div 
+                  whileHover={{ rotate: 5 }}
+                  className={`${service.logoBg} w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-2xl flex items-center justify-center mx-auto mb-2 md:mb-3 group-hover:shadow-lg transition-all duration-300`}
+                >
+                  {service.logo}
+                </motion.div>
+                <h4 className="font-semibold text-gray-800 text-sm md:text-base">{service.title}</h4>
+                <p className="text-xs text-gray-600 mt-1">{service.price}</p>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
         {/* Category Filter */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.7, delay: 0.5 }}
+          transition={{ duration: 0.7, delay: 0.6 }}
           className="flex flex-wrap justify-center gap-2 md:gap-3 mb-8 md:mb-12"
         >
           {categories.map((category) => (
@@ -312,7 +361,7 @@ const ServicesSection = () => {
               onMouseLeave={() => setActiveService(null)}
               whileHover={{ y: -10 }}
             >
-              {/* Service Header */}
+              {/* Service Header with Logo */}
               <div className={`bg-gradient-to-r ${service.color} p-4 md:p-6 text-white relative overflow-hidden`}>
                 <motion.div 
                   initial={{ scale: 0 }}
@@ -339,8 +388,15 @@ const ServicesSection = () => {
                       <div className="font-bold text-base md:text-lg">{service.price}</div>
                     </div>
                   </div>
-                  <h3 className="text-lg md:text-xl font-bold mb-1 md:mb-2">{service.title}</h3>
-                  <p className="text-white text-opacity-90 text-xs md:text-sm">{service.shortDesc}</p>
+                  <div className="flex items-center gap-3 md:gap-4 mb-3 md:mb-4">
+                    <div className={`${service.logoBg} p-2 md:p-3 rounded-lg md:rounded-xl`}>
+                      {service.logo}
+                    </div>
+                    <div>
+                      <h3 className="text-lg md:text-xl font-bold mb-1 md:mb-2">{service.title}</h3>
+                      <p className="text-white text-opacity-90 text-xs md:text-sm">{service.shortDesc}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -403,14 +459,14 @@ const ServicesSection = () => {
                 key={index}
                 whileHover={{ y: -5, scale: 1.02 }}
                 className="text-center p-3 md:p-4 rounded-xl hover:bg-blue-50 transition-all duration-300 cursor-pointer"
-                onClick={() => navigate(service.route)}  // Add this
+                onClick={() => navigate(service.route)}
               >
                 <motion.div 
                   whileHover={{ rotate: 360 }}
                   transition={{ duration: 0.5 }}
-                  className="bg-blue-100 text-blue-600 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center mx-auto mb-2 md:mb-3"
+                  className="bg-blue-100 text-blue-600 w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center mx-auto mb-2 md:mb-3"
                 >
-                  {service.icon}
+                  {service.logo}
                 </motion.div>
                 <h4 className="font-semibold text-gray-800 mb-1 md:mb-2 text-sm md:text-base">{service.title}</h4>
                 <p className="text-xs md:text-sm text-gray-600">{service.desc}</p>
