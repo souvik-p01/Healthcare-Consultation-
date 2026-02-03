@@ -21,6 +21,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { ApiError } from "../utils/ApiError.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 import { Patient } from "../models/Patient.model.js";
 
 /**
