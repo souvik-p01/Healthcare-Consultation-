@@ -1,17 +1,15 @@
 /**
  * Healthcare System - Notification Controller
  * 
- * Handles notification management for healthcare system.
+ * Updated to work with the new Notification model structure
  * 
  * Features:
  * - Real-time notifications
- * - Email notifications
- * - SMS notifications
- * - Push notifications
+ * - Multi-channel delivery (email, SMS, push, in-app)
  * - Notification templates
- * - Multi-channel delivery
+ * - Advanced filtering and pagination
  * - Notification preferences
- * - Notification history
+ * - Delivery tracking and analytics
  */
 
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -19,9 +17,6 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Notification } from "../models/notification.model.js";
 import { User } from "../models/User.model.js";
-import { Patient } from "../models/Patient.model.js";
-import { Doctor } from "../models/doctor.model.js";
-import { Appointment } from "../models/appointment.model.js";
 import { 
     sendEmailNotification,
     sendSMSNotification,
@@ -29,18 +24,18 @@ import {
 } from "../utils/notificationUtils.js";
 
 /**
- * GET USER NOTIFICATIONS
- * Get all notifications for the current user
- * 
- * GET /api/v1/notifications
- * Requires: verifyJWT middleware
+ * @desc    Get user notifications
+ * @route   GET /api/v1/notifications
+ * @access  Private
  */
 const getUserNotifications = asyncHandler(async (req, res) => {
     const userId = req.user._id;
+    const userRole = req.user.role || 'patient';
+    
     const {
-        type,
-        status,
+        notificationType,
         priority,
+        status,
         isRead,
         dateFrom,
         dateTo,
@@ -50,14 +45,21 @@ const getUserNotifications = asyncHandler(async (req, res) => {
         sortOrder = 'desc'
     } = req.query;
 
-    console.log("🔔 Fetching notifications for user:", userId);
+    console.log("🔔 Fetching notifications for user:", userId, "role:", userRole);
 
-    // Build query
-    const query = { userId };
+    // Build query - using recipientId and recipientType
+    const query = { 
+        $or: [
+            { recipientId: userId },
+            { recipientType: userRole },
+            { recipientType: 'all' }
+        ],
+        isArchived: false
+    };
     
-    if (type) query.type = type;
-    if (status) query.status = status;
+    if (notificationType) query.notificationType = notificationType;
     if (priority) query.priority = priority;
+    if (status) query.status = status;
     if (isRead !== undefined) query.isRead = isRead === 'true';
     
     // Date range filter
@@ -71,10 +73,10 @@ const getUserNotifications = asyncHandler(async (req, res) => {
     const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
 
     const notifications = await Notification.find(query)
-        .populate({
-            path: 'relatedEntityId',
-            select: 'appointmentNumber prescriptionNumber labResultNumber'
-        })
+        .populate('recipientId', 'firstName lastName email phoneNumber')
+        .populate('metadata.appointmentId', 'date time status')
+        .populate('metadata.prescriptionId', 'medicationName dosage')
+        .populate('metadata.labResultId', 'testName result')
         .sort(sort)
         .skip(skip)
         .limit(parseInt(limit))
@@ -83,10 +85,17 @@ const getUserNotifications = asyncHandler(async (req, res) => {
     const total = await Notification.countDocuments(query);
     
     // Get unread count for badge
-    const unreadCount = await Notification.countDocuments({ 
-        userId, 
-        isRead: false 
-    });
+    const unreadQuery = { 
+        $or: [
+            { recipientId: userId },
+            { recipientType: userRole },
+            { recipientType: 'all' }
+        ],
+        isRead: false,
+        isArchived: false
+    };
+    
+    const unreadCount = await Notification.countDocuments(unreadQuery);
 
     console.log(`✅ Found ${notifications.length} notifications for user`);
 
@@ -115,20 +124,51 @@ const getUserNotifications = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET UNREAD NOTIFICATIONS COUNT
- * Get count of unread notifications for the current user
- * 
- * GET /api/v1/notifications/unread-count
- * Requires: verifyJWT middleware
+ * @desc    Get unread notifications
+ * @route   GET /api/v1/notifications/unread
+ * @access  Private
+ */
+const getUnreadNotifications = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const userRole = req.user.role || 'patient';
+    const { limit = 10 } = req.query;
+
+    console.log("📥 Fetching unread notifications for user:", userId);
+
+    const notifications = await Notification.findUnreadByRecipient(userId, parseInt(limit));
+
+    console.log(`✅ Found ${notifications.length} unread notifications`);
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                { notifications },
+                "Unread notifications fetched successfully"
+            )
+        );
+});
+
+/**
+ * @desc    Get unread notifications count
+ * @route   GET /api/v1/notifications/unread-count
+ * @access  Private
  */
 const getUnreadNotificationsCount = asyncHandler(async (req, res) => {
     const userId = req.user._id;
+    const userRole = req.user.role || 'patient';
 
     console.log("📊 Fetching unread notifications count for user:", userId);
 
     const unreadCount = await Notification.countDocuments({ 
-        userId, 
-        isRead: false 
+        $or: [
+            { recipientId: userId },
+            { recipientType: userRole },
+            { recipientType: 'all' }
+        ],
+        isRead: false,
+        isArchived: false
     });
 
     console.log(`✅ User has ${unreadCount} unread notifications`);
@@ -145,11 +185,9 @@ const getUnreadNotificationsCount = asyncHandler(async (req, res) => {
 });
 
 /**
- * MARK NOTIFICATION AS READ
- * Mark a single notification as read
- * 
- * PATCH /api/v1/notifications/:notificationId/read
- * Requires: verifyJWT middleware
+ * @desc    Mark notification as read
+ * @route   PATCH /api/v1/notifications/:notificationId/read
+ * @access  Private
  */
 const markNotificationAsRead = asyncHandler(async (req, res) => {
     const { notificationId } = req.params;
@@ -161,33 +199,24 @@ const markNotificationAsRead = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Notification ID is required");
     }
 
-    // Find notification and verify ownership
-    const notification = await Notification.findOne({
-        _id: notificationId,
-        userId
-    });
+    // Find notification
+    const notification = await Notification.findById(notificationId);
 
     if (!notification) {
         throw new ApiError(404, "Notification not found");
     }
 
-    // Update notification
-    const updatedNotification = await Notification.findByIdAndUpdate(
-        notificationId,
-        {
-            $set: {
-                isRead: true,
-                readAt: new Date(),
-                updatedAt: new Date()
-            }
-        },
-        { new: true, runValidators: true }
-    )
-    .populate({
-        path: 'relatedEntityId',
-        select: 'appointmentNumber prescriptionNumber labResultNumber'
-    })
-    .lean();
+    // Check if user is authorized (recipient or admin)
+    const isRecipient = notification.recipientId.toString() === userId.toString();
+    const isRoleRecipient = notification.recipientType === req.user.role;
+    const isAllRecipient = notification.recipientType === 'all';
+    
+    if (!isRecipient && !isRoleRecipient && !isAllRecipient && req.user.role !== 'admin') {
+        throw new ApiError(403, "Not authorized to mark this notification as read");
+    }
+
+    // Use instance method to mark as read
+    const updatedNotification = await notification.markAsRead();
 
     console.log('✅ Notification marked as read:', notificationId);
 
@@ -203,28 +232,32 @@ const markNotificationAsRead = asyncHandler(async (req, res) => {
 });
 
 /**
- * MARK ALL NOTIFICATIONS AS READ
- * Mark all user notifications as read
- * 
- * PATCH /api/v1/notifications/mark-all-read
- * Requires: verifyJWT middleware
+ * @desc    Mark all notifications as read
+ * @route   PATCH /api/v1/notifications/mark-all-read
+ * @access  Private
  */
 const markAllNotificationsAsRead = asyncHandler(async (req, res) => {
     const userId = req.user._id;
+    const userRole = req.user.role || 'patient';
 
     console.log("📚 Marking all notifications as read for user:", userId);
 
     // Update all unread notifications for the user
     const result = await Notification.updateMany(
         {
-            userId,
-            isRead: false
+            $or: [
+                { recipientId: userId },
+                { recipientType: userRole },
+                { recipientType: 'all' }
+            ],
+            isRead: false,
+            isArchived: false
         },
         {
             $set: {
                 isRead: true,
                 readAt: new Date(),
-                updatedAt: new Date()
+                status: 'read'
             }
         }
     );
@@ -246,11 +279,9 @@ const markAllNotificationsAsRead = asyncHandler(async (req, res) => {
 });
 
 /**
- * DELETE NOTIFICATION
- * Delete a specific notification
- * 
- * DELETE /api/v1/notifications/:notificationId
- * Requires: verifyJWT middleware
+ * @desc    Delete notification
+ * @route   DELETE /api/v1/notifications/:notificationId
+ * @access  Private
  */
 const deleteNotification = asyncHandler(async (req, res) => {
     const { notificationId } = req.params;
@@ -262,20 +293,26 @@ const deleteNotification = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Notification ID is required");
     }
 
-    // Find notification and verify ownership
-    const notification = await Notification.findOne({
-        _id: notificationId,
-        userId
-    });
+    // Find notification
+    const notification = await Notification.findById(notificationId);
 
     if (!notification) {
         throw new ApiError(404, "Notification not found");
     }
 
-    // Delete notification
-    await Notification.findByIdAndDelete(notificationId);
+    // Check if user is authorized (recipient or admin)
+    const isRecipient = notification.recipientId.toString() === userId.toString();
+    const isRoleRecipient = notification.recipientType === req.user.role;
+    const isAllRecipient = notification.recipientType === 'all';
+    
+    if (!isRecipient && !isRoleRecipient && !isAllRecipient && req.user.role !== 'admin') {
+        throw new ApiError(403, "Not authorized to delete this notification");
+    }
 
-    console.log('✅ Notification deleted:', notificationId);
+    // Archive instead of delete for history
+    await notification.archive();
+
+    console.log('✅ Notification archived:', notificationId);
 
     return res
         .status(200)
@@ -283,27 +320,41 @@ const deleteNotification = asyncHandler(async (req, res) => {
             new ApiResponse(
                 200,
                 {},
-                "Notification deleted successfully"
+                "Notification archived successfully"
             )
         );
 });
 
 /**
- * CLEAR ALL NOTIFICATIONS
- * Delete all notifications for the current user
- * 
- * DELETE /api/v1/notifications/clear-all
- * Requires: verifyJWT middleware
+ * @desc    Clear all notifications
+ * @route   DELETE /api/v1/notifications/clear-all
+ * @access  Private
  */
 const clearAllNotifications = asyncHandler(async (req, res) => {
     const userId = req.user._id;
+    const userRole = req.user.role || 'patient';
 
-    console.log("🧹 Clearing all notifications for user:", userId);
+    console.log("🧹 Archiving all notifications for user:", userId);
 
-    // Delete all notifications for the user
-    const result = await Notification.deleteMany({ userId });
+    // Archive all notifications for the user
+    const result = await Notification.updateMany(
+        {
+            $or: [
+                { recipientId: userId },
+                { recipientType: userRole },
+                { recipientType: 'all' }
+            ],
+            isArchived: false
+        },
+        {
+            $set: {
+                isArchived: true,
+                archivedAt: new Date()
+            }
+        }
+    );
 
-    console.log(`✅ Cleared ${result.deletedCount} notifications`);
+    console.log(`✅ Archived ${result.modifiedCount} notifications`);
 
     return res
         .status(200)
@@ -311,20 +362,18 @@ const clearAllNotifications = asyncHandler(async (req, res) => {
             new ApiResponse(
                 200,
                 { 
-                    deletedCount: result.deletedCount,
-                    message: `Cleared ${result.deletedCount} notifications`
+                    archivedCount: result.modifiedCount,
+                    message: `Archived ${result.modifiedCount} notifications`
                 },
-                "All notifications cleared successfully"
+                "All notifications archived successfully"
             )
         );
 });
 
 /**
- * GET NOTIFICATION PREFERENCES
- * Get user's notification preferences
- * 
- * GET /api/v1/notifications/preferences
- * Requires: verifyJWT middleware
+ * @desc    Get notification preferences
+ * @route   GET /api/v1/notifications/preferences
+ * @access  Private
  */
 const getNotificationPreferences = asyncHandler(async (req, res) => {
     const userId = req.user._id;
@@ -332,7 +381,7 @@ const getNotificationPreferences = asyncHandler(async (req, res) => {
     console.log("⚙ Fetching notification preferences for user:", userId);
 
     const user = await User.findById(userId)
-        .select('notificationPreferences email phoneNumber')
+        .select('notificationPreferences email phoneNumber firstName')
         .lean();
 
     if (!user) {
@@ -341,29 +390,88 @@ const getNotificationPreferences = asyncHandler(async (req, res) => {
 
     // Default preferences if not set
     const defaultPreferences = {
-        email: {
-            appointments: true,
-            prescriptions: true,
-            labResults: true,
-            reminders: true,
-            promotions: false,
-            security: true
+        channels: {
+            email: true,
+            sms: true,
+            push: true,
+            inApp: true
         },
-        sms: {
-            appointments: true,
-            reminders: true,
-            criticalAlerts: true
-        },
-        push: {
-            appointments: true,
-            messages: true,
-            reminders: true
+        notificationTypes: {
+            appointment: {
+                email: true,
+                sms: true,
+                push: true,
+                inApp: true
+            },
+            prescription: {
+                email: true,
+                sms: false,
+                push: true,
+                inApp: true
+            },
+            lab_result: {
+                email: true,
+                sms: false,
+                push: true,
+                inApp: true
+            },
+            reminder: {
+                email: true,
+                sms: true,
+                push: true,
+                inApp: true
+            },
+            alert: {
+                email: true,
+                sms: true,
+                push: true,
+                inApp: true
+            },
+            system: {
+                email: true,
+                sms: false,
+                push: false,
+                inApp: true
+            },
+            billing: {
+                email: true,
+                sms: false,
+                push: false,
+                inApp: true
+            }
         },
         frequency: 'immediate',
         quietHours: {
             enabled: false,
             start: '22:00',
-            end: '07:00'
+            end: '07:00',
+            timezone: 'UTC'
+        },
+        prioritySettings: {
+            urgent: {
+                email: true,
+                sms: true,
+                push: true,
+                inApp: true
+            },
+            high: {
+                email: true,
+                sms: true,
+                push: true,
+                inApp: true
+            },
+            medium: {
+                email: true,
+                sms: false,
+                push: true,
+                inApp: true
+            },
+            low: {
+                email: false,
+                sms: false,
+                push: false,
+                inApp: true
+            }
         }
     };
 
@@ -383,20 +491,18 @@ const getNotificationPreferences = asyncHandler(async (req, res) => {
 });
 
 /**
- * UPDATE NOTIFICATION PREFERENCES
- * Update user's notification preferences
- * 
- * PATCH /api/v1/notifications/preferences
- * Requires: verifyJWT middleware
+ * @desc    Update notification preferences
+ * @route   PATCH /api/v1/notifications/preferences
+ * @access  Private
  */
 const updateNotificationPreferences = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const {
-        email,
-        sms,
-        push,
+        channels,
+        notificationTypes,
         frequency,
-        quietHours
+        quietHours,
+        prioritySettings
     } = req.body;
 
     console.log("⚙ Updating notification preferences for user:", userId);
@@ -406,11 +512,11 @@ const updateNotificationPreferences = asyncHandler(async (req, res) => {
         notificationPreferences: {}
     };
 
-    if (email) updateData.notificationPreferences.email = email;
-    if (sms) updateData.notificationPreferences.sms = sms;
-    if (push) updateData.notificationPreferences.push = push;
+    if (channels) updateData.notificationPreferences.channels = channels;
+    if (notificationTypes) updateData.notificationPreferences.notificationTypes = notificationTypes;
     if (frequency) updateData.notificationPreferences.frequency = frequency;
     if (quietHours) updateData.notificationPreferences.quietHours = quietHours;
+    if (prioritySettings) updateData.notificationPreferences.prioritySettings = prioritySettings;
 
     if (Object.keys(updateData.notificationPreferences).length === 0) {
         throw new ApiError(400, "At least one preference field is required to update");
@@ -437,17 +543,21 @@ const updateNotificationPreferences = asyncHandler(async (req, res) => {
 });
 
 /**
- * SEND TEST NOTIFICATION
- * Send a test notification to the current user
- * 
- * POST /api/v1/notifications/test
- * Requires: verifyJWT middleware
+ * @desc    Send test notification
+ * @route   POST /api/v1/notifications/test
+ * @access  Private
  */
 const sendTestNotification = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const { type = 'email', message = 'This is a test notification' } = req.body;
+    const userRole = req.user.role || 'patient';
+    const { 
+        channel = 'email', 
+        type = 'system',
+        title = 'Test Notification',
+        message = 'This is a test notification'
+    } = req.body;
 
-    console.log("🧪 Sending test notification to user:", userId, "type:", type);
+    console.log("🧪 Sending test notification to user:", userId, "channel:", channel);
 
     const user = await User.findById(userId)
         .select('email phoneNumber firstName notificationPreferences')
@@ -459,16 +569,49 @@ const sendTestNotification = asyncHandler(async (req, res) => {
 
     let testResult = {
         sent: false,
+        channel: channel,
         type: type,
         message: ''
     };
 
     try {
-        switch (type) {
+        // Create notification record
+        const notificationData = {
+            recipientId: userId,
+            recipientType: userRole,
+            title: title,
+            message: message,
+            shortMessage: message.substring(0, 147) + '...',
+            notificationType: type,
+            priority: 'low',
+            status: 'pending',
+            channels: [channel],
+            deliveryStatus: {
+                [channel]: {
+                    sent: false,
+                    delivered: false,
+                    error: null
+                }
+            },
+            isRead: false,
+            metadata: {
+                test: true,
+                timestamp: new Date()
+            },
+            personalization: {
+                patientName: user.firstName || 'User'
+            }
+        };
+
+        const notification = await Notification.create(notificationData);
+        testResult.notificationId = notification._id;
+
+        // Send notification based on channel
+        switch (channel) {
             case 'email':
                 if (user.email) {
                     await sendEmailNotification(user.email, {
-                        subject: 'Test Notification - Healthcare System',
+                        subject: title,
                         template: 'test',
                         data: {
                             userName: user.firstName,
@@ -476,6 +619,9 @@ const sendTestNotification = asyncHandler(async (req, res) => {
                             timestamp: new Date().toLocaleString()
                         }
                     });
+                    
+                    // Mark as delivered
+                    await notification.markDelivered('email');
                     testResult.sent = true;
                     testResult.message = 'Test email notification sent successfully';
                 } else {
@@ -486,9 +632,12 @@ const sendTestNotification = asyncHandler(async (req, res) => {
             case 'sms':
                 if (user.phoneNumber) {
                     await sendSMSNotification(user.phoneNumber, {
-                        message: `Test: ${message}`,
+                        message: `${title}: ${message}`,
                         type: 'test'
                     });
+                    
+                    // Mark as delivered
+                    await notification.markDelivered('sms');
                     testResult.sent = true;
                     testResult.message = 'Test SMS notification sent successfully';
                 } else {
@@ -498,40 +647,48 @@ const sendTestNotification = asyncHandler(async (req, res) => {
 
             case 'push':
                 await sendPushNotification(userId, {
-                    title: 'Test Notification',
+                    title: title,
                     body: message,
-                    type: 'test',
-                    data: { test: true }
+                    type: type,
+                    data: { 
+                        notificationId: notification._id,
+                        test: true 
+                    }
                 });
+                
+                // Mark as delivered
+                await notification.markDelivered('push');
                 testResult.sent = true;
                 testResult.message = 'Test push notification sent successfully';
                 break;
 
+            case 'in-app':
+                // In-app notifications are automatically delivered
+                await notification.markDelivered('inApp');
+                testResult.sent = true;
+                testResult.message = 'Test in-app notification created successfully';
+                break;
+
             default:
-                testResult.message = `Unsupported notification type: ${type}`;
+                testResult.message = `Unsupported notification channel: ${channel}`;
         }
 
-        // Create a notification record for the test
-        if (testResult.sent) {
-            await Notification.create({
-                userId,
-                type: 'system',
-                title: 'Test Notification',
-                message: message,
-                priority: 'low',
-                channel: type,
-                status: 'sent',
-                isRead: false,
-                metadata: {
-                    test: true,
-                    timestamp: new Date()
-                }
-            });
+        // Mark notification as read if in-app
+        if (channel === 'in-app') {
+            await notification.markAsRead();
         }
 
     } catch (error) {
         console.error('❌ Test notification failed:', error);
         testResult.message = `Test notification failed: ${error.message}`;
+        
+        // Mark as failed
+        if (testResult.notificationId) {
+            const notification = await Notification.findById(testResult.notificationId);
+            if (notification) {
+                await notification.markFailed(channel, error.message);
+            }
+        }
     }
 
     console.log('✅ Test notification completed:', testResult.message);
@@ -548,232 +705,293 @@ const sendTestNotification = asyncHandler(async (req, res) => {
 });
 
 /**
- * CREATE MANUAL NOTIFICATION
- * Create and send a manual notification (admin only)
- * 
- * POST /api/v1/notifications/manual
- * Requires: verifyJWT middleware, admin role
+ * @desc    Create manual notification (Admin only)
+ * @route   POST /api/v1/notifications/manual
+ * @access  Private/Admin
  */
 const createManualNotification = asyncHandler(async (req, res) => {
     const {
-        userIds,
-        userRole,
+        recipientIds,
+        recipientType,
         title,
         message,
-        type = 'system',
-        priority = 'normal',
-        channels = ['email'],
-        relatedEntityType,
-        relatedEntityId,
-        scheduledAt
+        notificationType = 'system',
+        priority = 'medium',
+        channels = ['in-app'],
+        metadata = {},
+        scheduledFor,
+        expiresAt
     } = req.body;
 
     const createdBy = req.user._id;
 
-    console.log("📢 Creating manual notification for users:", userIds || userRole);
+    console.log("📢 Creating manual notification for:", recipientIds || recipientType);
 
     // Validation
     if (!title || !message) {
         throw new ApiError(400, "Title and message are required");
     }
 
-    if (!userIds && !userRole) {
-        throw new ApiError(400, "Either userIds or userRole is required");
+    if (!recipientIds && !recipientType) {
+        throw new ApiError(400, "Either recipientIds or recipientType is required");
     }
 
-    // Build user query
-    let userQuery = {};
-    if (userIds && Array.isArray(userIds)) {
-        userQuery._id = { $in: userIds };
-    } else if (userRole) {
-        userQuery.role = userRole;
-    }
+    // Prepare notification data
+    const notificationData = {
+        recipientType: recipientType || null,
+        title,
+        message,
+        shortMessage: message.length > 150 ? message.substring(0, 147) + '...' : message,
+        notificationType,
+        priority,
+        channels,
+        status: scheduledFor ? 'pending' : 'sent',
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        metadata: {
+            ...metadata,
+            manual: true,
+            createdBy: createdBy
+        },
+        deliveryStatus: {}
+    };
 
-    // Get target users
-    const users = await User.find(userQuery)
-        .select('_id email phoneNumber firstName lastName notificationPreferences')
-        .lean();
+    // Initialize delivery status for each channel
+    channels.forEach(channel => {
+        notificationData.deliveryStatus[channel] = {
+            sent: false,
+            delivered: false,
+            error: null
+        };
+    });
 
-    if (!users || users.length === 0) {
-        throw new ApiError(404, "No users found matching the criteria");
-    }
-
-    const notificationResults = {
-        totalUsers: users.length,
+    const results = {
+        totalRecipients: 0,
         notificationsCreated: 0,
-        emailsSent: 0,
-        smsSent: 0,
-        pushSent: 0,
+        deliveries: {
+            email: { success: 0, failed: 0 },
+            sms: { success: 0, failed: 0 },
+            push: { success: 0, failed: 0 },
+            inApp: { success: 0, failed: 0 }
+        },
         errors: []
     };
 
-    // Create notifications for each user
-    for (const user of users) {
-        try {
-            // Create notification record
-            const notification = await Notification.create({
-                userId: user._id,
-                type,
-                title,
-                message,
-                priority,
-                channel: channels.join(','),
-                status: 'pending',
-                relatedEntityType,
-                relatedEntityId,
-                scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-                createdBy,
-                metadata: {
-                    manual: true,
-                    targetUser: user._id
+    // Handle different recipient scenarios
+    if (recipientType) {
+        // Send to all users of a specific type
+        const users = await User.find({ role: recipientType })
+            .select('_id email phoneNumber firstName notificationPreferences')
+            .lean();
+
+        results.totalRecipients = users.length;
+
+        for (const user of users) {
+            await processUserNotification(user, notificationData, results);
+        }
+    } else if (recipientIds && Array.isArray(recipientIds)) {
+        // Send to specific users
+        results.totalRecipients = recipientIds.length;
+
+        for (const recipientId of recipientIds) {
+            try {
+                const user = await User.findById(recipientId)
+                    .select('email phoneNumber firstName notificationPreferences')
+                    .lean();
+
+                if (!user) {
+                    throw new Error(`User ${recipientId} not found`);
                 }
-            });
 
-            notificationResults.notificationsCreated++;
-
-            // Send notifications based on channels and user preferences
-            const userPrefs = user.notificationPreferences || {};
-
-            for (const channel of channels) {
-                try {
-                    switch (channel) {
-                        case 'email':
-                            if (userPrefs.email?.system !== false && user.email) {
-                                await sendEmailNotification(user.email, {
-                                    subject: title,
-                                    template: 'manual',
-                                    data: {
-                                        userName: user.firstName,
-                                        message: message,
-                                        title: title
-                                    }
-                                });
-                                notificationResults.emailsSent++;
-                            }
-                            break;
-
-                        case 'sms':
-                            if (userPrefs.sms?.system !== false && user.phoneNumber) {
-                                await sendSMSNotification(user.phoneNumber, {
-                                    message: `${title}: ${message}`,
-                                    type: 'manual'
-                                });
-                                notificationResults.smsSent++;
-                            }
-                            break;
-
-                        case 'push':
-                            if (userPrefs.push?.system !== false) {
-                                await sendPushNotification(user._id, {
-                                    title: title,
-                                    body: message,
-                                    type: type,
-                                    data: { notificationId: notification._id }
-                                });
-                                notificationResults.pushSent++;
-                            }
-                            break;
-                    }
-
-                    // Update notification status to sent
-                    await Notification.findByIdAndUpdate(notification._id, {
-                        status: 'sent',
-                        sentAt: new Date()
-                    });
-
-                } catch (channelError) {
-                    console.error(`❌ Channel ${channel} failed for user ${user._id}:, channelError`);
-                    notificationResults.errors.push({
-                        userId: user._id,
-                        channel: channel,
-                        error: channelError.message
-                    });
-
-                    // Update notification status to failed
-                    await Notification.findByIdAndUpdate(notification._id, {
-                        status: 'failed',
-                        error: channelError.message
-                    });
-                }
+                await processUserNotification(user, notificationData, results);
+            } catch (userError) {
+                console.error(`❌ Notification creation failed for recipient ${recipientId}:`, userError);
+                results.errors.push({
+                    recipientId,
+                    error: userError.message
+                });
             }
-
-        } catch (userError) {
-            console.error(`❌ Notification creation failed for user ${user._id}:, userError`);
-            notificationResults.errors.push({
-                userId: user._id,
-                error: userError.message
-            });
         }
     }
 
-    console.log(`✅ Manual notification created for ${notificationResults.notificationsCreated} users`);
+    console.log(`✅ Manual notification created for ${results.notificationsCreated} recipients`);
 
     return res.status(201).json(
         new ApiResponse(
             201, 
-            { results: notificationResults },
+            { results },
             "Manual notifications created and sent successfully"
         )
     );
 });
 
 /**
- * GET NOTIFICATION STATISTICS
- * Get notification statistics for dashboard
- * 
- * GET /api/v1/notifications/statistics
- * Requires: verifyJWT middleware, admin role
+ * Helper function to process notification for a single user
+ */
+async function processUserNotification(user, notificationData, results) {
+    try {
+        // Create individual notification for each user
+        const userNotification = await Notification.create({
+            ...notificationData,
+            recipientId: user._id,
+            personalization: {
+                patientName: user.firstName || 'User',
+                userName: user.firstName || 'User'
+            }
+        });
+
+        results.notificationsCreated++;
+        
+        // Send notifications through channels
+        for (const channel of notificationData.channels) {
+            try {
+                await sendNotificationToUser(user, userNotification, channel, results);
+            } catch (channelError) {
+                console.error(`❌ Channel ${channel} failed for user ${user._id}:`, channelError);
+                results.errors.push({
+                    userId: user._id,
+                    channel,
+                    error: channelError.message
+                });
+            }
+        }
+
+    } catch (userError) {
+        console.error(`❌ Notification creation failed for user ${user._id}:`, userError);
+        results.errors.push({
+            userId: user._id,
+            error: userError.message
+        });
+    }
+}
+
+/**
+ * Helper function to send notification to user through specific channel
+ */
+async function sendNotificationToUser(user, notification, channel, results) {
+    let sent = false;
+    
+    switch (channel) {
+        case 'email':
+            if (user.email) {
+                await sendEmailNotification(user.email, {
+                    subject: notification.title,
+                    template: notification.notificationType,
+                    data: {
+                        userName: user.firstName,
+                        message: notification.message,
+                        title: notification.title
+                    }
+                });
+                await notification.markDelivered('email');
+                results.deliveries.email.success++;
+                sent = true;
+            }
+            break;
+
+        case 'sms':
+            if (user.phoneNumber) {
+                await sendSMSNotification(user.phoneNumber, {
+                    message: `${notification.title}: ${notification.message}`,
+                    type: notification.notificationType
+                });
+                await notification.markDelivered('sms');
+                results.deliveries.sms.success++;
+                sent = true;
+            }
+            break;
+
+        case 'push':
+            await sendPushNotification(user._id, {
+                title: notification.title,
+                body: notification.message,
+                type: notification.notificationType,
+                data: { notificationId: notification._id }
+            });
+            await notification.markDelivered('push');
+            results.deliveries.push.success++;
+            sent = true;
+            break;
+
+        case 'in-app':
+            // In-app notifications are automatically delivered
+            await notification.markDelivered('inApp');
+            results.deliveries.inApp.success++;
+            sent = true;
+            break;
+    }
+
+    if (!sent && channel !== 'in-app') {
+        results.deliveries[channel].failed++;
+    }
+}
+
+/**
+ * @desc    Get notification statistics
+ * @route   GET /api/v1/notifications/statistics
+ * @access  Private/Admin
  */
 const getNotificationStatistics = asyncHandler(async (req, res) => {
-    const { period = 'month', type, channel, status } = req.query;
+    const { 
+        period = 'month', 
+        recipientType, 
+        notificationType, 
+        startDate, 
+        endDate 
+    } = req.query;
 
     console.log("📊 Fetching notification statistics");
 
-    // Date range based on period
-    const dateRange = {};
-    const now = new Date();
-    
-    switch (period) {
-        case 'day':
-            dateRange.$gte = new Date(now.setHours(0, 0, 0, 0));
-            dateRange.$lte = new Date(now.setHours(23, 59, 59, 999));
-            break;
-        case 'week':
-            const startOfWeek = new Date(now);
-            startOfWeek.setDate(now.getDate() - now.getDay());
-            startOfWeek.setHours(0, 0, 0, 0);
-            dateRange.$gte = startOfWeek;
-            dateRange.$lte = new Date();
-            break;
-        case 'month':
-            dateRange.$gte = new Date(now.getFullYear(), now.getMonth(), 1);
-            dateRange.$lte = new Date();
-            break;
-        case 'year':
-            dateRange.$gte = new Date(now.getFullYear(), 0, 1);
-            dateRange.$lte = new Date();
-            break;
-        default:
-            dateRange.$gte = new Date(now.getFullYear(), now.getMonth(), 1);
-            dateRange.$lte = new Date();
+    // Calculate date range
+    let dateRange = {};
+    if (startDate && endDate) {
+        dateRange.$gte = new Date(startDate);
+        dateRange.$lte = new Date(endDate);
+    } else {
+        const now = new Date();
+        switch (period) {
+            case 'day':
+                const startOfDay = new Date(now);
+                startOfDay.setHours(0, 0, 0, 0);
+                dateRange.$gte = startOfDay;
+                dateRange.$lte = now;
+                break;
+            case 'week':
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() - now.getDay());
+                startOfWeek.setHours(0, 0, 0, 0);
+                dateRange.$gte = startOfWeek;
+                dateRange.$lte = now;
+                break;
+            case 'month':
+                dateRange.$gte = new Date(now.getFullYear(), now.getMonth(), 1);
+                dateRange.$lte = now;
+                break;
+            case 'year':
+                dateRange.$gte = new Date(now.getFullYear(), 0, 1);
+                dateRange.$lte = now;
+                break;
+            default:
+                dateRange.$gte = new Date(now.getFullYear(), now.getMonth(), 1);
+                dateRange.$lte = now;
+        }
     }
 
-    const query = { createdAt: dateRange };
-    if (type) query.type = type;
-    if (channel) query.channel = channel;
-    if (status) query.status = status;
+    // Build query
+    const query = {
+        createdAt: dateRange,
+        isArchived: false
+    };
+    
+    if (recipientType) query.recipientType = recipientType;
+    if (notificationType) query.notificationType = notificationType;
 
     // Get statistics
     const totalNotifications = await Notification.countDocuments(query);
 
     const typeStats = await Notification.aggregate([
         { $match: query },
-        { $group: { _id: '$type', count: { $sum: 1 } } }
-    ]);
-
-    const channelStats = await Notification.aggregate([
-        { $match: query },
-        { $group: { _id: '$channel', count: { $sum: 1 } } }
+        { $group: { _id: '$notificationType', count: { $sum: 1 } } }
     ]);
 
     const statusStats = await Notification.aggregate([
@@ -786,60 +1004,61 @@ const getNotificationStatistics = asyncHandler(async (req, res) => {
         { $group: { _id: '$priority', count: { $sum: 1 } } }
     ]);
 
-    const monthlyTrend = await Notification.aggregate([
+    const readStats = await Notification.aggregate([
         { $match: query },
         {
             $group: {
-                _id: {
-                    year: { $year: '$createdAt' },
-                    month: { $month: '$createdAt' }
-                },
-                count: { $sum: 1 }
+                _id: null,
+                total: { $sum: 1 },
+                read: { $sum: { $cond: ['$isRead', 1, 0] } }
             }
         },
-        { $sort: { '_id.year': 1, '_id.month': 1 } },
-        { $limit: 12 }
+        {
+            $project: {
+                total: 1,
+                read: 1,
+                readRate: { $multiply: [{ $divide: ['$read', '$total'] }, 100] }
+            }
+        }
+    ]);
+
+    const deliveryStats = await Notification.aggregate([
+        { $match: query },
+        {
+            $group: {
+                _id: null,
+                emailDelivered: { $sum: { $cond: ['$deliveryStatus.email.delivered', 1, 0] } },
+                smsDelivered: { $sum: { $cond: ['$deliveryStatus.sms.delivered', 1, 0] } },
+                pushDelivered: { $sum: { $cond: ['$deliveryStatus.push.delivered', 1, 0] } },
+                inAppDelivered: { $sum: { $cond: ['$deliveryStatus.inApp.delivered', 1, 0] } }
+            }
+        }
     ]);
 
     const statistics = {
         period,
-        totalNotifications,
-        byType: typeStats.reduce((acc, stat) => {
-            acc[stat._id] = stat.count;
-            return acc;
-        }, {}),
-        byChannel: channelStats.reduce((acc, stat) => {
-            acc[stat._id] = stat.count;
-            return acc;
-        }, {}),
-        byStatus: statusStats.reduce((acc, stat) => {
-            acc[stat._id] = stat.count;
-            return acc;
-        }, {}),
-        byPriority: priorityStats.reduce((acc, stat) => {
-            acc[stat._id] = stat.count;
-            return acc;
-        }, {}),
-        monthlyTrend: monthlyTrend.map(item => ({
-            period: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
-            count: item.count
-        })),
-        deliveryRate: {
-            sent: statusStats.find(stat => stat._id === 'sent')?.count || 0,
-            failed: statusStats.find(stat => stat._id === 'failed')?.count || 0,
-            pending: statusStats.find(stat => stat._id === 'pending')?.count || 0
-        },
+        recipientType,
         dateRange: {
             from: dateRange.$gte,
             to: dateRange.$lte
+        },
+        summary: {
+            totalNotifications,
+            readRate: readStats[0]?.readRate || 0,
+            unreadRate: readStats[0] ? 100 - (readStats[0].readRate || 0) : 0,
+            delivery: {
+                email: deliveryStats[0]?.emailDelivered || 0,
+                sms: deliveryStats[0]?.smsDelivered || 0,
+                push: deliveryStats[0]?.pushDelivered || 0,
+                inApp: deliveryStats[0]?.inAppDelivered || 0
+            }
+        },
+        breakdown: {
+            byType: typeStats,
+            byStatus: statusStats,
+            byPriority: priorityStats
         }
     };
-
-    // Calculate delivery success rate
-    const totalDelivered = statistics.deliveryRate.sent + statistics.deliveryRate.failed;
-    statistics.deliveryRate.successRate = totalDelivered > 0 
-        ? (statistics.deliveryRate.sent / totalDelivered * 100).toFixed(2)
-        : 0;
 
     console.log('✅ Notification statistics fetched successfully');
 
@@ -855,11 +1074,9 @@ const getNotificationStatistics = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET NOTIFICATION TEMPLATES
- * Get available notification templates
- * 
- * GET /api/v1/notifications/templates
- * Requires: verifyJWT middleware, admin role
+ * @desc    Get notification templates
+ * @route   GET /api/v1/notifications/templates
+ * @access  Private/Admin
  */
 const getNotificationTemplates = asyncHandler(async (req, res) => {
     console.log("📋 Fetching notification templates");
@@ -869,48 +1086,62 @@ const getNotificationTemplates = asyncHandler(async (req, res) => {
             reminder: {
                 name: 'Appointment Reminder',
                 description: 'Sent before scheduled appointments',
-                channels: ['email', 'sms', 'push'],
-                variables: ['patientName', 'doctorName', 'appointmentDate', 'appointmentTime', 'appointmentType']
+                channels: ['email', 'sms', 'push', 'in-app'],
+                variables: ['patientName', 'doctorName', 'appointmentDate', 'appointmentTime', 'appointmentType', 'location'],
+                priority: 'medium',
+                defaultChannels: ['email', 'sms']
             },
             confirmation: {
                 name: 'Appointment Confirmation',
                 description: 'Sent when appointment is confirmed',
-                channels: ['email', 'sms'],
-                variables: ['patientName', 'doctorName', 'appointmentDate', 'appointmentTime']
+                channels: ['email', 'sms', 'in-app'],
+                variables: ['patientName', 'doctorName', 'appointmentDate', 'appointmentTime', 'confirmationNumber'],
+                priority: 'medium',
+                defaultChannels: ['email']
             },
             cancellation: {
                 name: 'Appointment Cancellation',
                 description: 'Sent when appointment is cancelled',
-                channels: ['email', 'sms'],
-                variables: ['patientName', 'doctorName', 'appointmentDate', 'cancellationReason']
+                channels: ['email', 'sms', 'in-app'],
+                variables: ['patientName', 'doctorName', 'appointmentDate', 'appointmentTime', 'cancellationReason'],
+                priority: 'high',
+                defaultChannels: ['email', 'sms']
             }
         },
         prescription: {
             ready: {
                 name: 'Prescription Ready',
                 description: 'Sent when prescription is ready',
-                channels: ['email', 'sms', 'push'],
-                variables: ['patientName', 'doctorName', 'prescriptionNumber', 'medications']
+                channels: ['email', 'sms', 'push', 'in-app'],
+                variables: ['patientName', 'doctorName', 'prescriptionNumber', 'medications', 'pharmacyName'],
+                priority: 'medium',
+                defaultChannels: ['email', 'in-app']
             },
             refill: {
                 name: 'Prescription Refill Reminder',
                 description: 'Sent when prescription needs refill',
-                channels: ['email', 'sms'],
-                variables: ['patientName', 'medicationName', 'refillDate']
+                channels: ['email', 'sms', 'in-app'],
+                variables: ['patientName', 'medicationName', 'refillDate', 'pharmacyName'],
+                priority: 'medium',
+                defaultChannels: ['email']
             }
         },
         lab_result: {
             ready: {
                 name: 'Lab Result Ready',
                 description: 'Sent when lab results are available',
-                channels: ['email', 'push'],
-                variables: ['patientName', 'testName', 'labResultNumber']
+                channels: ['email', 'push', 'in-app'],
+                variables: ['patientName', 'testName', 'labResultNumber', 'doctorName'],
+                priority: 'medium',
+                defaultChannels: ['email', 'in-app']
             },
             critical: {
                 name: 'Critical Lab Result Alert',
                 description: 'Sent for critical lab results',
-                channels: ['email', 'sms', 'push'],
-                variables: ['patientName', 'doctorName', 'testName', 'criticalValues']
+                channels: ['email', 'sms', 'push', 'in-app'],
+                variables: ['patientName', 'doctorName', 'testName', 'criticalValues', 'urgency'],
+                priority: 'urgent',
+                defaultChannels: ['email', 'sms', 'push']
             }
         },
         system: {
@@ -918,13 +1149,43 @@ const getNotificationTemplates = asyncHandler(async (req, res) => {
                 name: 'Welcome Notification',
                 description: 'Sent to new users',
                 channels: ['email'],
-                variables: ['userName', 'welcomeMessage']
+                variables: ['userName', 'welcomeMessage', 'nextSteps'],
+                priority: 'low',
+                defaultChannels: ['email']
             },
             security: {
                 name: 'Security Alert',
                 description: 'Sent for security-related events',
-                channels: ['email', 'sms'],
-                variables: ['userName', 'alertType', 'timestamp']
+                channels: ['email', 'sms', 'in-app'],
+                variables: ['userName', 'alertType', 'timestamp', 'actionRequired'],
+                priority: 'high',
+                defaultChannels: ['email']
+            },
+            maintenance: {
+                name: 'System Maintenance',
+                description: 'Sent for scheduled maintenance',
+                channels: ['email', 'in-app'],
+                variables: ['userName', 'maintenanceDate', 'maintenanceTime', 'duration', 'impact'],
+                priority: 'medium',
+                defaultChannels: ['email']
+            }
+        },
+        billing: {
+            invoice: {
+                name: 'Invoice Generated',
+                description: 'Sent when new invoice is generated',
+                channels: ['email', 'in-app'],
+                variables: ['patientName', 'invoiceNumber', 'amount', 'dueDate', 'paymentMethods'],
+                priority: 'medium',
+                defaultChannels: ['email']
+            },
+            payment: {
+                name: 'Payment Confirmation',
+                description: 'Sent when payment is received',
+                channels: ['email', 'sms', 'in-app'],
+                variables: ['patientName', 'paymentAmount', 'paymentDate', 'invoiceNumber'],
+                priority: 'low',
+                defaultChannels: ['email']
             }
         }
     };
@@ -942,9 +1203,103 @@ const getNotificationTemplates = asyncHandler(async (req, res) => {
         );
 });
 
+/**
+ * @desc    Get notification by ID
+ * @route   GET /api/v1/notifications/:notificationId
+ * @access  Private
+ */
+const getNotificationById = asyncHandler(async (req, res) => {
+    const { notificationId } = req.params;
+    const userId = req.user._id;
+
+    console.log("🔍 Fetching notification details:", notificationId);
+
+    if (!notificationId) {
+        throw new ApiError(400, "Notification ID is required");
+    }
+
+    const notification = await Notification.findById(notificationId)
+        .populate('recipientId', 'firstName lastName email phoneNumber')
+        .populate('metadata.appointmentId')
+        .populate('metadata.prescriptionId')
+        .populate('metadata.labResultId')
+        .populate('metadata.paymentId')
+        .lean();
+
+    if (!notification) {
+        throw new ApiError(404, "Notification not found");
+    }
+
+    // Check if user is authorized
+    const isRecipient = notification.recipientId?._id.toString() === userId.toString();
+    const isRoleRecipient = notification.recipientType === req.user.role;
+    const isAllRecipient = notification.recipientType === 'all';
+    
+    if (!isRecipient && !isRoleRecipient && !isAllRecipient && req.user.role !== 'admin') {
+        throw new ApiError(403, "Not authorized to view this notification");
+    }
+
+    console.log('✅ Notification details fetched successfully');
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                { notification },
+                "Notification details fetched successfully"
+            )
+        );
+});
+
+/**
+ * @desc    Retry failed notification
+ * @route   POST /api/v1/notifications/:notificationId/retry
+ * @access  Private/Admin
+ */
+const retryFailedNotification = asyncHandler(async (req, res) => {
+    const { notificationId } = req.params;
+
+    console.log("🔄 Retrying failed notification:", notificationId);
+
+    if (!notificationId) {
+        throw new ApiError(400, "Notification ID is required");
+    }
+
+    const notification = await Notification.findById(notificationId);
+
+    if (!notification) {
+        throw new ApiError(404, "Notification not found");
+    }
+
+    if (notification.status !== 'failed') {
+        throw new ApiError(400, "Only failed notifications can be retried");
+    }
+
+    if (!notification.canRetry) {
+        throw new ApiError(400, "Cannot retry notification - max retries exceeded or not eligible");
+    }
+
+    // Use instance method to retry
+    await notification.retryDelivery();
+
+    console.log('✅ Notification queued for retry:', notificationId);
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                { notification },
+                "Notification queued for retry successfully"
+            )
+        );
+});
+
 // Export all notification controller functions
 export {
     getUserNotifications,
+    getUnreadNotifications,
     getUnreadNotificationsCount,
     markNotificationAsRead,
     markAllNotificationsAsRead,
@@ -955,17 +1310,7 @@ export {
     sendTestNotification,
     createManualNotification,
     getNotificationStatistics,
-    getNotificationTemplates
+    getNotificationTemplates,
+    getNotificationById,
+    retryFailedNotification
 };
-
-/**
- * Additional notification controllers that can be added:
- * - getNotificationById (get specific notification details)
- * - resendFailedNotification (retry failed notifications)
- * - bulkDeleteNotifications (delete multiple notifications)
- * - getNotificationLogs (detailed delivery logs)
- * - updateNotificationTemplate (manage templates)
- * - scheduleNotification (future-dated notifications)
- * - getNotificationAnalytics (advanced analytics)
- * - subscribeToPush (push notification subscription)
- */

@@ -59,12 +59,16 @@ export const AppContextProvider = ({ children }) => {
     }
   };
 
-  // Authentication APIs
+  // ✅ UPDATED: Registration function - DOES NOT set user state
   const registerUser = async (userData) => {
     setLoading(true);
     try {
       const response = await api.post('/users/register', userData);
-      toast.success('Registration successful! Please verify your email.');
+      
+      // ✅ Show success message but DON'T set user state
+      // ✅ Message matches LoginSignUp.jsx
+      toast.success('Account created successfully! Please login.');
+      
       return response;
     } catch (error) {
       toast.error(error.message || 'Registration failed');
@@ -74,6 +78,7 @@ export const AppContextProvider = ({ children }) => {
     }
   };
 
+  // ✅ UPDATED: Login function - sets user state
   const loginUser = async (credentials) => {
     setLoading(true);
     try {
@@ -353,4 +358,3 @@ export const useAppContext = () => {
 };
 
 export default AppContextProvider;
-
