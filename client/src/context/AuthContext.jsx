@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { authAPI } from '../Pages/services/api';
 import socketService from '../Pages/services/socket';
+import { doctorService } from '../Pages/services/DoctorApi';
 
 const AuthContext = createContext({});
 
@@ -79,13 +80,39 @@ export const AuthProvider = ({ children }) => {
 
   const updateProfile = async (profileData) => {
     try {
-      const response = await authAPI.getMe();
+      let response;
+      
+      // Use role-specific API
+      if (user?.role === 'doctor') {
+        response = await doctorService.updateProfile(profileData);
+      } else {
+        response = await authAPI.getMe();
+      }
+      
       const updatedUser = { ...user, ...response.data.user };
       
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setUser(updatedUser);
+      
+      return response.data;
     } catch (error) {
       console.error('Update profile error:', error);
+      throw error;
+    }
+  };
+
+  const refreshUserData = async () => {
+    try {
+      const response = await authAPI.getMe();
+      const refreshedUser = response.data.user;
+      
+      localStorage.setItem('user', JSON.stringify(refreshedUser));
+      setUser(refreshedUser);
+      
+      return refreshedUser;
+    } catch (error) {
+      console.error('Refresh user data error:', error);
+      throw error;
     }
   };
 
@@ -97,8 +124,12 @@ export const AuthProvider = ({ children }) => {
     logout,
     register,
     updateProfile,
+    refreshUserData,
     isAuthenticated: !!user,
+    isDoctor: user?.role === 'doctor',
     isTechnician: user?.role === 'technician',
+    isPatient: user?.role === 'patient',
+    isAdmin: user?.role === 'admin',
   };
 
   return (
