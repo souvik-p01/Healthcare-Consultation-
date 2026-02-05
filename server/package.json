@@ -6,6 +6,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon -r dotenv/config --experimental-json-modules src/index.js",
+    "build": "vite build",
     "start": "node -r dotenv/config src/index.js"
   },
   "keywords": [
@@ -47,8 +48,9 @@
     "mongoose-aggregate-paginate-v2": "^1.1.4",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
-    "nodemailer": "^7.0.6",
+    "nodemailer": "^7.0.13",
     "qrcode": "^1.5.4",
+    "twilio": "^5.12.0",
     "uuid": "^13.0.0",
     "validator": "^13.15.20",
     "winston": "^3.18.3"

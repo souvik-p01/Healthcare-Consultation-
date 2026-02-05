@@ -1,11 +1,12 @@
-import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { useAppContext } from '../context/AppContext';
+import React from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAppContext } from "../context/AppContext";
 
-const ProtectedRoute = ({ children, requiredRole = null }) => {
-  const { user, loading } = useAppContext();
+const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+  const { user, userRole, loading } = useAppContext();
   const location = useLocation();
 
+  // ⏳ Loading state
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -14,16 +15,24 @@ const ProtectedRoute = ({ children, requiredRole = null }) => {
     );
   }
 
-  if (!user) {
-    // Redirect to login page with return url
+  // ❌ Not logged in
+  if (!user || !userRole) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requiredRole && user.role !== requiredRole) {
-    // Redirect to dashboard if user doesn't have required role
-    return <Navigate to="/dashboard" replace />;
+  const role = userRole.toLowerCase();
+
+  // ✅ Admin can access everything
+  if (role === "admin") {
+    return children;
   }
 
+  // ❌ Role not allowed
+  if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  // ✅ Access granted
   return children;
 };
 
