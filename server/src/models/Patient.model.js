@@ -533,7 +533,7 @@ const patientSchema = new Schema(
             ref: 'User',
             required: [true, 'User reference is required'],
             unique: true,
-            index: true
+            //index: true
         },
         
         // Unique Medical Record Number
@@ -542,7 +542,7 @@ const patientSchema = new Schema(
             unique: true,
             uppercase: true,
             trim: true,
-            index: true
+            //index: true
         },
         
         // Blood Type Information
@@ -550,7 +550,7 @@ const patientSchema = new Schema(
             type: String,
             enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'],
             default: 'Unknown',
-            index: true
+            //index: true
         },
         
         // Height and Weight (for BMI calculation)
@@ -607,7 +607,7 @@ const patientSchema = new Schema(
         primaryCareProvider: {
             type: Schema.Types.ObjectId,
             ref: 'User',
-            index: true
+            //index: true
         },
         
         // Preferred Pharmacy
@@ -685,7 +685,7 @@ const patientSchema = new Schema(
             type: String,
             enum: ['active', 'inactive', 'transferred', 'deceased', 'archived'],
             default: 'active',
-            index: true
+            //index: true
         },
         isActive: {
             type: Boolean,
@@ -695,7 +695,7 @@ const patientSchema = new Schema(
         // Visit Information
         lastVisitDate: {
             type: Date,
-            index: true
+            //index: true
         },
         nextScheduledVisit: Date,
         
@@ -772,8 +772,8 @@ const patientSchema = new Schema(
 /**
  * Indexes for optimized queries
  */
-patientSchema.index({ user: 1 });
-patientSchema.index({ medicalRecordNumber: 1 });
+//patientSchema.index({ user: 1 });
+//patientSchema.index({ medicalRecordNumber: 1 });
 patientSchema.index({ bloodType: 1 });
 patientSchema.index({ status: 1 });
 patientSchema.index({ primaryCareProvider: 1 });

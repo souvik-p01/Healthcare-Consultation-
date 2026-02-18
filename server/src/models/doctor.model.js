@@ -15,14 +15,14 @@ const doctorSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: [true, 'User reference is required'],
-            unique: true,
+            //unique: true,
         },
         
         // Professional Information
         medicalLicenseNumber: {
             type: String,
             required: [true, 'Medical license number is required'],
-            unique: true,
+            //unique: true,
             trim: true,
             uppercase: true,
         },
@@ -501,8 +501,8 @@ const doctorSchema = new Schema(
 /**
  * Indexes for optimized queries
  */
-doctorSchema.index({ userId: 1 });
-doctorSchema.index({ medicalLicenseNumber: 1 });
+//doctorSchema.index({ userId: 1 });
+//doctorSchema.index({ medicalLicenseNumber: 1 });
 doctorSchema.index({ specializations: 1 });
 doctorSchema.index({ 'affiliations.hospitalName': 1 });
 doctorSchema.index({ status: 1, isVerified: 1 });
