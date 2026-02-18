@@ -16,7 +16,7 @@ const labResultSchema = new Schema(
             required: true,
             unique: true,
             trim: true,
-            index: true
+            //index: true
         },
         
         // Patient Information
@@ -24,13 +24,14 @@ const labResultSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'Patient',
             required: [true, 'Patient reference is required'],
-            index: true
+            //index: true
         },
         
         // Appointment Reference
         appointmentId: {
             type: Schema.Types.ObjectId,
             ref: 'Appointment',
+            //required: true
             index: true
         },
         
@@ -39,7 +40,7 @@ const labResultSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: [true, 'Ordering physician is required'],
-            index: true
+            //index: true
         },
         
         // Test Information
@@ -159,12 +160,12 @@ const labResultSchema = new Schema(
             enum: ['pending', 'collected', 'in_progress', 'completed', 'verified', 'cancelled'],
             default: 'pending',
             required: true,
-            index: true
+            //index: true
         },
         isCritical: {
             type: Boolean,
             default: false,
-            index: true
+            //index: true
         },
         hasAbnormalValues: {
             type: Boolean,
@@ -189,7 +190,7 @@ const labResultSchema = new Schema(
         },
         reportedDate: {
             type: Date,
-            index: true
+            ////index: true
         },
         verifiedDate: Date,
         
@@ -332,7 +333,7 @@ const labResultSchema = new Schema(
  */
 labResultSchema.index({ patientId: 1, reportedDate: -1 });
 labResultSchema.index({ orderedBy: 1, reportedDate: -1 });
-labResultSchema.index({ labResultNumber: 1 }, { unique: true });
+//labResultSchema.index({ labResultNumber: 1 }, { unique: true });
 labResultSchema.index({ status: 1, reportedDate: -1 });
 labResultSchema.index({ isCritical: 1, reportedDate: -1 });
 labResultSchema.index({ 'results.flag': 1 });
