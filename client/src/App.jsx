@@ -39,7 +39,7 @@ import HealthReports from "./Pages/services/HealthReports";
 import WellnessPrograms from "./Pages/services/WellnessPrograms";
 
 /* -------- Admin Dashboard -------- */
-import AdminDashboard from "./components/AdminDashboard";
+import AdminDashboard from "./Pages/AdminDashboard";
 
 
 /* -------- Extra -------- */
