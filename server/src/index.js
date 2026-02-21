@@ -14,8 +14,9 @@
  * - Uncaught exception and rejection handling
  * - Healthcare system health monitoring
  * - Payment gateway integration (Razorpay)
- * - HIPAA-compliant logging
- * - Audit trail for sensitive operations
+ * - Request logging and monitoring
+ * - Security middleware (helmet, rate limiting)
+ * - API versioning
  */
 
 // ==========================================
@@ -36,6 +37,11 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
+import mongoSanitize from "express-mongo-sanitize";
+import xssSanitize from "xss-sanitize";
 
 // Import routes
 import patientRoutes from "./routes/patient.routes.js";
@@ -44,15 +50,20 @@ import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import razorpayRoutes from "./routes/razorpay.routes.js";
+import webhookRoutes from "./routes/webhook.routes.js";
 
 // Import middleware
 import { errorHandler } from "./middlewares/error.middleware.js";
+import { requestLogger } from "./middlewares/logger.middleware.js";
 
-// Import database utilities
-import connectDB, { checkDBHealth, getDBStats, initializeDatabase } from "./config/database.js";
+// Import database utilities - THIS IS THE ONLY connectDB WE NEED
+import connectDB, { checkDBHealth, getDBStats, isDBConnected } from "./db/index.js";
 
 // Import logger
 import { LoggerUtils } from "./utils/logger.js";
+
+// Import constants
+import { DB_NAME } from "./constants.js";
 
 // ==========================================
 // EXPRESS APP CONFIGURATION
@@ -61,29 +72,66 @@ import { LoggerUtils } from "./utils/logger.js";
 // Create Express application
 const app = express();
 
+// Security middleware
+app.use(helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === 'production',
+    crossOriginEmbedderPolicy: process.env.NODE_ENV === 'production'
+}));
+
+// Compression middleware
+app.use(compression());
+
+// Body parsing middleware - IMPORTANT: webhook routes need raw body, so we conditionally parse
+app.use((req, res, next) => {
+    if (req.originalUrl === '/api/webhook/razorpay') {
+        next(); // Skip for webhook
+    } else {
+        express.json({ limit: "16kb" })(req, res, next);
+    }
+});
+
+app.use(express.urlencoded({ extended: true, limit: "16kb" }));
+app.use(cookieParser());
+
+// Data sanitization against NoSQL injection
+app.use(mongoSanitize());
+
+// Data sanitization against XSS
+app.use(xssSanitize());
+
 // CORS configuration
-app.use(cors({
+const corsOptions = {
     origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ["http://localhost:3000", "http://localhost:5173"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-refresh-token"]
-}));
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-refresh-token"],
+    exposedHeaders: ["x-access-token", "x-refresh-token"],
+    maxAge: 86400 // 24 hours
+};
+app.use(cors(corsOptions));
 
-// Body parsing middleware
-app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
-app.use(cookieParser());
+// Rate limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: process.env.NODE_ENV === 'production' ? 100 : 1000, // Limit each IP
+    message: 'Too many requests from this IP, please try again later',
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+// Apply rate limiting to API routes
+app.use('/api/', limiter);
 
 // Static files middleware
 app.use(express.static("public"));
 
 // Request logging middleware
+app.use(requestLogger);
+
+// Track total requests
+app.locals.totalRequests = 0;
 app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        LoggerUtils.logApiRequest(req, res, duration);
-    });
+    app.locals.totalRequests++;
     next();
 });
 
@@ -91,23 +139,37 @@ app.use((req, res, next) => {
 // ROUTES CONFIGURATION
 // ==========================================
 
+// Webhook routes (must be before JSON parsing)
+app.use("/api/webhook", webhookRoutes);
+
 // Health check endpoint
 app.get("/api/v1/health", async (req, res) => {
     const dbHealth = checkDBHealth();
     const uptime = process.uptime();
+    const memoryUsage = process.memoryUsage();
     
     res.status(200).json({
         success: true,
         message: "Healthcare Consultation System is running healthy",
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || "development",
-        database: dbHealth,
+        database: {
+            status: dbHealth.status,
+            name: dbHealth.database,
+            state: dbHealth.readyState,
+            collections: dbHealth.collections
+        },
         system: {
             uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`,
-            memory: process.memoryUsage(),
+            memory: {
+                heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+                heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+                rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`
+            },
             nodeVersion: process.version,
             platform: process.platform
-        }
+        },
+        totalRequests: app.locals.totalRequests
     });
 });
 
@@ -126,14 +188,14 @@ app.get("/api/v1/health/detailed", async (req, res) => {
         success: true,
         timestamp: new Date().toISOString(),
         services: {
-            api: { status: 'healthy', latency: 'OK' },
+            api: { status: 'healthy', uptime: process.uptime() },
             database: dbHealth,
             storage: dbStats ? 'healthy' : 'degraded'
         },
         metrics: {
-            uptime: process.uptime(),
-            totalRequests: app.locals.totalRequests || 0,
-            activeConnections: mongoose.connection.readyState === 1 ? 1 : 0
+            totalRequests: app.locals.totalRequests,
+            activeConnections: mongoose.connection.readyState === 1 ? 1 : 0,
+            memoryUsage: process.memoryUsage()
         }
     });
 });
@@ -150,7 +212,8 @@ app.get("/api/v1", (req, res) => {
             users: "/api/v1/users",
             patients: "/api/v1/patients",
             admin: "/api/v1/admin",
-            payments: "/api/v1/payments"
+            payments: "/api/v1/payments",
+            webhooks: "/api/webhook"
         }
     });
 });
@@ -161,6 +224,7 @@ app.get("/", (req, res) => {
         success: true,
         message: "Healthcare Consultation System API",
         version: "1.0.0",
+        documentation: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/docs`,
         endpoints: {
             health: "/api/v1/health",
             api: "/api/v1",
@@ -236,18 +300,18 @@ const DB_RETRY_CONFIG = {
  * Log server startup information
  */
 const logServerInfo = () => {
-    const dbHealth = checkDBHealth();
+    const dbHealth = isDBConnected();
     
     console.log('\n' + '='.repeat(70));
     console.log('🏥 HEALTHCARE CONSULTATION SYSTEM');
     console.log('='.repeat(70));
     console.log("🚀 Server started successfully");
     console.log(`🌐 Server URL: http://localhost:${PORT}`);
-    console.log(`📊 Database: ${dbHealth.database} (${dbHealth.status})`);
+    console.log(`📊 Database: ${dbHealth ? 'Connected' : 'Disconnected'}`);
     console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📅 Started at: ${SERVER_START_TIME.toLocaleString()}`);
     console.log(`⏱  Uptime: 0 seconds`);
-    console.log(`💳 Payment Gateway: Razorpay ${process.env.RAZORPAY_KEY_ID ? 'Configured' : 'Not Configured'}`);
+    console.log(`💳 Payment Gateway: ${process.env.RAZORPAY_KEY_ID ? 'Configured' : 'Not Configured'}`);
     console.log('='.repeat(70));
     console.log('✅ Available Endpoints:');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/health');
@@ -261,11 +325,13 @@ const logServerInfo = () => {
     console.log('='.repeat(70) + '\n');
 
     // Log to file as well
-    LoggerUtils.info('Server started', {
-        port: PORT,
-        environment: process.env.NODE_ENV,
-        database: dbHealth.database
-    });
+    if (LoggerUtils) {
+        LoggerUtils.info('Server started', {
+            port: PORT,
+            environment: process.env.NODE_ENV,
+            database: dbHealth ? 'Connected' : 'Disconnected'
+        });
+    }
 };
 
 /**
@@ -283,10 +349,17 @@ const logServerShutdown = (reason) => {
     console.log(`📋 Reason: ${reason}`);
     console.log(`⏱  Total uptime: ${hours}h ${minutes}m ${seconds}s`);
     console.log(`📅 Shutdown at: ${new Date().toLocaleString()}`);
+    console.log(`📊 Total requests served: ${app.locals.totalRequests || 0}`);
     console.log('='.repeat(70) + '\n');
 
     // Log to file as well
-    LoggerUtils.warn('Server shutdown', { reason, uptime });
+    if (LoggerUtils) {
+        LoggerUtils.warn('Server shutdown', { 
+            reason, 
+            uptime,
+            totalRequests: app.locals.totalRequests 
+        });
+    }
 };
 
 /**
@@ -310,20 +383,22 @@ const checkRequiredEnvVars = () => {
         });
         console.error('\n💡 Please check your .env file and ensure all required variables are set.');
         
-        LoggerUtils.error('Missing required environment variables', { missingVars });
+        if (LoggerUtils) {
+            LoggerUtils.error('Missing required environment variables', { missingVars });
+        }
         return false;
     }
 
     console.log('✅ All required environment variables are present');
     
-    // Mask sensitive data in logs
-    LoggerUtils.info('Environment variables validated', {
-        hasMongoURI: !!process.env.MONGODB_URI,
-        hasAccessToken: !!process.env.ACCESS_TOKEN_SECRET,
-        hasRefreshToken: !!process.env.REFRESH_TOKEN_SECRET,
-        hasRazorpayKey: !!process.env.RAZORPAY_KEY_ID,
-        razorpayKeyPrefix: process.env.RAZORPAY_KEY_ID ? process.env.RAZORPAY_KEY_ID.substring(0, 8) + '...' : null
-    });
+    if (LoggerUtils) {
+        LoggerUtils.info('Environment variables validated', {
+            hasMongoURI: !!process.env.MONGODB_URI,
+            hasAccessToken: !!process.env.ACCESS_TOKEN_SECRET,
+            hasRefreshToken: !!process.env.REFRESH_TOKEN_SECRET,
+            hasRazorpayKey: !!process.env.RAZORPAY_KEY_ID
+        });
+    }
     
     return true;
 };
@@ -340,7 +415,9 @@ const checkOptionalEnvVars = () => {
         'EMAIL_USER': 'Email notifications',
         'EMAIL_PASS': 'Email notifications',
         'CORS_ORIGIN': 'CORS configuration',
-        'FRONTEND_URL': 'Frontend application URL'
+        'FRONTEND_URL': 'Frontend application URL',
+        'SMTP_HOST': 'Email server host',
+        'SMTP_PORT': 'Email server port'
     };
 
     const missingOptional = [];
@@ -358,9 +435,70 @@ const checkOptionalEnvVars = () => {
         });
         console.warn('   These features will not be available until configured.\n');
         
-        LoggerUtils.warn('Optional environment variables missing', { 
-            missing: missingOptional.map(v => v.varName) 
-        });
+        if (LoggerUtils) {
+            LoggerUtils.warn('Optional environment variables missing', { 
+                missing: missingOptional.map(v => v.varName) 
+            });
+        }
+    }
+};
+
+// ==========================================
+// DATABASE CONNECTION WITH RETRY
+// ==========================================
+
+/**
+ * Connect to MongoDB with retry logic using imported connectDB
+ * Attempts to reconnect if initial connection fails
+ */
+const connectWithRetry = async () => {
+    try {
+        console.log(`🔄 Attempting to connect to MongoDB (Attempt ${DB_RETRY_CONFIG.currentRetry + 1}/${DB_RETRY_CONFIG.maxRetries})...`);
+        
+        await connectDB(); // This uses the imported connectDB from db/index.js
+        
+        console.log(`✅ Successfully connected to MongoDB: ${mongoose.connection.name}`);
+        DB_RETRY_CONFIG.currentRetry = 0; // Reset retry counter on success
+        
+        if (LoggerUtils) {
+            LoggerUtils.info('Database connected successfully', {
+                host: mongoose.connection.host,
+                database: mongoose.connection.name
+            });
+        }
+        
+        return true;
+        
+    } catch (error) {
+        console.error(`❌ MongoDB connection failed: ${error.message}`);
+        
+        if (LoggerUtils) {
+            LoggerUtils.error('Database connection failed', {
+                attempt: DB_RETRY_CONFIG.currentRetry + 1,
+                error: error.message
+            });
+        }
+        
+        DB_RETRY_CONFIG.currentRetry++;
+        
+        if (DB_RETRY_CONFIG.currentRetry < DB_RETRY_CONFIG.maxRetries) {
+            console.log(`🔄 Retrying in ${DB_RETRY_CONFIG.retryDelay / 1000} seconds... (Attempt ${DB_RETRY_CONFIG.currentRetry + 1}/${DB_RETRY_CONFIG.maxRetries})`);
+            
+            await new Promise(resolve => setTimeout(resolve, DB_RETRY_CONFIG.retryDelay));
+            
+            return await connectWithRetry();
+        } else {
+            console.error(`❌ Failed to connect to MongoDB after ${DB_RETRY_CONFIG.maxRetries} attempts`);
+            
+            if (LoggerUtils) {
+                LoggerUtils.emergency('Database connection failed after max retries', {
+                    maxRetries: DB_RETRY_CONFIG.maxRetries,
+                    error: error.message
+                });
+            }
+            
+            throw error;
+        }
     }
 };
 
@@ -374,10 +512,9 @@ const checkOptionalEnvVars = () => {
  * Steps:
  * 1. Check environment variables
  * 2. Connect to database (with retry)
- * 3. Initialize database collections and indexes
- * 4. Start Express server
- * 5. Set up error handlers
- * 6. Set up graceful shutdown handlers
+ * 3. Start Express server
+ * 4. Set up error handlers
+ * 5. Set up graceful shutdown handlers
  */
 const startServer = async () => {
     try {
@@ -389,7 +526,9 @@ const startServer = async () => {
         
         if (!hasRequiredVars) {
             console.error('\n❌ Cannot start server without required environment variables');
-            LoggerUtils.emergency('Server startup failed - missing required environment variables');
+            if (LoggerUtils) {
+                LoggerUtils.emergency('Server startup failed - missing required environment variables');
+            }
             process.exit(1);
         }
         
@@ -398,56 +537,51 @@ const startServer = async () => {
         
         // Step 2: Connect to MongoDB database with retry logic
         console.log('\n📊 Connecting to MongoDB database...');
-        await connectDB();
+        await connectWithRetry();
         
-        // Step 3: Initialize database collections and indexes
-        console.log('\n🗄️  Initializing database collections...');
-        await initializeDatabase();
-        
-        // Step 4: Start the Express server
+        // Step 3: Start the Express server
         console.log('\n🚀 Starting Express server...');
         const server = app.listen(PORT, () => {
             // Log server information on successful start
             logServerInfo();
             
-            // Track total requests
-            app.locals.totalRequests = 0;
-            app.use((req, res, next) => {
-                app.locals.totalRequests++;
-                next();
-            });
-            
-            // Log server performance info every hour (optional)
+            // Log server performance info every hour
             if (process.env.NODE_ENV === 'production') {
                 setInterval(() => {
                     const uptime = Math.floor((Date.now() - SERVER_START_TIME.getTime()) / 1000);
                     const memoryUsage = process.memoryUsage();
-                    const dbHealth = checkDBHealth();
+                    const dbHealth = isDBConnected();
 
-                    LoggerUtils.info('Server Health Check', {
-                        uptime: `${uptime}s`,
-                        memory: {
-                            heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-                            heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
-                            rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`
-                        },
-                        database: dbHealth,
+                    const healthInfo = {
+                        uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${uptime % 60}s`,
+                        memory: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+                        database: dbHealth ? 'Connected' : 'Disconnected',
                         totalRequests: app.locals.totalRequests
-                    });
+                    };
+
+                    console.log("📊 Server Health Check:", healthInfo);
+                    
+                    if (LoggerUtils) {
+                        LoggerUtils.info('Server health check', healthInfo);
+                    }
                 }, 3600000); // Every hour
             }
         });
 
-        // Step 5: Handle server-level errors
+        // Step 4: Handle server-level errors
         server.on("error", (error) => {
-            LoggerUtils.error("Server Error:", error);
+            console.error("❌ Server Error:", error);
+            
+            if (LoggerUtils) {
+                LoggerUtils.error('Server error', { error: error.message, code: error.code });
+            }
             
             // Handle specific error types
             if (error.code === 'EADDRINUSE') {
-                LoggerUtils.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
+                console.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
                 process.exit(1);
             } else if (error.code === 'EACCES') {
-                LoggerUtils.error(`❌ Permission denied to use port ${PORT}`);
+                console.error(`❌ Permission denied to use port ${PORT}`);
                 process.exit(1);
             } else {
                 throw error;
@@ -463,19 +597,23 @@ const startServer = async () => {
          * Critical errors that weren't caught by try-catch
          */
         process.on('uncaughtException', (error) => {
-            LoggerUtils.error('UNCAUGHT EXCEPTION:', {
-                message: error.message,
-                stack: error.stack,
-                name: error.name
-            });
+            console.error('\n❌ UNCAUGHT EXCEPTION:', error);
+            console.error('Stack trace:', error.stack);
+            
+            if (LoggerUtils) {
+                LoggerUtils.error('UNCAUGHT EXCEPTION', {
+                    message: error.message,
+                    stack: error.stack,
+                    name: error.name
+                });
+                
+                LoggerUtils.logSecurityEvent('uncaught_exception', 'critical', 'system', {
+                    error: error.message,
+                    stack: error.stack
+                });
+            }
             
             logServerShutdown('Uncaught Exception');
-            
-            // Log security event
-            LoggerUtils.logSecurityEvent('uncaught_exception', 'critical', 'system', {
-                error: error.message,
-                stack: error.stack
-            });
             
             // Give time for logging before exit
             setTimeout(() => {
@@ -488,17 +626,22 @@ const startServer = async () => {
          * Promises that were rejected but not caught
          */
         process.on('unhandledRejection', (reason, promise) => {
-            LoggerUtils.error('UNHANDLED PROMISE REJECTION:', {
-                reason: reason,
-                promise: promise
-            });
+            console.error('\n❌ UNHANDLED PROMISE REJECTION:');
+            console.error('Reason:', reason);
+            console.error('Promise:', promise);
+            
+            if (LoggerUtils) {
+                LoggerUtils.error('UNHANDLED PROMISE REJECTION', {
+                    reason: reason?.message || String(reason),
+                    promise: promise
+                });
+                
+                LoggerUtils.logSecurityEvent('unhandled_rejection', 'high', 'system', {
+                    reason: reason?.message || String(reason)
+                });
+            }
             
             logServerShutdown('Unhandled Promise Rejection');
-            
-            // Log security event
-            LoggerUtils.logSecurityEvent('unhandled_rejection', 'high', 'system', {
-                reason: reason?.message || String(reason)
-            });
             
             // Close server gracefully
             server.close(() => {
@@ -516,7 +659,11 @@ const startServer = async () => {
          */
         process.on('SIGTERM', async () => {
             console.log('\n🛑 SIGTERM signal received');
-            LoggerUtils.warn('SIGTERM signal received');
+            
+            if (LoggerUtils) {
+                LoggerUtils.warn('SIGTERM signal received');
+            }
+            
             logServerShutdown('SIGTERM Signal');
             
             console.log('📊 Closing database connections...');
@@ -525,15 +672,19 @@ const startServer = async () => {
             
             console.log('🌐 Closing server...');
             server.close(() => {
-                LoggerUtils.info('Server closed successfully');
+                if (LoggerUtils) {
+                    LoggerUtils.info('Server closed successfully');
+                }
                 console.log('✅ Server closed successfully');
                 process.exit(0);
             });
             
             // Force exit if graceful shutdown takes too long (30 seconds)
             setTimeout(() => {
-                LoggerUtils.error('Graceful shutdown timeout, forcing exit');
                 console.error('❌ Graceful shutdown timeout, forcing exit');
+                if (LoggerUtils) {
+                    LoggerUtils.error('Graceful shutdown timeout, forcing exit');
+                }
                 process.exit(1);
             }, 30000);
         });
@@ -544,7 +695,11 @@ const startServer = async () => {
          */
         process.on('SIGINT', async () => {
             console.log('\n\n🛑 SIGINT signal received (Ctrl+C)');
-            LoggerUtils.warn('SIGINT signal received');
+            
+            if (LoggerUtils) {
+                LoggerUtils.warn('SIGINT signal received');
+            }
+            
             logServerShutdown('User Interruption (Ctrl+C)');
             
             console.log('📊 Closing database connections...');
@@ -553,7 +708,9 @@ const startServer = async () => {
             
             console.log('🌐 Closing server...');
             server.close(() => {
-                LoggerUtils.info('Server closed successfully');
+                if (LoggerUtils) {
+                    LoggerUtils.info('Server closed successfully');
+                }
                 console.log('✅ Server closed successfully');
                 console.log('👋 Goodbye!\n');
                 process.exit(0);
@@ -561,23 +718,27 @@ const startServer = async () => {
             
             // Force exit if graceful shutdown takes too long (10 seconds)
             setTimeout(() => {
-                LoggerUtils.error('Graceful shutdown timeout, forcing exit');
                 console.error('❌ Graceful shutdown timeout, forcing exit');
+                if (LoggerUtils) {
+                    LoggerUtils.error('Graceful shutdown timeout, forcing exit');
+                }
                 process.exit(1);
             }, 10000);
         });
 
     } catch (error) {
         // Fatal error during server startup
-        LoggerUtils.error('FATAL ERROR: Failed to start healthcare server', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
-        
         console.error('\n❌ FATAL ERROR: Failed to start healthcare server');
         console.error('Error details:', error.message);
         console.error('Stack trace:', error.stack);
+        
+        if (LoggerUtils) {
+            LoggerUtils.emergency('FATAL ERROR: Server startup failed', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
+        }
         
         logServerShutdown('Fatal Startup Error');
         
@@ -595,7 +756,7 @@ startServer();
 
 /**
  * ==========================================
- * REQUIRED ENVIRONMENT VARIABLES
+ * UPDATED ENVIRONMENT VARIABLES
  * ==========================================
  * 
  * Create a .env file in the root directory with these variables:
@@ -605,9 +766,8 @@ startServer();
  * NODE_ENV=development
  * 
  * # Database
- * MONGODB_URI=mongodb://localhost:27017/healthcare-consultation
- * DB_MAX_POOL_SIZE=10
- * DB_MIN_POOL_SIZE=2
+ * MONGODB_URI=mongodb://localhost:27017
+ * DB_NAME=healthcare-consultation
  * DB_MAX_RETRIES=5
  * DB_RETRY_DELAY=5000
  * 
@@ -633,130 +793,12 @@ startServer();
  * EMAIL_SERVICE=gmail
  * EMAIL_USER=your-email@gmail.com
  * EMAIL_PASS=your-app-specific-password
+ * SMTP_HOST=smtp.gmail.com
+ * SMTP_PORT=587
  * 
  * # Frontend URL
  * FRONTEND_URL=http://localhost:3000
  * 
  * # Logging
  * LOG_LEVEL=info
- * 
- * ==========================================
- * PACKAGE.JSON DEPENDENCIES NEEDED
- * ==========================================
- * 
- * Make sure you have these dependencies:
- * 
- * "dependencies": {
- *   "express": "^4.18.2",
- *   "mongoose": "^7.5.0",
- *   "bcryptjs": "^2.4.3",
- *   "jsonwebtoken": "^9.0.2",
- *   "cors": "^2.8.5",
- *   "cookie-parser": "^1.4.6",
- *   "dotenv": "^16.3.1",
- *   "cloudinary": "^1.40.0",
- *   "nodemailer": "^6.9.4",
- *   "razorpay": "^2.9.2",
- *   "winston": "^3.10.0",
- *   "winston-daily-rotate-file": "^4.7.1"
- * }
- * 
- * "devDependencies": {
- *   "nodemon": "^3.0.1"
- * }
- * 
- * ==========================================
- * USAGE
- * ==========================================
- * 
- * Development:
- *   npm run dev
- * 
- * Production:
- *   npm start
- * 
- * ==========================================
- * PROJECT STRUCTURE
- * ==========================================
- * 
- * src/
- * ├── index.js (this file)
- * ├── server.js (Express app configuration - optional)
- * ├── config/
- * │   └── database.js (Database connection)
- * ├── routes/
- * │   ├── auth.routes.js
- * │   ├── user.routes.js
- * │   ├── patient.routes.js
- * │   ├── admin.routes.js
- * │   ├── payment.routes.js
- * │   └── razorpay.routes.js
- * ├── controllers/
- * │   ├── auth.controller.js
- * │   ├── user.controller.js
- * │   ├── patient.controller.js
- * │   ├── admin.controller.js
- * │   └── payment.controller.js
- * ├── models/
- * │   ├── user.model.js
- * │   ├── patient.model.js
- * │   ├── payment.model.js
- * │   ├── invoice.model.js
- * │   └── auditLog.model.js
- * ├── middlewares/
- * │   ├── auth.middleware.js
- * │   ├── roleAuth.middleware.js
- * │   └── error.middleware.js
- * └── utils/
- *     ├── ApiResponse.js
- *     ├── ApiError.js
- *     ├── asyncHandler.js
- *     ├── logger.js
- *     ├── razorpayUtils.js
- *     ├── emailUtils.js
- *     └── invoiceUtils.js
- * 
- * ==========================================
- * API ENDPOINTS SUMMARY
- * ==========================================
- * 
- * Auth:
- *   POST   /api/v1/auth/register      - Register new user
- *   POST   /api/v1/auth/login          - Login user
- *   POST   /api/v1/auth/logout         - Logout user
- *   POST   /api/v1/auth/refresh-token  - Refresh access token
- * 
- * Users:
- *   GET    /api/v1/users/profile       - Get user profile
- *   PUT    /api/v1/users/profile       - Update user profile
- *   POST   /api/v1/users/change-password - Change password
- * 
- * Patients:
- *   GET    /api/v1/patients            - Get all patients
- *   POST   /api/v1/patients            - Create patient
- *   GET    /api/v1/patients/:id        - Get patient by ID
- *   PUT    /api/v1/patients/:id        - Update patient
- *   DELETE /api/v1/patients/:id        - Delete patient
- * 
- * Admin:
- *   GET    /api/v1/admin/dashboard     - Admin dashboard
- *   GET    /api/v1/admin/users          - Get all users
- *   GET    /api/v1/admin/analytics      - Get system analytics
- * 
- * Payments:
- *   POST   /api/v1/payments/create-order - Create Razorpay order
- *   POST   /api/v1/payments/confirm      - Confirm payment
- *   GET    /api/v1/payments/:paymentId   - Get payment details
- *   GET    /api/v1/payments              - Get user payments
- *   POST   /api/v1/payments/:paymentId/refund - Process refund
- *   POST   /api/v1/payments/manual        - Create manual payment
- * 
- * Simple Razorpay (backward compatible):
- *   POST   /api/create-order             - Simple order creation
- *   POST   /api/verify-payment            - Simple payment verification
- *   GET    /api/payment/:paymentId        - Get payment details
- * 
- * Health:
- *   GET    /api/v1/health                 - Basic health check
- *   GET    /api/v1/health/detailed        - Detailed health check
- */ 
+ */

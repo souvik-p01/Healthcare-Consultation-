@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Video, 
   Phone, 
@@ -38,27 +38,15 @@ import {
   PhoneOff,
   MessageCircle,
   Battery,
-  Activity
+  Activity,
+  Copy,
+  Check,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 
-// Mock WebRTC service for video calls (in real app, use WebRTC libraries like SimplePeer)
-const initiateVideoCall = async (doctorId) => {
-  console.log(`Initiating encrypted video call with doctor ${doctorId}`);
-  // In production, integrate with WebRTC/WebSocket services
-  return { callId: `call_${Date.now()}`, status: 'connecting' };
-};
-
-// Mock WebSocket service for chat (in real app, use Socket.io or similar)
-const initiateChatSession = async (doctorId) => {
-  console.log(`Starting encrypted chat with doctor ${doctorId}`);
-  return { sessionId: `chat_${Date.now()}`, encrypted: true };
-};
-
-// Mock telephony service
-const initiatePhoneCall = async (doctorId) => {
-  console.log(`Initiating phone call with doctor ${doctorId}`);
-  return { callId: `phone_${Date.now()}`, attended: true };
-};
+// Import ZEGOCLOUD SDK
+import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 
 const Telemedicine = () => {
   const [selectedPlan, setSelectedPlan] = useState('video');
@@ -73,22 +61,28 @@ const Telemedicine = () => {
     age: '',
     gender: '',
     symptoms: '',
-    phone: ''
+    phone: '',
+    email: ''
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCall, setActiveCall] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
-  const [videoStream, setVideoStream] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [callStartTime, setCallStartTime] = useState(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [zegoInstance, setZegoInstance] = useState(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  
+  const videoContainerRef = useRef(null);
+  const durationInterval = useRef(null);
 
-  // Initialize media devices
+  // Initialize connection status simulation
   useEffect(() => {
-    if (selectedPlan === 'video') {
-      checkMediaPermissions();
-    }
-    
-    // Simulate connection quality
     const interval = setInterval(() => {
       const qualities = ['excellent', 'good', 'fair', 'poor'];
       const randomQuality = qualities[Math.floor(Math.random() * qualities.length)];
@@ -96,17 +90,267 @@ const Telemedicine = () => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [selectedPlan]);
+  }, []);
 
-  const checkMediaPermissions = async () => {
+  // Call duration timer
+  useEffect(() => {
+    if (isCallActive && callStartTime) {
+      durationInterval.current = setInterval(() => {
+        const duration = Math.floor((Date.now() - callStartTime) / 1000);
+        setCallDuration(duration);
+      }, 1000);
+    }
+
+    return () => {
+      if (durationInterval.current) {
+        clearInterval(durationInterval.current);
+      }
+    };
+  }, [isCallActive, callStartTime]);
+
+  // Format call duration
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // REAL ZEGOCLOUD Video Call Implementation
+  const startZegoCall = async (doctor) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
+      // Get credentials from environment variables
+      const appID = Number(process.env.REACT_APP_ZEGO_APP_ID);
+      const serverSecret = process.env.REACT_APP_ZEGO_SERVER_SECRET;
+
+      if (!appID || !serverSecret) {
+        alert('ZEGOCLOUD credentials not configured. Please check your .env file.');
+        return;
+      }
+
+      // Generate unique room ID based on doctor and timestamp
+      const roomID = `telemed_${doctor.id}_${Date.now()}`;
+      
+      // Generate unique user ID for patient
+      const userID = `patient_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const userName = patientDetails.name || "Patient";
+
+      // Generate kit token
+      const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+        appID,
+        serverSecret,
+        roomID,
+        userID,
+        userName
+      );
+
+      // Create instance
+      const zp = ZegoUIKitPrebuilt.create(kitToken);
+      setZegoInstance(zp);
+
+      // Start time tracking
+      setCallStartTime(Date.now());
+      setIsCallActive(true);
+
+      // Join room with your configuration
+      zp.joinRoom({
+        container: videoContainerRef.current,
+        turnOnMicrophoneWhenJoining: true,
+        turnOnCameraWhenJoining: true,
+        showMyCameraToggleButton: true,
+        showMyMicrophoneToggleButton: true,
+        showAudioVideoSettingsButton: true,
+        showScreenSharingButton: true,
+        showTextChat: true,
+        showUserList: true,
+        maxUsers: 2,
+        layout: "Auto",
+        showLayoutButton: false,
+        showPreJoinView: false, // Skip pre-join view for quicker connection
+        scenario: {
+          mode: ZegoUIKitPrebuilt.OneONoneCall, // Use OneONoneCall mode
+          config: {
+            role: ZegoUIKitPrebuilt.Host,
+          },
+        },
+        onJoinRoom: () => {
+          console.log('Successfully joined room:', roomID);
+          setActiveCall({
+            id: roomID,
+            doctor: doctor,
+            startTime: Date.now()
+          });
+        },
+        onLeaveRoom: () => {
+          console.log('Left room:', roomID);
+          setIsCallActive(false);
+          setCallStartTime(null);
+          setCallDuration(0);
+          setActiveCall(null);
+          setZegoInstance(null);
+        },
+        onUserJoin: (users) => {
+          console.log('User joined:', users);
+          // Doctor has joined the call
+          if (users.length > 0) {
+            // Could show notification that doctor joined
+          }
+        },
+        onUserLeave: (users) => {
+          console.log('User left:', users);
+          // Doctor left the call
+        },
       });
-      setVideoStream(stream);
-    } catch (err) {
-      console.log('Media permissions denied');
+    } catch (error) {
+      console.error('Failed to start ZEGOCLOUD call:', error);
+      alert('Failed to start video call. Please try again.');
+    }
+  };
+
+  // Audio-only call using ZEGOCLOUD (phone consultation)
+  const startZegoAudioCall = async (doctor) => {
+    try {
+      const appID = Number(process.env.REACT_APP_ZEGO_APP_ID);
+      const serverSecret = process.env.REACT_APP_ZEGO_SERVER_SECRET;
+
+      if (!appID || !serverSecret) {
+        alert('ZEGOCLOUD credentials not configured. Please check your .env file.');
+        return;
+      }
+
+      const roomID = `telemed_audio_${doctor.id}_${Date.now()}`;
+      const userID = `patient_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const userName = patientDetails.name || "Patient";
+
+      const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+        appID,
+        serverSecret,
+        roomID,
+        userID,
+        userName
+      );
+
+      const zp = ZegoUIKitPrebuilt.create(kitToken);
+      setZegoInstance(zp);
+
+      setCallStartTime(Date.now());
+      setIsCallActive(true);
+
+      zp.joinRoom({
+        container: videoContainerRef.current,
+        turnOnMicrophoneWhenJoining: true,
+        turnOnCameraWhenJoining: false, // Disable camera for audio-only
+        showMyCameraToggleButton: false, // Hide camera toggle
+        showMyMicrophoneToggleButton: true,
+        showAudioVideoSettingsButton: true,
+        showScreenSharingButton: false, // Disable screen sharing for audio-only
+        showTextChat: true,
+        showUserList: true,
+        maxUsers: 2,
+        layout: "Auto",
+        showLayoutButton: false,
+        scenario: {
+          mode: ZegoUIKitPrebuilt.OneONoneCall,
+          config: {
+            role: ZegoUIKitPrebuilt.Host,
+          },
+        },
+        onJoinRoom: () => {
+          console.log('Successfully joined audio room:', roomID);
+          setActiveCall({
+            id: roomID,
+            doctor: doctor,
+            startTime: Date.now(),
+            type: 'audio'
+          });
+        },
+        onLeaveRoom: () => {
+          console.log('Left audio room:', roomID);
+          setIsCallActive(false);
+          setCallStartTime(null);
+          setCallDuration(0);
+          setActiveCall(null);
+          setZegoInstance(null);
+        },
+      });
+    } catch (error) {
+      console.error('Failed to start audio call:', error);
+      alert('Failed to start audio call. Please try again.');
+    }
+  };
+
+  // Handle consultation start based on selected plan
+  const handleConsultationStart = async () => {
+    if (!selectedDoctor) {
+      alert('Please select a doctor first');
+      return;
+    }
+
+    if (selectedPlan === 'video') {
+      startZegoCall(selectedDoctor);
+    } else if (selectedPlan === 'phone') {
+      startZegoAudioCall(selectedDoctor);
+    } else if (selectedPlan === 'chat') {
+      // For chat, we'll use the existing chat functionality
+      setActiveCall({
+        id: `chat_${Date.now()}`,
+        doctor: selectedDoctor,
+        type: 'chat',
+        startTime: Date.now()
+      });
+      setIsCallActive(true);
+      setCallStartTime(Date.now());
+    }
+  };
+
+  // End call function
+  const endCall = () => {
+    if (zegoInstance) {
+      zegoInstance.destroyRoom();
+      setZegoInstance(null);
+    }
+    setIsCallActive(false);
+    setCallStartTime(null);
+    setCallDuration(0);
+    setActiveCall(null);
+    setIsMuted(false);
+    setIsVideoOff(false);
+  };
+
+  // Toggle mute
+  const toggleMute = () => {
+    if (zegoInstance) {
+      // ZEGOCLOUD handles this internally via UI buttons
+      setIsMuted(!isMuted);
+    }
+  };
+
+  // Toggle video
+  const toggleVideo = () => {
+    if (zegoInstance) {
+      setIsVideoOff(!isVideoOff);
+    }
+  };
+
+  // Toggle fullscreen
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullScreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullScreen(false);
+      }
+    }
+  };
+
+  // Copy meeting link
+  const copyMeetingLink = () => {
+    if (activeCall) {
+      const link = `https://telemed.io/join/${activeCall.id}`;
+      navigator.clipboard.writeText(link);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
     }
   };
 
@@ -135,7 +379,7 @@ const Telemedicine = () => {
         'Session recording available',
         'Real-time vital monitoring'
       ],
-      tech: ['WebRTC', 'AES-256 Encryption', 'WebSocket'],
+      tech: ['ZEGOCLOUD SDK', 'AES-256 Encryption', 'WebRTC'],
       popular: true,
       color: 'from-blue-500 to-cyan-600'
     },
@@ -163,7 +407,7 @@ const Telemedicine = () => {
         'Emergency callback feature',
         'Multi-language support'
       ],
-      tech: ['VoIP', 'SIP Protocol', 'AES Encryption'],
+      tech: ['ZEGOCLOUD Audio SDK', 'VoIP', 'AES Encryption'],
       popular: false,
       color: 'from-green-500 to-emerald-600'
     },
@@ -214,7 +458,8 @@ const Telemedicine = () => {
         specializations: ['Diabetes', 'Hypertension', 'General Medicine'],
         education: 'MBBS, MD (Medicine)',
         verified: true,
-        responseTime: '5 mins'
+        responseTime: '5 mins',
+        zegoUserId: 'doctor_gp001'
       },
       {
         id: 'GP002',
@@ -231,7 +476,8 @@ const Telemedicine = () => {
         specializations: ['Fever', 'Cough', 'Allergies'],
         education: 'MBBS, DNB (Medicine)',
         verified: true,
-        responseTime: '3 mins'
+        responseTime: '3 mins',
+        zegoUserId: 'doctor_gp002'
       }
     ],
     'Dermatology': [
@@ -250,21 +496,61 @@ const Telemedicine = () => {
         specializations: ['Acne', 'Psoriasis', 'Skin Allergy'],
         education: 'MBBS, MD (Dermatology)',
         verified: true,
-        responseTime: '15 mins'
+        responseTime: '15 mins',
+        zegoUserId: 'doctor_der001'
       }
     ],
-    // Add more specialties with similar structure...
+    'Cardiology': [
+      {
+        id: 'CAR001',
+        name: 'Dr. Suresh Patel',
+        hospital: 'Asian Heart Institute, Mumbai',
+        experience: '20 years',
+        rating: 4.9,
+        reviews: 567,
+        languages: ['English', 'Hindi', 'Gujarati'],
+        fee: '₹999',
+        nextAvailable: 'Today, 4:00 PM',
+        timeSlots: ['4:00 PM', '5:30 PM', '7:00 PM'],
+        availability: 'online',
+        specializations: ['Heart Disease', 'Hypertension', 'Cholesterol'],
+        education: 'MBBS, MD, DM (Cardiology)',
+        verified: true,
+        responseTime: '10 mins',
+        zegoUserId: 'doctor_car001'
+      }
+    ],
+    'Pediatrics': [
+      {
+        id: 'PED001',
+        name: 'Dr. Neha Gupta',
+        hospital: 'Rainbow Children\'s Hospital, Delhi',
+        experience: '8 years',
+        rating: 4.8,
+        reviews: 234,
+        languages: ['English', 'Hindi'],
+        fee: '₹599',
+        nextAvailable: 'Today, 3:30 PM',
+        timeSlots: ['3:30 PM', '5:00 PM', '6:30 PM'],
+        availability: 'online',
+        specializations: ['Newborn Care', 'Vaccination', 'Child Development'],
+        education: 'MBBS, MD (Pediatrics)',
+        verified: true,
+        responseTime: '8 mins',
+        zegoUserId: 'doctor_ped001'
+      }
+    ]
   };
 
   const specialties = [
-    { name: 'General Physician', icon: '🩺', color: 'bg-blue-100 text-blue-800' },
-    { name: 'Dermatology', icon: '💆', color: 'bg-purple-100 text-purple-800' },
-    { name: 'Pediatrics', icon: '👶', color: 'bg-pink-100 text-pink-800' },
-    { name: 'Gynecology', icon: '🤰', color: 'bg-red-100 text-red-800' },
-    { name: 'Psychiatry', icon: '🧠', color: 'bg-indigo-100 text-indigo-800' },
-    { name: 'Cardiology', icon: '❤️', color: 'bg-red-100 text-red-800' },
-    { name: 'Orthopedics', icon: '🦴', color: 'bg-gray-100 text-gray-800' },
-    { name: 'ENT Specialist', icon: '👂', color: 'bg-green-100 text-green-800' }
+    { name: 'General Physician', icon: '🩺', color: 'bg-blue-100 text-blue-800', count: 12 },
+    { name: 'Dermatology', icon: '💆', color: 'bg-purple-100 text-purple-800', count: 8 },
+    { name: 'Pediatrics', icon: '👶', color: 'bg-pink-100 text-pink-800', count: 6 },
+    { name: 'Cardiology', icon: '❤️', color: 'bg-red-100 text-red-800', count: 5 },
+    { name: 'Gynecology', icon: '🤰', color: 'bg-red-100 text-red-800', count: 7 },
+    { name: 'Psychiatry', icon: '🧠', color: 'bg-indigo-100 text-indigo-800', count: 4 },
+    { name: 'Orthopedics', icon: '🦴', color: 'bg-gray-100 text-gray-800', count: 5 },
+    { name: 'ENT Specialist', icon: '👂', color: 'bg-green-100 text-green-800', count: 6 }
   ];
 
   const howItWorks = [
@@ -287,7 +573,7 @@ const Telemedicine = () => {
       title: 'Connect Securely',
       desc: 'End-to-end encrypted consultation',
       icon: <ShieldIcon className="w-6 h-6" />,
-      tech: 'Military-grade Encryption'
+      tech: 'ZEGOCLOUD WebRTC'
     },
     {
       step: 4,
@@ -303,28 +589,6 @@ const Telemedicine = () => {
     setShowDoctorModal(true);
     setSelectedDoctor(null);
     setSelectedTimeSlot(null);
-  };
-
-  const handleConsultationStart = async () => {
-    if (!selectedDoctor) return;
-
-    try {
-      if (selectedPlan === 'video') {
-        const call = await initiateVideoCall(selectedDoctor.id);
-        setActiveCall(call);
-        alert(`Starting encrypted video call with ${selectedDoctor.name}`);
-      } else if (selectedPlan === 'phone') {
-        const call = await initiatePhoneCall(selectedDoctor.id);
-        setActiveCall(call);
-        alert(`Initiating phone call with ${selectedDoctor.name}`);
-      } else if (selectedPlan === 'chat') {
-        const session = await initiateChatSession(selectedDoctor.id);
-        setActiveCall(session);
-        alert(`Starting encrypted chat with ${selectedDoctor.name}`);
-      }
-    } catch (error) {
-      alert('Failed to start consultation. Please try again.');
-    }
   };
 
   const handleBooking = () => {
@@ -343,7 +607,8 @@ const Telemedicine = () => {
       age: '',
       gender: '',
       symptoms: '',
-      phone: ''
+      phone: '',
+      email: ''
     });
   };
 
@@ -383,7 +648,7 @@ const Telemedicine = () => {
     return (
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1">
-          <div className={`w-2 h-2 rounded-full ${getStatusColor()}`}></div>
+          <div className={`w-2 h-2 rounded-full ${getStatusColor()} animate-pulse`}></div>
           <div className="text-xs font-medium capitalize">{status}</div>
         </div>
         <Wifi className="w-4 h-4" />
@@ -416,7 +681,7 @@ const Telemedicine = () => {
                 Telemedicine Services
               </h1>
               <p className="text-lg md:text-xl text-blue-100 max-w-3xl">
-                Secure, encrypted consultations with certified doctors. Available 24/7 from anywhere.
+                Secure, encrypted consultations with certified doctors using ZEGOCLOUD technology. Available 24/7 from anywhere.
               </p>
             </div>
           </div>
@@ -507,9 +772,12 @@ const Telemedicine = () => {
 
                   <button
                     onClick={handleConsultationStart}
-                    className={`w-full bg-gradient-to-r ${type.color} text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all duration-300 active:scale-95 flex items-center justify-center gap-3`}
+                    disabled={!selectedDoctor}
+                    className={`w-full bg-gradient-to-r ${type.color} text-white py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all duration-300 active:scale-95 flex items-center justify-center gap-3 ${
+                      !selectedDoctor ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   >
-                    Start Consultation
+                    Start {type.title}
                     {type.id === 'video' && <Video className="w-5 h-5" />}
                     {type.id === 'phone' && <Phone className="w-5 h-5" />}
                     {type.id === 'chat' && <MessageSquare className="w-5 h-5" />}
@@ -521,7 +789,7 @@ const Telemedicine = () => {
         </div>
 
         {/* Specialties Grid */}
-        <div className="mb-12 md:mb-16">
+        <div className="mb-12 md:mb-16" id="specialties">
           <h2 className="text-2xl md:text-4xl font-bold text-center mb-8 md:mb-12 text-gray-800">
             Available Specialties
           </h2>
@@ -583,14 +851,52 @@ const Telemedicine = () => {
         {activeCall && (
           <div className="mb-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-6 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold">Active Consultation</h3>
+              <div>
+                <h3 className="text-xl font-bold">Active Consultation</h3>
+                <p className="text-sm opacity-90">
+                  with {selectedDoctor?.name} • {formatDuration(callDuration)}
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
                 <span className="text-sm">Live</span>
+                {copySuccess ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy 
+                    className="w-4 h-4 cursor-pointer hover:text-blue-200" 
+                    onClick={copyMeetingLink}
+                  />
+                )}
               </div>
             </div>
             
-            {selectedPlan === 'chat' ? (
+            {/* ZEGOCLOUD Video Container */}
+            {selectedPlan === 'video' && (
+              <div 
+                ref={videoContainerRef}
+                className="w-full h-[500px] bg-black rounded-xl overflow-hidden"
+                style={{ minHeight: '500px' }}
+              />
+            )}
+
+            {/* Audio Call UI */}
+            {selectedPlan === 'phone' && (
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-8 text-center">
+                <div className="w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Phone className="w-10 h-10 text-white" />
+                </div>
+                <h4 className="text-xl font-semibold mb-2">Audio Call in Progress</h4>
+                <p className="text-sm opacity-90 mb-4">Speaking with {selectedDoctor?.name}</p>
+                <div 
+                  ref={videoContainerRef}
+                  className="hidden" // Hidden container for audio-only (ZEGOCLOUD still needs it)
+                />
+              </div>
+            )}
+
+            {/* Chat UI */}
+            {selectedPlan === 'chat' && (
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
                 <div className="h-64 overflow-y-auto mb-4 space-y-4">
                   {chatMessages.map(msg => (
@@ -618,7 +924,7 @@ const Telemedicine = () => {
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                     placeholder="Type your message..."
-                    className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white"
+                    className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white text-white placeholder-white/50"
                   />
                   <button
                     onClick={sendMessage}
@@ -628,26 +934,42 @@ const Telemedicine = () => {
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="text-center">
-                <p className="mb-4">Consultation with {selectedDoctor?.name} is active</p>
-                <div className="flex justify-center gap-4">
-                  {selectedPlan === 'video' && (
-                    <>
-                      <button className="px-6 py-3 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition-colors flex items-center gap-2">
-                        <Camera className="w-5 h-5" />
-                        Toggle Camera
-                      </button>
-                      <button className="px-6 py-3 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition-colors flex items-center gap-2">
-                        <Mic className="w-5 h-5" />
-                        Mute
-                      </button>
-                    </>
-                  )}
-                  <button className="px-6 py-3 bg-red-500 rounded-xl hover:bg-red-600 transition-colors flex items-center gap-2">
-                    End Call
-                  </button>
-                </div>
+            )}
+
+            {/* Call Controls */}
+            {(selectedPlan === 'video' || selectedPlan === 'phone') && (
+              <div className="flex justify-center gap-4 mt-4">
+                {selectedPlan === 'video' && (
+                  <>
+                    <button
+                      onClick={toggleMute}
+                      className="px-6 py-3 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition-colors flex items-center gap-2"
+                    >
+                      <Mic className={`w-5 h-5 ${isMuted ? 'line-through' : ''}`} />
+                      {isMuted ? 'Unmute' : 'Mute'}
+                    </button>
+                    <button
+                      onClick={toggleVideo}
+                      className="px-6 py-3 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition-colors flex items-center gap-2"
+                    >
+                      <Camera className={`w-5 h-5 ${isVideoOff ? 'line-through' : ''}`} />
+                      {isVideoOff ? 'Start Video' : 'Stop Video'}
+                    </button>
+                    <button
+                      onClick={toggleFullScreen}
+                      className="px-6 py-3 bg-white/20 backdrop-blur-sm rounded-xl hover:bg-white/30 transition-colors flex items-center gap-2"
+                    >
+                      {isFullScreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={endCall}
+                  className="px-8 py-3 bg-red-500 rounded-xl hover:bg-red-600 transition-colors flex items-center gap-2 font-semibold"
+                >
+                  {selectedPlan === 'video' ? <VideoOff className="w-5 h-5" /> : <PhoneOff className="w-5 h-5" />}
+                  End Call
+                </button>
               </div>
             )}
           </div>
@@ -660,21 +982,21 @@ const Telemedicine = () => {
               <ShieldIcon className="w-6 h-6 text-blue-600" />
             </div>
             <h3 className="text-xl font-bold text-gray-800 mb-3">Secure & Encrypted</h3>
-            <p className="text-gray-600">All consultations are end-to-end encrypted with military-grade security.</p>
+            <p className="text-gray-600">All consultations are end-to-end encrypted with ZEGOCLOUD's military-grade security.</p>
           </div>
           <div className="bg-white p-6 rounded-2xl shadow-lg">
             <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
               <Smartphone className="w-6 h-6 text-green-600" />
             </div>
             <h3 className="text-xl font-bold text-gray-800 mb-3">Device Compatible</h3>
-            <p className="text-gray-600">Access from any device - mobile, tablet, or desktop.</p>
+            <p className="text-gray-600">Access from any device - mobile, tablet, or desktop with ZEGOCLOUD SDK.</p>
           </div>
           <div className="bg-white p-6 rounded-2xl shadow-lg">
             <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
               <Activity className="w-6 h-6 text-purple-600" />
             </div>
-            <h3 className="text-xl font-bold text-gray-800 mb-3">Vital Monitoring</h3>
-            <p className="text-gray-600">Integrate with health devices for real-time vital monitoring.</p>
+            <h3 className="text-xl font-bold text-gray-800 mb-3">HD Quality</h3>
+            <p className="text-gray-600">High-definition video and audio with adaptive bitrate technology.</p>
           </div>
         </div>
 
@@ -686,7 +1008,7 @@ const Telemedicine = () => {
               Ready to Consult a Doctor?
             </h3>
             <p className="text-xl mb-8 text-white/90 max-w-2xl mx-auto">
-              Book your consultation now and get expert medical advice within minutes
+              Book your consultation now and get expert medical advice within minutes using secure video calls
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
@@ -704,7 +1026,6 @@ const Telemedicine = () => {
               </button>
               <button
                 onClick={() => {
-                  // Scroll to specialties
                   document.getElementById('specialties')?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="border-2 border-white text-white px-8 py-4 rounded-xl font-bold hover:bg-white hover:text-blue-600 transition-all flex items-center justify-center gap-3 active:scale-95"
@@ -936,7 +1257,7 @@ const Telemedicine = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Full Name
+                        Full Name *
                       </label>
                       <input
                         type="text"
@@ -944,11 +1265,12 @@ const Telemedicine = () => {
                         value={patientDetails.name}
                         onChange={(e) => setPatientDetails({...patientDetails, name: e.target.value})}
                         placeholder="Enter your full name"
+                        required
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Age
+                        Age *
                       </label>
                       <input
                         type="number"
@@ -956,16 +1278,18 @@ const Telemedicine = () => {
                         value={patientDetails.age}
                         onChange={(e) => setPatientDetails({...patientDetails, age: e.target.value})}
                         placeholder="Enter age"
+                        required
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Gender
+                        Gender *
                       </label>
                       <select
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         value={patientDetails.gender}
                         onChange={(e) => setPatientDetails({...patientDetails, gender: e.target.value})}
+                        required
                       >
                         <option value="">Select Gender</option>
                         <option value="male">Male</option>
@@ -975,7 +1299,7 @@ const Telemedicine = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Phone Number
+                        Phone Number *
                       </label>
                       <input
                         type="tel"
@@ -983,6 +1307,19 @@ const Telemedicine = () => {
                         value={patientDetails.phone}
                         onChange={(e) => setPatientDetails({...patientDetails, phone: e.target.value})}
                         placeholder="Enter phone number"
+                        required
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email (Optional)
+                      </label>
+                      <input
+                        type="email"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={patientDetails.email}
+                        onChange={(e) => setPatientDetails({...patientDetails, email: e.target.value})}
+                        placeholder="Enter email for confirmation"
                       />
                     </div>
                   </div>
@@ -1027,6 +1364,10 @@ const Telemedicine = () => {
                       <span className="text-gray-600">Patient:</span>
                       <span className="font-semibold">{patientDetails.name}</span>
                     </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Phone:</span>
+                      <span className="font-semibold">{patientDetails.phone}</span>
+                    </div>
                     <div className="border-t pt-4 mt-4">
                       <div className="flex justify-between items-center text-lg font-bold">
                         <span>Total Amount:</span>
@@ -1049,7 +1390,10 @@ const Telemedicine = () => {
                   <div className="bg-blue-50 rounded-xl p-4">
                     <p className="text-sm text-gray-600 mb-2">Meeting Details:</p>
                     <p className="font-mono text-sm bg-white p-3 rounded-lg">
-                      Join URL: https://telemed.io/meet/{selectedDoctor.id}-{Date.now()}
+                      Room ID: telemed_{selectedDoctor.id}_{Date.now()}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      You'll receive a confirmation SMS with meeting link
                     </p>
                   </div>
                 </div>
@@ -1072,11 +1416,16 @@ const Telemedicine = () => {
                       completeBooking();
                     }
                   }}
+                  disabled={bookingStep === 1 && (!patientDetails.name || !patientDetails.age || !patientDetails.gender || !patientDetails.phone)}
                   className={`ml-auto px-8 py-3 rounded-lg font-bold text-white ${
                     bookingStep === 3
                       ? 'bg-green-600 hover:bg-green-700'
                       : 'bg-blue-600 hover:bg-blue-700'
-                  } transition-colors`}
+                  } transition-colors ${
+                    bookingStep === 1 && (!patientDetails.name || !patientDetails.age || !patientDetails.gender || !patientDetails.phone)
+                      ? 'opacity-50 cursor-not-allowed'
+                      : ''
+                  }`}
                 >
                   {bookingStep === 3 ? 'Complete Booking' : 'Continue'}
                 </button>

@@ -142,14 +142,14 @@ class HealthcareLogger {
             level: process.env.LOG_LEVEL || 'info',
             format: combine(
                 errors({ stack: true }),
-                timestamp({ format: DATETIME_CONFIG.FORMATS.DATABASE })
+                timestamp({ format: DATETIME_CONFIG.DATE_FORMATS.REPORT || 'YYYY-MM-DD HH:mm:ss' })
             ),
             transports: [
                 // Console transport for development
                 new winston.transports.Console({
                     format: combine(
                         colorize({ all: true }),
-                        timestamp({ format: DATETIME_CONFIG.FORMATS.DISPLAY }),
+                        timestamp({ format: DATETIME_CONFIG.DATE_FORMATS.DISPLAY || 'MMM dd, yyyy HH:mm:ss' }),
                         consoleFormat
                     )
                 }),
@@ -665,5 +665,5 @@ class HealthcareLogger {
 // Create singleton instance
 const healthcareLogger = new HealthcareLogger();
 
-// Export the singleton instance and class
-export { healthcareLogger as LoggerUtils, HealthcareLogger, LOG_CONFIG };
+// Export the singleton instance and class (LOG_CONFIG is already exported above)
+export { healthcareLogger as LoggerUtils, HealthcareLogger };

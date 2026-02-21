@@ -1,742 +1,966 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Brain,
-  ChevronLeft,
-  Send,
-  MessageSquare,
-  Shield,
-  TrendingUp,
-  Upload,
-  Download,
-  Search,
-  Bell,
-  Settings,
-  Zap,
-  FileText,
-  X,
-  User,
-  Bot,
-  Camera,
-  Image as ImageIcon,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Volume2,
-  Mic,
-  History,
-  Star,
-  Heart,
-  Plus,
-  Trash2,
-  Eye,
-  Share2,
-  Lock,
-  Unlock,
-  Menu,
-  Maximize2
+  Brain, ChevronLeft, Send, MessageSquare, Shield, TrendingUp,
+  Upload, Download, Search, Bell, Settings, Zap, FileText, X,
+  User, Bot, Camera, AlertCircle, CheckCircle, Clock, Volume2,
+  Mic, History, Star, Heart, Plus, Trash2, Eye, Share2, Lock,
+  Menu, Maximize2, Activity, Pill, Stethoscope, ChevronRight,
+  Sparkles, BarChart2, RefreshCw
 } from 'lucide-react';
 
-// Using a free AI service (OpenRouter API - Free tier)
-const FREE_AI_API_KEY = 'your-free-api-key-here'; // Replace with your free API key
-const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+import OpenAI from "openai";
 
-const AIAssistantPage = ({ role }) => {
-  const [messages, setMessages] = useState([
-    { 
-      id: 1, 
-      type: 'bot', 
-      text: 'Hello! 👋 I\'m your AI Health Assistant, powered by advanced medical AI. How can I help you today?', 
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    },
-    { 
-      id: 2, 
-      type: 'bot', 
-      text: 'I can analyze symptoms, explain lab reports, provide medication information, and connect you with healthcare professionals. I\'m here 24/7 to support your health journey!',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [isTyping, setIsTyping] = useState(false);
-  const [chatHistory, setChatHistory] = useState([]);
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [apiKey] = useState(FREE_AI_API_KEY);
-  const fileInputRef = useRef(null);
-  const messagesEndRef = useRef(null);
-  const chatContainerRef = useRef(null);
+/* ── Design Tokens ──────────────────────────────────────────── */
+const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap');
 
-  // Auto-scroll to bottom
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  :root {
+    --ink:      #0a0a12;
+    --ink2:     #2a2a3a;
+    --muted:    #7b7b99;
+    --border:   #e4e4ef;
+    --surface:  #f7f7fc;
+    --white:    #ffffff;
+    --teal:     #00c9a7;
+    --teal2:    #00a08a;
+    --coral:    #ff6b6b;
+    --gold:     #ffd166;
+    --blue:     #4361ee;
+    --purple:   #7b2ff7;
+    --glow:     rgba(0,201,167,0.25);
+    --r-sm:     10px;
+    --r-md:     16px;
+    --r-lg:     24px;
+    --r-xl:     32px;
+  }
 
-  const roleGreeting = {
-    technician: 'Lab diagnostics & equipment assistance',
-    doctor: 'Clinical decision & patient analysis',
-    patient: 'Symptom analysis & health guidance'
-  };
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  .ai-page {
+    font-family: 'DM Sans', sans-serif;
+    background: #f0f0f8;
+    min-height: 100vh;
+    color: var(--ink);
+  }
 
-  // Function to call Free AI API (using OpenRouter's free tier)
-  const callAIAPI = async (userMessage) => {
-    try {
-      // Option 1: Use free AI API (requires API key - get one from openrouter.ai)
-      if (apiKey && apiKey !== 'your-free-api-key-here') {
-        const response = await fetch(AI_API_URL, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': window.location.origin,
-            'X-Title': 'HealthCare AI Assistant'
-          },
-          body: JSON.stringify({
-            model: 'mistralai/mistral-7b-instruct:free',
-            messages: [
-              { 
-                role: 'system', 
-                content: 'You are a professional medical AI assistant. Provide helpful, accurate health information, but always remind users to consult real doctors for serious concerns. Be empathetic and clear in your responses.'
-              },
-              { role: 'user', content: userMessage }
-            ],
-            max_tokens: 200,
-            temperature: 0.7
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        return data.choices[0]?.message?.content || 'I apologize, but I could not generate a response. Please try again.';
-      }
-      
-      // Option 2: Local mock responses (no API key needed)
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      const medicalResponses = {
-        'headache': 'Headaches can have many causes including tension, dehydration, or sinus issues. Try drinking water, resting in a dark room, and consider over-the-counter pain relief like ibuprofen. If severe, persistent, or accompanied by vision changes, consult a doctor immediately.',
-        'fever': 'For fever above 100.4°F (38°C), monitor temperature regularly. Stay hydrated, rest, and use fever reducers like acetaminophen. Seek medical help if fever exceeds 103°F (39.4°C), lasts more than 3 days, or if you have difficulty breathing.',
-        'cough': 'Coughs can be viral, bacterial, or allergic. Drink warm fluids like tea with honey, use a humidifier, and avoid irritants. If cough persists beyond 3 weeks, produces colored mucus, or causes chest pain, please see a doctor.',
-        'cold': 'Common cold symptoms include runny nose, sore throat, and mild fatigue. Rest, hydrate, and use saline nasal sprays. Most colds resolve in 7-10 days. Contact a doctor if symptoms worsen or you develop high fever.',
-        'appointment': 'I can help you schedule an appointment with our healthcare network! Would you prefer a video consultation or in-person visit? You can book directly through our platform.',
-        'report': 'I can help analyze medical reports. Please upload your lab results, imaging reports, or doctor notes. I\'ll explain findings in simple terms and suggest follow-up questions for your doctor.',
-        'medication': 'I can provide medication information including uses, side effects, and interactions. Please tell me the specific medication name and dosage for accurate information.',
-        'emergency': '🚨 For emergencies like chest pain, difficulty breathing, severe bleeding, or loss of consciousness, CALL EMERGENCY SERVICES IMMEDIATELY (112 or 911).',
-        'diabetes': 'For diabetes management: Monitor blood sugar regularly, follow a balanced diet with controlled carbohydrates, exercise regularly, and take medications as prescribed. Consult your endocrinologist for personalized advice.',
-        'blood pressure': 'Normal blood pressure is around 120/80 mmHg. For high blood pressure, reduce sodium intake, exercise regularly, manage stress, and take prescribed medications. Monitor regularly and consult your doctor.',
-        'allergy': 'For allergies: Avoid known triggers, use antihistamines as needed, and consider allergy testing. For severe reactions (anaphylaxis), use an epinephrine auto-injector and seek emergency care.'
-      };
+  /* ── HEADER ── */
+  .ai-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .ai-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.2rem;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .ai-logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, #00c9a7, #4361ee);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ai-topbar-right { display: flex; align-items: center; gap: 12px; }
+  .ai-status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 0.75rem; font-weight: 500;
+    border: 1px solid;
+  }
+  .ai-status-pill.connected { background: #e8faf5; border-color: #00c9a7; color: #00a08a; }
+  .ai-status-pill.error     { background: #fff0f0; border-color: #ff6b6b; color: #cc4444; }
+  .ai-status-pill.checking  { background: #fffbe8; border-color: #ffd166; color: #b38600; }
+  .ai-status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor;
+    animation: pulse-dot 2s infinite;
+  }
+  @keyframes pulse-dot {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+  .ai-back-btn {
+    display: flex; align-items: center; gap: 6px;
+    text-decoration: none; color: var(--muted); font-size: 0.875rem;
+    transition: color 0.2s;
+  }
+  .ai-back-btn:hover { color: var(--ink); }
 
-      const lowerMsg = userMessage.toLowerCase();
-      
-      // Check for keywords and return appropriate response
-      for (const [keyword, response] of Object.entries(medicalResponses)) {
-        if (lowerMsg.includes(keyword)) {
-          return response;
-        }
-      }
+  /* ── LAYOUT ── */
+  .ai-workspace {
+    display: grid;
+    grid-template-columns: 280px 1fr 260px;
+    height: calc(100vh - 65px);
+    overflow: hidden;
+  }
+  @media (max-width: 1100px) {
+    .ai-workspace { grid-template-columns: 240px 1fr; }
+    .ai-right-panel { display: none; }
+  }
+  @media (max-width: 768px) {
+    .ai-workspace { grid-template-columns: 1fr; }
+    .ai-left-panel { display: none; }
+    .ai-left-panel.open { display: flex; position: fixed; left: 0; top: 65px; bottom: 0; width: 280px; z-index: 99; }
+  }
 
-      // General response for unknown queries
-      return 'Thank you for your health query. While I can provide general information, it\'s important to consult with a healthcare professional for personalized medical advice. I can help you understand symptoms, explain medical terms, or guide you to appropriate resources. Could you provide more details about your concern?';
-      
-    } catch (error) {
-      console.log('Using mock response due to:', error.message);
-      // Fallback to mock response
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Enhanced mock responses
-      const mockResponses = [
-        "Based on common symptoms you've described, I recommend monitoring your condition and consulting a healthcare professional if symptoms persist beyond 48 hours.",
-        "I understand your concern. For accurate diagnosis and treatment, please schedule a consultation with one of our certified doctors.",
-        "This sounds like something that should be evaluated by a medical professional. I can help you book an appointment or provide more information about symptoms.",
-        "Your health is important. While I provide general guidance, please seek professional medical advice for proper diagnosis and treatment.",
-        "I recommend keeping a symptom diary and consulting with a doctor who can examine you properly and order any necessary tests."
-      ];
-      
-      return mockResponses[Math.floor(Math.random() * mockResponses.length)];
-    }
-  };
+  /* ── LEFT PANEL ── */
+  .ai-left-panel {
+    background: var(--white);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .ai-panel-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ai-section-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.7rem; font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .ai-quick-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .ai-quick-btn {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 8px; padding: 14px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    font-size: 0.7rem; font-weight: 500; color: var(--ink2);
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .ai-quick-btn:hover {
+    border-color: var(--teal);
+    background: #f0fdfb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,201,167,0.1);
+  }
+  .ai-quick-icon {
+    width: 34px; height: 34px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+  }
 
-  const sendMessage = async () => {
-    if (!input.trim()) return;
-    
-    const userMessage = {
-      id: Date.now(),
-      type: 'user',
-      text: input,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
-    setChatHistory(prev => [...prev, { query: input, time: new Date().toISOString() }]);
-    const userInput = input;
-    setInput('');
-    setIsLoading(true);
-    setIsTyping(true);
+  /* suggestion chips */
+  .ai-chips { display: flex; flex-direction: column; gap: 6px; }
+  .ai-chip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    font-size: 0.8rem; color: var(--ink2);
+    transition: all 0.15s;
+    text-align: left;
+  }
+  .ai-chip:hover {
+    border-color: var(--blue);
+    background: #f0f3ff;
+    color: var(--blue);
+  }
+  .ai-chip-emoji { font-size: 1.1rem; flex-shrink: 0; }
 
-    try {
-      const botResponse = await callAIAPI(userInput);
-      
-      const botMessage = {
-        id: Date.now() + 1,
-        type: 'bot',
-        text: botResponse,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      
-      setMessages(prev => [...prev, botMessage]);
-    } catch (error) {
-      console.error('Error getting AI response:', error);
-      // Error fallback message
-      const errorMessage = {
-        id: Date.now() + 1,
-        type: 'bot',
-        text: 'I apologize, but I\'m having trouble connecting right now. Please try again or contact our support team for immediate assistance.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      setIsTyping(false);
-    }
-  };
+  /* uploaded files */
+  .ai-file-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--white);
+    margin-bottom: 6px;
+  }
+  .ai-file-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: #eef2ff; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .ai-file-name { font-size: 0.75rem; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ai-file-size { font-size: 0.65rem; color: var(--muted); }
+  .ai-file-remove { margin-left: auto; flex-shrink: 0; background: none; border: none; cursor: pointer; color: var(--muted); }
+  .ai-file-remove:hover { color: var(--coral); }
 
-  const handleFileUpload = (event) => {
-    const files = Array.from(event.target.files);
-    const newFiles = files.map(file => ({
-      id: Date.now() + Math.random(),
-      name: file.name,
-      type: file.type,
-      size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-      uploadedDate: new Date().toLocaleDateString(),
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
-      fileObject: file
-    }));
-    
-    setUploadedFiles(prev => [...prev, ...newFiles]);
-    setShowUploadModal(false);
-    
-    // Auto-analyze if it's a medical report
-    const isMedicalReport = files.some(f => 
-      f.name.toLowerCase().includes('report') || 
-      f.name.toLowerCase().includes('lab') ||
-      f.name.toLowerCase().includes('test') ||
-      f.name.toLowerCase().includes('scan') ||
-      f.name.toLowerCase().includes('xray') ||
-      f.name.toLowerCase().includes('mri') ||
-      f.type === 'application/pdf' || 
-      f.type.includes('image/')
-    );
-    
-    if (isMedicalReport) {
-      setTimeout(() => {
-        const analysisMessage = {
-          id: Date.now(),
-          type: 'bot',
-          text: '📄 I see you\'ve uploaded a medical report. I can help analyze common findings! For detailed analysis, I can explain terms like "HbA1c" (blood sugar control), "LDL" (bad cholesterol), or "CRP" (inflammation markers). Please describe what specific parts you need help understanding.',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setMessages(prev => [...prev, analysisMessage]);
-      }, 500);
-    }
-  };
+  /* ── CHAT AREA ── */
+  .ai-chat-area {
+    display: flex; flex-direction: column;
+    background: #f4f4f9;
+    overflow: hidden;
+  }
 
-  const removeFile = (fileId) => {
-    const fileToRemove = uploadedFiles.find(f => f.id === fileId);
-    if (fileToRemove?.preview) {
-      URL.revokeObjectURL(fileToRemove.preview);
-    }
-    setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
-  };
+  /* chat header */
+  .ai-chat-header {
+    padding: 16px 24px;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .ai-avatar-wrap {
+    position: relative;
+    width: 44px; height: 44px;
+  }
+  .ai-avatar {
+    width: 44px; height: 44px; border-radius: 14px;
+    background: linear-gradient(135deg, #00c9a7 0%, #4361ee 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ai-avatar-dot {
+    position: absolute; bottom: -2px; right: -2px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #22c55e; border: 2px solid var(--white);
+  }
+  .ai-chat-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem; font-weight: 700; color: var(--ink);
+  }
+  .ai-chat-sub { font-size: 0.75rem; color: var(--muted); }
+  .ai-header-actions { margin-left: auto; display: flex; gap: 8px; }
+  .ai-icon-btn {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--muted);
+    transition: all 0.15s;
+  }
+  .ai-icon-btn:hover { background: var(--border); color: var(--ink); }
 
-  const quickActions = [
-    { icon: <Search className="w-5 h-5" />, label: 'Symptom Checker', color: 'bg-blue-100 text-blue-600' },
-    { icon: <Upload className="w-5 h-5" />, label: 'Upload Reports', color: 'bg-green-100 text-green-600' },
-    { icon: <History className="w-5 h-5" />, label: 'Chat History', color: 'bg-purple-100 text-purple-600' },
-    { icon: <Volume2 className="w-5 h-5" />, label: 'Voice Input', color: 'bg-orange-100 text-orange-600' },
-    { icon: <Download className="w-5 h-5" />, label: 'Export Chat', color: 'bg-red-100 text-red-600' },
-    { icon: <Share2 className="w-5 h-5" />, label: 'Share Analysis', color: 'bg-indigo-100 text-indigo-600' }
-  ];
+  /* messages */
+  .ai-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    scroll-behavior: smooth;
+  }
+  .ai-messages::-webkit-scrollbar { width: 4px; }
+  .ai-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-  const commonQueries = [
-    { query: 'I have headache and fever', icon: '🤒' },
-    { query: 'How to read lab reports?', icon: '📋' },
-    { query: 'Book doctor appointment', icon: '👨‍⚕️' },
-    { query: 'Medication side effects', icon: '💊' },
-    { query: 'First aid for emergencies', icon: '🚑' },
-    { query: 'Diet for diabetes', icon: '🥗' },
-    { query: 'High blood pressure tips', icon: '🫀' },
-    { query: 'Allergy symptoms relief', icon: '🤧' }
-  ];
+  .ai-msg-row {
+    display: flex;
+    gap: 12px;
+    animation: msgIn 0.3s ease-out;
+  }
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .ai-msg-row.user { flex-direction: row-reverse; }
 
-  // API Setup Instructions Component
-  const ApiSetupInfo = () => (
-    <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-      <div className="flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-        <div>
-          <h4 className="font-semibold text-yellow-800 mb-1">Setup AI Integration</h4>
-          <p className="text-sm text-yellow-700 mb-2">
-            To enable real AI responses, get a free API key from:
-          </p>
-          <div className="space-y-1 text-sm">
-            <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 block">
-              🔗 OpenRouter.ai (Free tier available)
-            </a>
-            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 block">
-              🔗 OpenAI Platform (Free credits for new users)
-            </a>
-            <p className="text-xs text-yellow-600 mt-2">
-              Currently using enhanced mock responses. Replace the API key in the code to enable real AI.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  .ai-msg-avatar {
+    width: 34px; height: 34px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; align-self: flex-end;
+  }
+  .ai-msg-avatar.bot {
+    background: linear-gradient(135deg, #00c9a7, #4361ee);
+  }
+  .ai-msg-avatar.user { background: var(--surface); border: 1px solid var(--border); }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 py-4 md:py-8">
-      <div className="container mx-auto px-2 sm:px-4 max-w-7xl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-          <Link 
-            to="/services"
-            className="inline-flex items-center text-purple-600 hover:text-purple-700 bg-white px-4 py-2 rounded-full shadow-sm hover:shadow transition-shadow w-fit"
-          >
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            <span className="text-sm sm:text-base">Back to Services</span>
-          </Link>
-          
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setShowSidebar(!showSidebar)}
-              className="md:hidden p-2 bg-white rounded-lg shadow-sm"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <button className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-shadow">
-              <Star className="w-4 h-4" />
-              <span className="text-sm">AI Health Pro</span>
-            </button>
-          </div>
-        </div>
+  .ai-bubble-wrap { display: flex; flex-direction: column; max-width: 68%; }
+  .ai-msg-row.user .ai-bubble-wrap { align-items: flex-end; }
 
-        {/* API Setup Info */}
-        <ApiSetupInfo />
+  .ai-bubble {
+    padding: 14px 18px;
+    border-radius: 18px;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .ai-bubble.bot {
+    background: var(--white);
+    color: var(--ink);
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid var(--border);
+  }
+  .ai-bubble.user {
+    background: linear-gradient(135deg, #00c9a7 0%, #4361ee 100%);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .ai-bubble-meta {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 5px;
+    font-size: 0.68rem; color: var(--muted);
+  }
+  .ai-bubble-sender { font-weight: 600; color: var(--muted); }
 
-        {/* Main Chat Container */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Enhanced Header */}
-          <div className="bg-gradient-to-r from-purple-500 via-purple-600 to-indigo-600 p-4 md:p-6 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-12 -translate-x-12"></div>
-            
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between relative z-10">
-              <div className="flex items-center gap-4 mb-4 sm:mb-0">
-                <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
-                  <div className="relative">
-                    <Brain className="w-8 h-8 md:w-10 md:h-10" />
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
-                  </div>
-                </div>
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-                    AI Health Assistant
-                    <span className="text-xs bg-white/20 px-2 py-1 rounded-full">AI-Powered</span>
-                  </h1>
-                  <div className="flex items-center gap-2 text-purple-100 text-sm md:text-base">
-                    <Zap className="w-4 h-4" />
-                    <p className="text-purple-100">
-                      {roleGreeting[role] || 'AI Health Assistant'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <button className="p-2 hover:bg-white/10 rounded-lg transition-colors" title="Privacy">
-                  <Lock className="w-5 h-5" />
-                </button>
-                <button className="p-2 hover:bg-white/10 rounded-lg transition-colors" title="Fullscreen">
-                  <Maximize2 className="w-5 h-5" />
-                </button>
-                <div className="hidden sm:flex items-center gap-2 bg-white/20 px-3 py-2 rounded-lg backdrop-blur-sm">
-                  <Heart className="w-4 h-4" />
-                  <span className="text-sm">Secure & Private</span>
-                </div>
-              </div>
-            </div>
-          </div>
+  /* typing indicator */
+  .ai-typing-dots { display: flex; gap: 4px; padding: 4px 0; }
+  .ai-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted);
+    animation: bounce 1.2s infinite;
+  }
+  .ai-dot:nth-child(2) { animation-delay: 0.2s; }
+  .ai-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%,80%,100% { transform: translateY(0); }
+    40% { transform: translateY(-6px); }
+  }
 
-          {/* Chat Interface */}
-          <div className="flex flex-col lg:flex-row h-[70vh] md:h-[600px]">
-            {/* Sidebar */}
-            <div className={`${showSidebar ? 'block' : 'hidden'} lg:block w-full lg:w-1/4 border-r bg-gradient-to-b from-gray-50 to-white p-4`}>
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-purple-600" />
-                  Quick Actions
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {quickActions.map((action, idx) => (
-                    <button 
-                      key={idx}
-                      onClick={() => {
-                        if (action.label === 'Upload Reports') {
-                          setShowUploadModal(true);
-                        }
-                      }}
-                      className="flex flex-col items-center p-3 bg-white rounded-xl hover:shadow-md transition-shadow border hover:border-purple-200"
-                      title={action.label}
-                    >
-                      <div className={`p-2 rounded-lg ${action.color} mb-2`}>
-                        {action.icon}
-                      </div>
-                      <span className="text-xs font-medium text-gray-700">{action.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+  /* ── INPUT BAR ── */
+  .ai-input-bar {
+    padding: 16px 20px;
+    background: var(--white);
+    border-top: 1px solid var(--border);
+  }
+  .ai-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 8px 8px 8px 16px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .ai-input-row:focus-within {
+    border-color: var(--teal);
+    box-shadow: 0 0 0 4px var(--glow);
+  }
+  .ai-input-field {
+    flex: 1; background: none; border: none; outline: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem; color: var(--ink);
+  }
+  .ai-input-field::placeholder { color: var(--muted); }
+  .ai-attach-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .ai-attach-btn:hover { background: var(--border); color: var(--ink); }
+  .ai-send-btn {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: linear-gradient(135deg, #00c9a7, #4361ee);
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: white; flex-shrink: 0;
+    transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 4px 14px rgba(0,201,167,0.35);
+  }
+  .ai-send-btn:hover:not(:disabled) { transform: scale(1.07); box-shadow: 0 6px 20px rgba(0,201,167,0.45); }
+  .ai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-              {/* Uploaded Files Section */}
-              {uploadedFiles.length > 0 && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-gray-700 flex items-center gap-2">
-                      <FileText className="w-4 h-4" />
-                      Your Reports
-                    </h4>
-                    <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">
-                      {uploadedFiles.length}
-                    </span>
-                  </div>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {uploadedFiles.slice(0, 3).map(file => (
-                      <div key={file.id} className="flex items-center justify-between p-2 bg-white rounded-lg border hover:bg-purple-50">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-blue-600" />
-                          <div>
-                            <div className="text-xs font-medium truncate max-w-[120px]">{file.name}</div>
-                            <div className="text-xs text-gray-500">{file.size}</div>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => removeFile(file.id)}
-                          className="text-gray-400 hover:text-red-500"
-                          title="Remove file"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  {uploadedFiles.length > 3 && (
-                    <button className="text-xs text-purple-600 mt-2 hover:text-purple-700">
-                      View all {uploadedFiles.length} files →
-                    </button>
-                  )}
-                </div>
-              )}
+  .ai-input-hints {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px; flex-wrap: wrap;
+  }
+  .ai-hint-label { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+  .ai-hint-chip {
+    font-size: 0.72rem; color: var(--blue);
+    background: #eef2ff; border-radius: 999px;
+    padding: 3px 10px; cursor: pointer; border: none;
+    transition: background 0.15s;
+  }
+  .ai-hint-chip:hover { background: #dde6ff; }
 
-              {/* Common Queries */}
-              <div>
-                <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <History className="w-4 h-4" />
-                  Common Questions
-                </h3>
-                <div className="space-y-2">
-                  {commonQueries.map((item, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setInput(item.query);
-                        setTimeout(() => sendMessage(), 100);
-                      }}
-                      className="w-full text-left p-3 text-sm bg-white hover:bg-purple-50 rounded-xl border transition-colors flex items-center gap-3"
-                    >
-                      <span className="text-lg">{item.icon}</span>
-                      <span className="flex-1 text-xs md:text-sm">{item.query}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+  /* ── RIGHT PANEL ── */
+  .ai-right-panel {
+    background: var(--white);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
 
-              {/* Stats */}
-              <div className="mt-6 pt-4 border-t border-gray-200">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-purple-600">{messages.length}</div>
-                    <div className="text-xs text-gray-500">Messages</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-green-600">24/7</div>
-                    <div className="text-xs text-gray-500">Available</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+  .ai-health-card {
+    margin: 16px;
+    border-radius: var(--r-lg);
+    padding: 20px;
+    background: linear-gradient(135deg, #0a0a12 0%, #1a1a2e 100%);
+    color: white;
+    position: relative; overflow: hidden;
+  }
+  .ai-health-card::before {
+    content: '';
+    position: absolute; top: -20px; right: -20px;
+    width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(0,201,167,0.15);
+  }
+  .ai-health-card-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.75rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: rgba(255,255,255,0.5); margin-bottom: 12px;
+  }
+  .ai-health-stat {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 8px;
+  }
+  .ai-health-label { font-size: 0.8rem; color: rgba(255,255,255,0.6); }
+  .ai-health-value { font-family: 'Syne', sans-serif; font-size: 0.95rem; font-weight: 700; color: #00c9a7; }
 
-            {/* Chat Area */}
-            <div className="flex-1 flex flex-col">
-              {/* Messages Area */}
-              <div 
-                ref={chatContainerRef}
-                className="flex-1 p-3 md:p-6 overflow-y-auto bg-gradient-to-b from-gray-50 to-white"
-              >
-                {messages.map((msg) => (
-                  <div 
-                    key={msg.id} 
-                    className={`mb-4 flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div className="flex max-w-[85%] md:max-w-xs">
-                      {msg.type === 'bot' && (
-                        <div className="mr-3 mt-1">
-                          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center">
-                            <Bot className="w-4 h-4 text-white" />
-                          </div>
-                        </div>
-                      )}
-                      <div className={`px-4 py-3 rounded-2xl ${msg.type === 'user' 
-                        ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-tr-none' 
-                        : 'bg-white text-gray-800 shadow-sm rounded-tl-none border'
-                      }`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs opacity-80">
-                            {msg.type === 'user' ? 'You' : 'Health AI'}
-                          </span>
-                          <span className="text-xs opacity-60">{msg.timestamp}</span>
-                        </div>
-                        <p className="text-sm md:text-base whitespace-pre-wrap">{msg.text}</p>
-                      </div>
-                      {msg.type === 'user' && (
-                        <div className="ml-3 mt-1">
-                          <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                            <User className="w-4 h-4 text-gray-600" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                
-                {isTyping && (
-                  <div className="flex justify-start mb-4">
-                    <div className="flex max-w-xs">
-                      <div className="mr-3 mt-1">
-                        <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center">
-                          <Bot className="w-4 h-4 text-white" />
-                        </div>
-                      </div>
-                      <div className="px-4 py-3 rounded-2xl bg-white shadow-sm border rounded-tl-none">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-300"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                <div ref={messagesEndRef} />
-              </div>
+  .ai-info-card {
+    margin: 0 16px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 16px;
+  }
+  .ai-info-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.8rem; font-weight: 700; color: var(--ink2);
+    margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+  }
+  .ai-feature-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .ai-feature-dot {
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .ai-feature-dot.teal  { background: #e8faf5; color: #00a08a; }
+  .ai-feature-dot.blue  { background: #eef2ff; color: #4361ee; }
+  .ai-feature-dot.coral { background: #fff0f0; color: #cc4444; }
+  .ai-feature-name  { font-size: 0.8rem; font-weight: 600; color: var(--ink); }
+  .ai-feature-desc  { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
 
-              {/* Input Area */}
-              <div className="border-t p-3 md:p-4 bg-white">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => setShowUploadModal(true)}
-                      className="p-2 border rounded-lg hover:bg-purple-50 transition-colors flex-shrink-0"
-                      title="Upload file"
-                    >
-                      <Upload className="w-5 h-5 text-purple-600" />
-                    </button>
-                    <button 
-                      className="p-2 border rounded-lg hover:bg-blue-50 transition-colors flex-shrink-0"
-                      title="Voice input"
-                      onClick={() => alert('Voice input feature coming soon!')}
-                    >
-                      <Mic className="w-5 h-5 text-blue-600" />
-                    </button>
-                    <button 
-                      className="p-2 border rounded-lg hover:bg-green-50 transition-colors flex-shrink-0"
-                      title="Take photo"
-                      onClick={() => alert('Camera feature coming soon!')}
-                    >
-                      <Camera className="w-5 h-5 text-green-600" />
-                    </button>
-                  </div>
-                  
-                  <div className="flex-1 flex">
-                    <input
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
-                      placeholder="Describe symptoms, ask about medications, or upload reports..."
-                      className="flex-1 px-4 py-3 border border-r-0 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
-                      disabled={isLoading}
-                    />
-                    <button 
-                      onClick={sendMessage}
-                      disabled={isLoading || !input.trim()}
-                      className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-4 md:px-6 py-3 rounded-r-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                      {isLoading ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span className="hidden sm:inline">Thinking...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-5 h-5" />
-                          <span className="hidden sm:inline">Send</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="text-xs text-gray-500">Try asking:</span>
-                  {['Headache relief options', 'Explain my lab report', 'Diabetes management tips'].map((example, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setInput(example);
-                        setTimeout(() => sendMessage(), 100);
-                      }}
-                      className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full hover:bg-purple-100"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+  /* ── MODAL ── */
+  .ai-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,10,18,0.6);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; padding: 20px;
+  }
+  .ai-modal {
+    background: var(--white);
+    border-radius: var(--r-xl);
+    max-width: 440px; width: 100%;
+    padding: 32px;
+    animation: modalIn 0.25s ease-out;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.2);
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.94) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .ai-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .ai-modal-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem; font-weight: 700; color: var(--ink);
+  }
+  .ai-modal-close {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; padding: 6px;
+    color: var(--muted); display: flex; align-items: center;
+  }
+  .ai-drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 20px;
+  }
+  .ai-drop-zone:hover { border-color: var(--teal); background: #f0fdfb; }
+  .ai-drop-icon {
+    width: 56px; height: 56px; border-radius: var(--r-md);
+    background: linear-gradient(135deg, #e8faf5, #eef2ff);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 14px;
+  }
+  .ai-drop-title { font-size: 0.95rem; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .ai-drop-sub { font-size: 0.8rem; color: var(--muted); }
+  .ai-modal-checks { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+  .ai-check-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--ink2); }
+  .ai-modal-actions { display: flex; gap: 10px; }
+  .ai-btn-secondary {
+    flex: 1; padding: 12px; border-radius: var(--r-md);
+    border: 1.5px solid var(--border); background: var(--white);
+    font-family: 'DM Sans', sans-serif; font-size: 0.875rem;
+    cursor: pointer; color: var(--ink2);
+    transition: background 0.15s;
+  }
+  .ai-btn-secondary:hover { background: var(--surface); }
+  .ai-btn-primary {
+    flex: 1; padding: 12px; border-radius: var(--r-md);
+    background: linear-gradient(135deg, #00c9a7, #4361ee);
+    border: none; color: white;
+    font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,201,167,0.3);
+    transition: opacity 0.2s;
+  }
+  .ai-btn-primary:hover { opacity: 0.9; }
 
-        {/* Features Section */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mt-6 md:mt-8">
-          {[
-            { 
-              icon: <MessageSquare className="w-6 h-6 md:w-8 md:h-8" />, 
-              title: 'AI-Powered Analysis', 
-              desc: 'Advanced machine learning provides accurate symptom analysis and health insights.',
-              gradient: 'from-blue-500 to-cyan-500'
-            },
-            { 
-              icon: <Shield className="w-6 h-6 md:w-8 md:h-8" />, 
-              title: 'Medical-Grade Security', 
-              desc: 'HIPAA compliant encryption ensures your health data remains private and secure.',
-              gradient: 'from-green-500 to-emerald-500'
-            },
-            { 
-              icon: <Upload className="w-6 h-6 md:w-8 md:h-8" />, 
-              title: 'Report Analysis', 
-              desc: 'Upload lab reports, prescriptions, and medical documents for AI-assisted analysis.',
-              gradient: 'from-purple-500 to-pink-500'
-            }
-          ].map((feature, idx) => (
-            <div key={idx} className="bg-white p-4 md:p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100">
-              <div className={`bg-gradient-to-r ${feature.gradient} w-12 h-12 md:w-14 md:h-14 rounded-xl flex items-center justify-center mb-4 mx-auto`}>
-                <div className="text-white">
-                  {feature.icon}
-                </div>
-              </div>
-              <h3 className="font-bold text-gray-800 mb-2 text-center text-sm md:text-base">{feature.title}</h3>
-              <p className="text-xs md:text-sm text-gray-600 text-center">{feature.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+  /* Mobile menu button */
+  .ai-mobile-menu {
+    display: none;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px; cursor: pointer;
+    color: var(--ink2);
+  }
+  @media (max-width: 768px) { .ai-mobile-menu { display: flex; } }
 
-      {/* File Upload Modal */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 animate-scale-in">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <Upload className="w-6 h-6 text-purple-600" />
-                Upload Medical Reports
-              </h3>
-              <button 
-                onClick={() => setShowUploadModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div 
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-purple-300 rounded-xl p-8 text-center hover:bg-purple-50 transition-colors cursor-pointer mb-4"
-            >
-              <Upload className="w-12 h-12 text-purple-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-2">Click to upload medical files</p>
-              <p className="text-sm text-gray-500">PDF, JPG, PNG up to 10MB each</p>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                className="hidden"
-              />
-            </div>
-            
-            <div className="text-sm text-gray-600 mb-6">
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span>End-to-end encrypted uploads</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span>AI analysis of medical reports</span>
-              </div>
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowUploadModal(false)}
-                className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white py-3 rounded-lg hover:shadow-lg transition-all"
-              >
-                Choose Files
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+  /* Spin animation for loading */
+  .ai-spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+`;
 
-      {/* Mobile Floating Action Button */}
-      <button 
-        onClick={() => setShowSidebar(!showSidebar)}
-        className="fixed bottom-4 right-4 lg:hidden z-40 bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-shadow"
-      >
-        {showSidebar ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
-    </div>
-  );
+/* ── Data ───────────────────────────────────────────────────── */
+const quickActions = [
+  { emoji: '🔍', label: 'Symptoms',   color: '#eef2ff' },
+  { emoji: '📤', label: 'Upload',     color: '#e8faf5' },
+  { emoji: '💬', label: 'History',    color: '#fdf4ff' },
+  { emoji: '🎙️', label: 'Voice',      color: '#fff7ec' },
+  { emoji: '📥', label: 'Export',     color: '#fff0f0' },
+  { emoji: '🔗', label: 'Share',      color: '#eef2ff' },
+];
+
+const commonQueries = [
+  { query: 'I have headache and fever', emoji: '🤒' },
+  { query: 'How to read lab reports?', emoji: '📋' },
+  { query: 'Book doctor appointment',  emoji: '👨‍⚕️' },
+  { query: 'Medication side effects',  emoji: '💊' },
+  { query: 'First aid for emergencies',emoji: '🚑' },
+  { query: 'Diet for diabetes',        emoji: '🥗' },
+  { query: 'Blood pressure tips',      emoji: '🫀' },
+  { query: 'Allergy relief',           emoji: '🤧' },
+];
+
+const roleSubtitle = {
+  technician: 'Lab Diagnostics & Equipment',
+  doctor: 'Clinical Decision Support',
+  patient: 'Personal Health Guidance',
 };
 
+/* ── Helpers ────────────────────────────────────────────────── */
+const timestamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+/* ── Main Component ─────────────────────────────────────────── */
+const AIAssistantPage = ({ role }) => {
+  const [messages, setMessages] = useState([
+    {
+      id: 1, type: 'bot',
+      text: 'Hello! 👋 I\'m your AI Health Assistant, powered by DeepSeek AI. How can I help you today?',
+      time: timestamp(),
+    },
+    {
+      id: 2, type: 'bot',
+      text: 'I can analyze symptoms, explain lab reports, provide medication information, and connect you with healthcare professionals. Available 24/7!',
+      time: timestamp(),
+    },
+  ]);
+  const [input, setInput]               = useState('');
+  const [isLoading, setIsLoading]       = useState(false);
+  const [isTyping, setIsTyping]         = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [showUpload, setShowUpload]     = useState(false);
+  const [apiStatus, setApiStatus]       = useState('checking');
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
+
+  const fileInputRef  = useRef(null);
+  const messagesEnd   = useRef(null);
+
+  /* ── OpenAI / DeepSeek init ── */
+  const [openaiInstance] = useState(() => {
+    const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEEPSEEK_API_KEY)
+      || (typeof process !== 'undefined' && process.env?.DEEPSEEK_API_KEY);
+    if (!apiKey) { setTimeout(() => setApiStatus('error'), 0); return null; }
+    try {
+      const inst = new OpenAI({ baseURL: 'https://api.deepseek.com/v1', apiKey, dangerouslyAllowBrowser: true });
+      setTimeout(() => setApiStatus('connected'), 0);
+      return inst;
+    } catch {
+      setTimeout(() => setApiStatus('error'), 0);
+      return null;
+    }
+  });
+
+  useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  /* ── API call ── */
+  const callAPI = async (msg) => {
+    if (!openaiInstance) throw new Error('no-key');
+    const systemPrompts = {
+      doctor: 'You are an AI for healthcare professionals. Provide clinical decision support using professional terminology and evidence-based guidelines.',
+      technician: 'You are an AI for lab technicians. Help with diagnostics, equipment, procedures, and quality control with technical precision.',
+      patient: 'You are a compassionate AI for patients. Use simple language, be empathetic, and always encourage professional consultation.',
+    };
+    const system = systemPrompts[role] || 'You are a professional medical AI assistant. Be empathetic, accurate, and remind users to consult real doctors for serious concerns.';
+    const completion = await openaiInstance.chat.completions.create({
+      messages: [{ role: 'system', content: system }, { role: 'user', content: msg }],
+      model: 'deepseek-chat', temperature: 0.7, max_tokens: 500,
+    });
+    return completion.choices[0]?.message?.content || 'I could not generate a response. Please try again.';
+  };
+
+  /* ── Fallback ── */
+  const mockResponse = (msg) => {
+    const lc = msg.toLowerCase();
+    if (lc.includes('headache'))     return 'Headaches can stem from tension, dehydration, or sinus issues. Try drinking water, resting in a dark room, and consider OTC pain relief. If severe or persistent, please consult a doctor.';
+    if (lc.includes('fever'))        return 'For fever above 100.4°F (38°C): stay hydrated, rest, and use acetaminophen. Seek medical help if fever exceeds 103°F, lasts more than 3 days, or if breathing is difficult.';
+    if (lc.includes('cough'))        return 'Drink warm fluids like tea with honey, use a humidifier, and avoid irritants. If your cough persists beyond 3 weeks, produces colored mucus, or causes chest pain, see a doctor.';
+    if (lc.includes('diabetes'))     return 'For diabetes management: monitor blood sugar regularly, follow a balanced low-carb diet, exercise consistently, and take medications as prescribed. Consult your endocrinologist for personalized advice.';
+    if (lc.includes('blood pressure')) return 'Normal blood pressure is around 120/80 mmHg. To manage high BP: reduce sodium, exercise regularly, manage stress, and take prescribed medications. Monitor frequently.';
+    if (lc.includes('emergency'))    return '🚨 EMERGENCY: Call emergency services immediately (112 or 911) for chest pain, difficulty breathing, severe bleeding, or loss of consciousness.';
+    return 'Thank you for your question. While I can provide general information, please consult a healthcare professional for personalized medical advice. Could you provide more details about your concern?';
+  };
+
+  /* ── Send message ── */
+  const sendMessage = async (text) => {
+    const msg = (text || input).trim();
+    if (!msg || isLoading) return;
+    setMessages(prev => [...prev, { id: Date.now(), type: 'user', text: msg, time: timestamp() }]);
+    setInput(''); setIsLoading(true); setIsTyping(true);
+    try {
+      let response;
+      if (openaiInstance && apiStatus === 'connected') {
+        try { response = await callAPI(msg); }
+        catch { response = mockResponse(msg) + '\n\n*(Offline mode – check API connection for full AI features.)*'; }
+      } else {
+        await new Promise(r => setTimeout(r, 900));
+        response = mockResponse(msg);
+      }
+      setMessages(prev => [...prev, { id: Date.now() + 1, type: 'bot', text: response, time: timestamp() }]);
+    } catch {
+      setMessages(prev => [...prev, { id: Date.now() + 1, type: 'bot', text: 'Connection issue. Please try again or use offline mode for basic queries.', time: timestamp() }]);
+    } finally {
+      setIsLoading(false); setIsTyping(false);
+    }
+  };
+
+  /* ── File upload ── */
+  const handleFiles = (e) => {
+    const files = Array.from(e.target.files).map(f => ({
+      id: Date.now() + Math.random(),
+      name: f.name,
+      size: (f.size / (1024 * 1024)).toFixed(2) + ' MB',
+      type: f.type,
+    }));
+    setUploadedFiles(prev => [...prev, ...files]);
+    setShowUpload(false);
+    setTimeout(() => setMessages(prev => [...prev, {
+      id: Date.now(), type: 'bot',
+      text: '📄 Report uploaded! I can help explain findings like "HbA1c", "LDL", or "CRP". What would you like me to clarify?',
+      time: timestamp(),
+    }]), 400);
+  };
+
+  const statusConfig = {
+    connected: { label: 'DeepSeek AI Live', dot: true },
+    error:     { label: 'Offline Mode',     dot: false },
+    checking:  { label: 'Connecting...',    dot: true },
+  };
+
+  /* ── RENDER ── */
+  return (
+    <>
+      <style>{styles}</style>
+      <div className="ai-page">
+
+        {/* ── TOP BAR ── */}
+        <div className="ai-topbar">
+          <Link to="/services" className="ai-back-btn">
+            <ChevronLeft size={16} />
+            Services
+          </Link>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="ai-logo-icon">
+              <Brain size={18} color="white" />
+            </div>
+            <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: '1rem', color: 'var(--ink)' }}>
+              HealthAI
+            </span>
+          </div>
+
+          <div className="ai-topbar-right">
+            <div className={`ai-status-pill ${apiStatus}`}>
+              <span className="ai-status-dot" />
+              {statusConfig[apiStatus]?.label}
+            </div>
+            <button className="ai-mobile-menu" onClick={() => setSidebarOpen(v => !v)}>
+              <Menu size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── WORKSPACE ── */}
+        <div className="ai-workspace">
+
+          {/* ── LEFT PANEL ── */}
+          <div className={`ai-left-panel${sidebarOpen ? ' open' : ''}`}>
+            <div className="ai-panel-section">
+              <div className="ai-section-label">Quick Actions</div>
+              <div className="ai-quick-grid">
+                {quickActions.map((a, i) => (
+                  <button key={i} className="ai-quick-btn"
+                    onClick={() => a.label === 'Upload' && setShowUpload(true)}
+                  >
+                    <div className="ai-quick-icon" style={{ background: a.color, fontSize: '1.2rem' }}>
+                      {a.emoji}
+                    </div>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {uploadedFiles.length > 0 && (
+              <div className="ai-panel-section">
+                <div className="ai-section-label">
+                  Reports
+                  <span style={{ marginLeft: 6, background: '#eef2ff', color: 'var(--blue)', borderRadius: 999, padding: '1px 7px', fontSize: '0.65rem' }}>
+                    {uploadedFiles.length}
+                  </span>
+                </div>
+                {uploadedFiles.slice(0, 3).map(f => (
+                  <div key={f.id} className="ai-file-item">
+                    <div className="ai-file-icon"><FileText size={15} color="#4361ee" /></div>
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <div className="ai-file-name">{f.name}</div>
+                      <div className="ai-file-size">{f.size}</div>
+                    </div>
+                    <button className="ai-file-remove"
+                      onClick={() => setUploadedFiles(prev => prev.filter(x => x.id !== f.id))}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="ai-panel-section" style={{ flex: 1 }}>
+              <div className="ai-section-label">Common Questions</div>
+              <div className="ai-chips">
+                {commonQueries.map((q, i) => (
+                  <button key={i} className="ai-chip" onClick={() => sendMessage(q.query)}>
+                    <span className="ai-chip-emoji">{q.emoji}</span>
+                    {q.query}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-around' }}>
+              {[
+                { val: messages.length, lbl: 'Messages' },
+                { val: '24/7', lbl: 'Available' },
+                { val: uploadedFiles.length, lbl: 'Files' },
+              ].map((s, i) => (
+                <div key={i} style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: '1.1rem', color: i === 0 ? 'var(--teal)' : i === 1 ? 'var(--blue)' : 'var(--purple)' }}>
+                    {s.val}
+                  </div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: 2 }}>{s.lbl}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── CHAT AREA ── */}
+          <div className="ai-chat-area">
+
+            {/* chat header */}
+            <div className="ai-chat-header">
+              <div className="ai-avatar-wrap">
+                <div className="ai-avatar"><Bot size={20} color="white" /></div>
+                <div className="ai-avatar-dot" />
+              </div>
+              <div>
+                <div className="ai-chat-title">DeepSeek Health AI</div>
+                <div className="ai-chat-sub">{roleSubtitle[role] || 'AI Health Assistant'}</div>
+              </div>
+              <div className="ai-header-actions">
+                <div className="ai-icon-btn" title="Privacy"><Lock size={15} /></div>
+                <div className="ai-icon-btn" title="Settings"><Settings size={15} /></div>
+                <div className="ai-icon-btn" title="Clear chat"
+                  onClick={() => setMessages([])}><RefreshCw size={15} /></div>
+              </div>
+            </div>
+
+            {/* messages */}
+            <div className="ai-messages">
+              {messages.map(msg => (
+                <div key={msg.id} className={`ai-msg-row ${msg.type}`}>
+                  <div className={`ai-msg-avatar ${msg.type}`}>
+                    {msg.type === 'bot'
+                      ? <Bot size={16} color="white" />
+                      : <User size={16} color="var(--muted)" />}
+                  </div>
+                  <div className="ai-bubble-wrap">
+                    <div className={`ai-bubble ${msg.type}`}>{msg.text}</div>
+                    <div className="ai-bubble-meta">
+                      <span className="ai-bubble-sender">{msg.type === 'bot' ? 'DeepSeek AI' : 'You'}</span>
+                      · {msg.time}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {isTyping && (
+                <div className="ai-msg-row bot">
+                  <div className="ai-msg-avatar bot"><Bot size={16} color="white" /></div>
+                  <div className="ai-bubble-wrap">
+                    <div className="ai-bubble bot">
+                      <div className="ai-typing-dots">
+                        <div className="ai-dot" /><div className="ai-dot" /><div className="ai-dot" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEnd} />
+            </div>
+
+            {/* input */}
+            <div className="ai-input-bar">
+              <div className="ai-input-row">
+                <button className="ai-attach-btn" title="Upload file" onClick={() => setShowUpload(true)}>
+                  <Upload size={17} />
+                </button>
+                <button className="ai-attach-btn" title="Microphone">
+                  <Mic size={17} />
+                </button>
+                <input
+                  className="ai-input-field"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                  placeholder="Describe symptoms, ask about medications, or upload reports…"
+                  disabled={isLoading}
+                />
+                <button className="ai-send-btn" onClick={() => sendMessage()} disabled={isLoading || !input.trim()}>
+                  {isLoading
+                    ? <RefreshCw size={17} className="ai-spin" />
+                    : <Send size={17} />}
+                </button>
+              </div>
+              <div className="ai-input-hints">
+                <span className="ai-hint-label">Try:</span>
+                {['Headache relief', 'Explain lab report', 'Diabetes tips'].map((t, i) => (
+                  <button key={i} className="ai-hint-chip" onClick={() => sendMessage(t)}>{t}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── RIGHT PANEL ── */}
+          <div className="ai-right-panel">
+            <div className="ai-health-card">
+              <div className="ai-health-card-title">Session Overview</div>
+              {[
+                { lbl: 'Messages sent', val: messages.filter(m => m.type === 'user').length },
+                { lbl: 'AI responses',  val: messages.filter(m => m.type === 'bot').length },
+                { lbl: 'Files uploaded',val: uploadedFiles.length },
+                { lbl: 'Mode',          val: apiStatus === 'connected' ? 'AI Live' : 'Offline' },
+              ].map((s, i) => (
+                <div key={i} className="ai-health-stat">
+                  <span className="ai-health-label">{s.lbl}</span>
+                  <span className="ai-health-value">{s.val}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="ai-info-card">
+              <div className="ai-info-title"><Sparkles size={14} /> Capabilities</div>
+              {[
+                { icon: <MessageSquare size={14}/>, cls: 'teal', name: 'AI Symptom Analysis', desc: 'DeepSeek-powered health insights' },
+                { icon: <Shield size={14}/>,        cls: 'blue', name: 'HIPAA Secure',         desc: 'End-to-end encrypted session' },
+                { icon: <Upload size={14}/>,        cls: 'coral', name: 'Report Analysis',      desc: 'Upload PDFs, images, docs' },
+              ].map((f, i) => (
+                <div key={i} className="ai-feature-row">
+                  <div className={`ai-feature-dot ${f.cls}`}>{f.icon}</div>
+                  <div>
+                    <div className="ai-feature-name">{f.name}</div>
+                    <div className="ai-feature-desc">{f.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="ai-info-card">
+              <div className="ai-info-title"><Activity size={14} /> Quick Stats</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {[
+                  { val: '24/7', lbl: 'Available', bg: '#e8faf5', clr: '#00a08a' },
+                  { val: '<2s',  lbl: 'Response',  bg: '#eef2ff', clr: '#4361ee' },
+                ].map((s, i) => (
+                  <div key={i} style={{ flex: 1, textAlign: 'center', background: s.bg, borderRadius: 12, padding: '12px 8px' }}>
+                    <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: '1.1rem', color: s.clr }}>{s.val}</div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: 2 }}>{s.lbl}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ margin: '0 16px 16px' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--muted)', lineHeight: 1.5, padding: '14px', background: 'var(--surface)', borderRadius: 'var(--r-md)', border: '1px solid var(--border)' }}>
+                ⚠️ This AI assistant provides general health information only. Always consult a licensed healthcare professional for diagnosis and treatment.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── UPLOAD MODAL ── */}
+        {showUpload && (
+          <div className="ai-modal-overlay" onClick={() => setShowUpload(false)}>
+            <div className="ai-modal" onClick={e => e.stopPropagation()}>
+              <div className="ai-modal-header">
+                <div className="ai-modal-title">Upload Medical Reports</div>
+                <button className="ai-modal-close" onClick={() => setShowUpload(false)}><X size={16} /></button>
+              </div>
+              <div className="ai-drop-zone" onClick={() => fileInputRef.current?.click()}>
+                <div className="ai-drop-icon"><Upload size={24} color="#00a08a" /></div>
+                <div className="ai-drop-title">Click or drag files here</div>
+                <div className="ai-drop-sub">PDF, JPG, PNG — up to 10 MB each</div>
+                <input ref={fileInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  style={{ display: 'none' }} onChange={handleFiles} />
+              </div>
+              <div className="ai-modal-checks">
+                {['End-to-end encrypted uploads', 'AI-assisted report analysis'].map((t, i) => (
+                  <div key={i} className="ai-check-row">
+                    <CheckCircle size={15} color="#00c9a7" />
+                    {t}
+                  </div>
+                ))}
+              </div>
+              <div className="ai-modal-actions">
+                <button className="ai-btn-secondary" onClick={() => setShowUpload(false)}>Cancel</button>
+                <button className="ai-btn-primary" onClick={() => fileInputRef.current?.click()}>Choose Files</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </>
+  );
+};
 
 export default AIAssistantPage;
