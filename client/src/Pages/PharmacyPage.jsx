@@ -24,7 +24,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react'
-import PaymentGateway from './components/PaymentGateway';
+import PaymentGateway from '../components/PaymentGateway';
 
 // Google Maps Component for Pharmacy Map
 const PharmacyMap = ({ pharmacies, userLocation, onPharmacySelect }) => {

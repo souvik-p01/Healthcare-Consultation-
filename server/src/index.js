@@ -54,13 +54,13 @@ import webhookRoutes from "./routes/webhook.routes.js";
 
 // Import middleware
 import { errorHandler } from "./middlewares/error.middleware.js";
-import { requestLogger } from "./middlewares/logger.middleware.js";
+import { requestLogger } from "./middlewares/logging.middleware.js";
 
 // Import database utilities - THIS IS THE ONLY connectDB WE NEED
 import connectDB, { checkDBHealth, getDBStats, isDBConnected } from "./db/index.js";
 
 // Import logger
-import { LoggerUtils } from "./utils/logger.js";
+import { LoggerUtils } from "./utils/loggerUtils.js";
 
 // Import constants
 import { DB_NAME } from "./constants.js";

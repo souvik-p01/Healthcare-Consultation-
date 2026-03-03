@@ -36,7 +36,7 @@
 
 // import mongoose from "mongoose";
 // import { DB_NAME } from "../constants.js";
-// import { LoggerUtils } from "../utils/logger.js";
+// import { LoggerUtils } from "../utils/loggerUtils.js";
 
 // /**
 //  * Configure MongoDB connection options for healthcare system
@@ -228,7 +228,7 @@
 
 import mongoose from "mongoose";
 import { DB_NAME } from "../constants.js";
-import { LoggerUtils } from "../utils/logger.js"; // Assuming you have logger utility
+import { LoggerUtils } from "../utils/loggerUtils.js"; // Assuming you have logger utility
 
 /**
  * Configure MongoDB connection options for healthcare system
