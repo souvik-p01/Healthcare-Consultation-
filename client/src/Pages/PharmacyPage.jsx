@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Pill,
   ChevronLeft,
@@ -21,132 +21,205 @@ import {
   Home,
   Navigation,
   Package,
-  Check,
-  Loader2
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
+import PaymentGateway from './components/PaymentGateway';
 
-// Razorpay Payment Gateway Integration
-const PaymentGateway = ({ amount, onSuccess, onClose }) => {
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [selectedMethod, setSelectedMethod] = useState('razorpay')
-  
-  const handlePayment = async () => {
-    setIsProcessing(true)
-    
-    if (selectedMethod === 'razorpay') {
-      // Razorpay Integration
-      const options = {
-        key: 'rzp_test_YOUR_KEY_ID', // Replace with your Razorpay key
-        amount: amount * 100, // Razorpay accepts amount in paise
-        currency: 'INR',
-        name: 'MedCare Pharmacy',
-        description: 'Medicine Purchase',
-        image: 'https://your-logo-url.com/logo.png',
-        handler: function (response) {
-          setIsProcessing(false)
-          onSuccess(response.razorpay_payment_id)
-        },
-        prefill: {
-          name: 'Customer Name',
-          email: 'customer@example.com',
-          contact: '9999999999'
-        },
-        theme: {
-          color: '#10b981'
+// Google Maps Component for Pharmacy Map
+const PharmacyMap = ({ pharmacies, userLocation, onPharmacySelect }) => {
+  const mapRef = useRef(null)
+  const googleMapRef = useRef(null)
+  const markersRef = useRef([])
+
+  useEffect(() => {
+    if (!window.google || !mapRef.current) return
+
+    const center = userLocation || { lat: 19.0760, lng: 72.8777 }
+
+    const mapOptions = {
+      center: center,
+      zoom: 14,
+      styles: [
+        {
+          featureType: "poi",
+          elementType: "labels",
+          stylers: [{ visibility: "off" }]
         }
-      }
-      
-      const rzp = new window.Razorpay(options)
-      rzp.on('payment.failed', function (response) {
-        setIsProcessing(false)
-        alert('Payment failed! Please try again.')
-      })
-      rzp.open()
-    } else {
-      // Simulate COD
-      setTimeout(() => {
-        setIsProcessing(false)
-        onSuccess('COD')
-      }, 2000)
+      ],
+      mapTypeControl: true,
+      fullscreenControl: true,
+      streetViewControl: false,
+      zoomControl: true
     }
-  }
-  
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl w-full max-w-md p-4 md:p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4 md:mb-6">
-          <h3 className="text-lg md:text-xl font-bold text-gray-800">Complete Payment</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5 md:w-6 md:h-6" />
-          </button>
-        </div>
-        
-        <div className="mb-4 md:mb-6">
-          <div className="text-center mb-4 md:mb-6">
-            <div className="text-2xl md:text-3xl font-bold text-gray-800">₹{amount}</div>
-            <div className="text-sm md:text-base text-gray-500">Total Amount</div>
+
+    googleMapRef.current = new window.google.maps.Map(mapRef.current, mapOptions)
+
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.setMap(null))
+    markersRef.current = []
+
+    // Add user marker
+    if (userLocation) {
+      const userMarker = new window.google.maps.Marker({
+        position: userLocation,
+        map: googleMapRef.current,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: '#3b82f6',
+          fillOpacity: 1,
+          strokeWeight: 2,
+          strokeColor: '#ffffff'
+        },
+        title: "Your Location"
+      })
+      markersRef.current.push(userMarker)
+
+      const userInfoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 8px;">
+            <h4 style="margin: 0 0 5px; font-weight: bold;">Your Location</h4>
+            <p style="margin: 0;">You are here</p>
           </div>
-          
-          <div className="space-y-3">
-            <div className="border rounded-lg p-3 md:p-4">
-              <h4 className="font-semibold mb-3 text-sm md:text-base">Payment Methods</h4>
-              <div className="space-y-2">
-                <label className="flex items-center gap-3 p-2 md:p-3 hover:bg-gray-50 rounded cursor-pointer border">
-                  <input 
-                    type="radio" 
-                    name="payment" 
-                    value="razorpay"
-                    checked={selectedMethod === 'razorpay'}
-                    onChange={(e) => setSelectedMethod(e.target.value)}
-                    className="text-green-600" 
-                  />
-                  <CreditCard className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-                  <span className="flex-1 text-sm md:text-base">UPI / Cards / Net Banking</span>
-                </label>
-                <label className="flex items-center gap-3 p-2 md:p-3 hover:bg-gray-50 rounded cursor-pointer border">
-                  <input 
-                    type="radio" 
-                    name="payment" 
-                    value="cod"
-                    checked={selectedMethod === 'cod'}
-                    onChange={(e) => setSelectedMethod(e.target.value)}
-                    className="text-green-600" 
-                  />
-                  <div className="w-4 h-4 md:w-5 md:h-5 text-lg">💵</div>
-                  <span className="flex-1 text-sm md:text-base">Cash on Delivery</span>
-                </label>
-              </div>
-            </div>
+        `
+      })
+
+      userMarker.addListener('click', () => {
+        userInfoWindow.open(googleMapRef.current, userMarker)
+      })
+    }
+
+    // Add pharmacy markers
+    pharmacies.forEach((pharmacy, index) => {
+      const marker = new window.google.maps.Marker({
+        position: pharmacy.coordinates,
+        map: googleMapRef.current,
+        icon: {
+          url: index === 0 
+            ? 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
+            : 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
+          scaledSize: new window.google.maps.Size(40, 40)
+        },
+        title: pharmacy.name
+      })
+
+      const infoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 12px; max-width: 250px;">
+            <h4 style="margin: 0 0 8px; font-weight: bold; font-size: 16px;">${pharmacy.name}</h4>
+            <p style="margin: 5px 0; font-size: 13px;">📍 ${pharmacy.address}</p>
+            <p style="margin: 5px 0; font-size: 13px;">📏 Distance: ${pharmacy.distance}</p>
+            <p style="margin: 5px 0; font-size: 13px;">⏱️ Delivery: ${pharmacy.deliveryTime}</p>
+            <p style="margin: 5px 0; font-size: 13px;">⭐ Rating: ${pharmacy.rating}</p>
+            <button onclick="window.selectPharmacy(${index})" 
+              style="margin-top: 8px; padding: 6px 12px; background-color: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+              Select Pharmacy
+            </button>
           </div>
-        </div>
-        
-        <button
-          onClick={handlePayment}
-          disabled={isProcessing}
-          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 md:py-4 rounded-lg hover:shadow-lg transition-all font-bold disabled:opacity-70 text-sm md:text-base"
-        >
-          {isProcessing ? (
-            <span className="flex items-center justify-center">
-              <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
-              Processing...
-            </span>
-          ) : (
-            selectedMethod === 'cod' ? 'Place Order' : `Pay ₹${amount}`
-          )}
-        </button>
-        
-        <div className="mt-3 md:mt-4 text-center text-xs md:text-sm text-gray-500">
-          <Shield className="w-3 h-3 md:w-4 md:h-4 inline mr-1" />
-          Secure payment • 100% Genuine medicines
-        </div>
-      </div>
-    </div>
-  )
+        `
+      })
+
+      marker.addListener('click', () => {
+        infoWindow.open(googleMapRef.current, marker)
+      })
+
+      markersRef.current.push(marker)
+    })
+
+    // Fit bounds to show all markers
+    if (markersRef.current.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds()
+      markersRef.current.forEach(marker => {
+        if (marker.getPosition()) {
+          bounds.extend(marker.getPosition())
+        }
+      })
+      googleMapRef.current.fitBounds(bounds)
+    }
+
+    // Make selectPharmacy available globally
+    window.selectPharmacy = (index) => {
+      if (onPharmacySelect) {
+        onPharmacySelect(pharmacies[index])
+      }
+    }
+
+    return () => {
+      delete window.selectPharmacy
+    }
+  }, [pharmacies, userLocation])
+
+  return <div ref={mapRef} className="w-full h-full" />
 }
 
-// Store Detail View Component
-const StoreDetailView = ({ pharmacy, medicines, onClose, onAddToCart }) => {
+// Store Detail View Component with Map
+const StoreDetailView = ({ pharmacy, medicines, onClose, onAddToCart, userLocation }) => {
+  const mapRef = useRef(null)
   const availableMeds = medicines.filter(med => pharmacy.availableMedicines.includes(med.id))
+
+  useEffect(() => {
+    if (!window.google || !mapRef.current) return
+
+    const map = new window.google.maps.Map(mapRef.current, {
+      center: pharmacy.coordinates,
+      zoom: 16,
+      mapTypeControl: false,
+      streetViewControl: false
+    })
+
+    // Pharmacy marker
+    new window.google.maps.Marker({
+      position: pharmacy.coordinates,
+      map: map,
+      icon: {
+        url: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+        scaledSize: new window.google.maps.Size(40, 40)
+      },
+      title: pharmacy.name
+    })
+
+    // User location marker if available
+    if (userLocation) {
+      new window.google.maps.Marker({
+        position: userLocation,
+        map: map,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: '#3b82f6',
+          fillOpacity: 1,
+          strokeWeight: 2,
+          strokeColor: '#ffffff'
+        },
+        title: "Your Location"
+      })
+
+      // Draw route
+      const directionsService = new window.google.maps.DirectionsService()
+      const directionsRenderer = new window.google.maps.DirectionsRenderer({
+        map: map,
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: '#10b981',
+          strokeWeight: 4
+        }
+      })
+
+      directionsService.route(
+        {
+          origin: userLocation,
+          destination: pharmacy.coordinates,
+          travelMode: window.google.maps.TravelMode.DRIVING
+        },
+        (result, status) => {
+          if (status === 'OK') {
+            directionsRenderer.setDirections(result)
+          }
+        }
+      )
+    }
+  }, [pharmacy, userLocation])
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -182,6 +255,26 @@ const StoreDetailView = ({ pharmacy, medicines, onClose, onAddToCart }) => {
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          {/* Store Map */}
+          <div className="mb-6">
+            <h4 className="text-base md:text-lg font-bold text-gray-800 mb-3">Store Location</h4>
+            <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden">
+              <div ref={mapRef} className="w-full h-full" />
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                onClick={() => {
+                  const url = `https://www.google.com/maps/dir/?api=1&origin=${userLocation?.lat || 19.0760},${userLocation?.lng || 72.8777}&destination=${pharmacy.coordinates.lat},${pharmacy.coordinates.lng}&travelmode=driving`
+                  window.open(url, '_blank')
+                }}
+                className="flex items-center gap-2 text-green-600 hover:text-green-700 text-sm"
+              >
+                <Navigation className="w-4 h-4" />
+                Get Directions
+              </button>
+            </div>
+          </div>
+
           <h4 className="text-base md:text-lg font-bold text-gray-800 mb-4">
             Available Medicines ({availableMeds.length})
           </h4>
@@ -236,12 +329,15 @@ const StoreDetailView = ({ pharmacy, medicines, onClose, onAddToCart }) => {
   )
 }
 
-// Delivery Tracking Component
+// Delivery Tracking Component with Real Map
 const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) => {
   const [deliveryStage, setDeliveryStage] = useState(2)
   const [riderLocation, setRiderLocation] = useState(pharmacyLocation)
   const [distance, setDistance] = useState(1.2)
   const [estimatedTime, setEstimatedTime] = useState(25)
+  const mapRef = useRef(null)
+  const mapInstanceRef = useRef(null)
+  const markerRef = useRef(null)
   
   const stages = [
     { title: 'Order Confirmed', time: new Date(Date.now() - 15*60000).toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'}), icon: CheckCircle },
@@ -252,12 +348,97 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
   ]
   
   useEffect(() => {
+    if (!window.google || !mapRef.current || !userLocation || !pharmacyLocation) return
+
+    // Initialize map
+    mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
+      center: riderLocation,
+      zoom: 13,
+      mapTypeControl: false,
+      streetViewControl: false,
+      styles: [
+        {
+          featureType: "poi",
+          elementType: "labels",
+          stylers: [{ visibility: "off" }]
+        }
+      ]
+    })
+
+    // Add user location marker
+    new window.google.maps.Marker({
+      position: userLocation,
+      map: mapInstanceRef.current,
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: '#3b82f6',
+        fillOpacity: 1,
+        strokeWeight: 2,
+        strokeColor: '#ffffff'
+      },
+      title: "Your Location"
+    })
+
+    // Add pharmacy marker
+    new window.google.maps.Marker({
+      position: pharmacyLocation,
+      map: mapInstanceRef.current,
+      icon: {
+        url: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png',
+        scaledSize: new window.google.maps.Size(40, 40)
+      },
+      title: "Pharmacy"
+    })
+
+    // Add rider marker (animated)
+    markerRef.current = new window.google.maps.Marker({
+      position: riderLocation,
+      map: mapInstanceRef.current,
+      icon: {
+        url: 'http://maps.google.com/mapfiles/ms/icons/truck.png',
+        scaledSize: new window.google.maps.Size(40, 40)
+      },
+      title: "Delivery Partner"
+    })
+
+    // Draw route
+    const directionsService = new window.google.maps.DirectionsService()
+    const directionsRenderer = new window.google.maps.DirectionsRenderer({
+      map: mapInstanceRef.current,
+      suppressMarkers: true,
+      polylineOptions: {
+        strokeColor: '#10b981',
+        strokeWeight: 4
+      }
+    })
+
+    directionsService.route(
+      {
+        origin: riderLocation,
+        destination: userLocation,
+        travelMode: window.google.maps.TravelMode.DRIVING
+      },
+      (result, status) => {
+        if (status === 'OK') {
+          directionsRenderer.setDirections(result)
+        }
+      }
+    )
+
+    // Simulate rider movement
     const timer = setInterval(() => {
       setDeliveryStage(prev => Math.min(prev + 0.2, stages.length - 1))
       
       setRiderLocation(prev => {
         const newLat = prev.lat + (userLocation.lat - prev.lat) * 0.05
         const newLng = prev.lng + (userLocation.lng - prev.lng) * 0.05
+        
+        // Update marker position
+        if (markerRef.current) {
+          markerRef.current.setPosition({ lat: newLat, lng: newLng })
+        }
+        
         return { lat: newLat, lng: newLng }
       })
       
@@ -265,8 +446,13 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
       setEstimatedTime(prev => Math.max(5, prev - 1))
     }, 3000)
     
-    return () => clearInterval(timer)
-  }, [userLocation])
+    return () => {
+      clearInterval(timer)
+      if (markerRef.current) {
+        markerRef.current.setMap(null)
+      }
+    }
+  }, [userLocation, pharmacyLocation])
   
   const openLiveTracking = () => {
     const url = `https://www.google.com/maps/dir/${riderLocation.lat},${riderLocation.lng}/${userLocation.lat},${userLocation.lng}`
@@ -321,17 +507,7 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
           </div>
           
           <div className="relative w-full h-64 md:h-96 bg-gray-100 rounded-lg overflow-hidden mb-3 md:mb-4">
-            {userLocation && riderLocation && (
-              <iframe
-                width="100%"
-                height="100%"
-                frameBorder="0"
-                style={{ border: 0 }}
-                src={`https://www.google.com/maps/embed/v1/directions?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&origin=${riderLocation.lat},${riderLocation.lng}&destination=${userLocation.lat},${userLocation.lng}&mode=driving`}
-                allowFullScreen
-                title="Delivery Route"
-              />
-            )}
+            <div ref={mapRef} className="w-full h-full" />
             
             <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 md:p-3">
               <div className="flex items-center gap-2">
@@ -439,100 +615,29 @@ const PharmacyPage = () => {
   const [userLocation, setUserLocation] = useState(null)
   const [selectedPharmacyLocation, setSelectedPharmacyLocation] = useState(null)
   const [orderId, setOrderId] = useState(null)
+  const [mapLoaded, setMapLoaded] = useState(false)
+  const [mapError, setMapError] = useState(null)
+
+  // API Integration States
+  const [medicines, setMedicines] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [medicineType, setMedicineType] = useState('')
+  const [manufacturer, setManufacturer] = useState('')
+  const [searchTimeout, setSearchTimeout] = useState(null)
+
+  const API_KEY = 'YOUR_API_KEY_HERE' // Replace with your actual API key
+  const BASE_URL = 'https://beta.myupchar.com/api/medicine/search'
 
   const categories = [
     { id: 'all', name: 'All Medicines', count: 256 },
-    { id: 'prescription', name: 'Prescription', count: 128 },
-    { id: 'otc', name: 'Over-the-Counter', count: 78 },
-    { id: 'ayurvedic', name: 'Ayurvedic', count: 32 },
-    { id: 'wellness', name: 'Wellness', count: 18 }
-  ]
-
-  const medicines = [
-    {
-      id: 1,
-      name: 'Paracetamol 500mg',
-      brand: 'Crocin',
-      category: 'otc',
-      price: 45,
-      discountPrice: 35,
-      stock: 120,
-      requiresPrescription: false,
-      form: 'Tablet',
-      packaging: 'Strip of 15 tablets',
-      description: 'For relief from fever and mild to moderate pain',
-      availableIn: ['Apollo Pharmacy', 'MedPlus', 'Wellness Forever']
-    },
-    {
-      id: 2,
-      name: 'Amoxicillin 250mg',
-      brand: 'Mox',
-      category: 'prescription',
-      price: 120,
-      discountPrice: 95,
-      stock: 45,
-      requiresPrescription: true,
-      form: 'Capsule',
-      packaging: 'Strip of 10 capsules',
-      description: 'Antibiotic for bacterial infections',
-      availableIn: ['Apollo Pharmacy', 'MedPlus']
-    },
-    {
-      id: 3,
-      name: 'Vitamin D3 1000IU',
-      brand: 'Carbamide Forte',
-      category: 'wellness',
-      price: 250,
-      discountPrice: 199,
-      stock: 80,
-      requiresPrescription: false,
-      form: 'Softgel',
-      packaging: 'Bottle of 60 softgels',
-      description: 'Vitamin D supplement for bone health',
-      availableIn: ['Wellness Forever', 'Guardian']
-    },
-    {
-      id: 4,
-      name: 'Aspirin 75mg',
-      brand: 'Ecosprin',
-      category: 'prescription',
-      price: 35,
-      discountPrice: 28,
-      stock: 200,
-      requiresPrescription: true,
-      form: 'Tablet',
-      packaging: 'Strip of 14 tablets',
-      description: 'Blood thinner for heart conditions',
-      availableIn: ['Apollo Pharmacy', 'MedPlus', 'Guardian']
-    },
-    {
-      id: 5,
-      name: 'Cetirizine 10mg',
-      brand: 'Zyrtec',
-      category: 'otc',
-      price: 65,
-      discountPrice: 52,
-      stock: 150,
-      requiresPrescription: false,
-      form: 'Tablet',
-      packaging: 'Strip of 10 tablets',
-      description: 'Antihistamine for allergy relief',
-      availableIn: ['MedPlus', 'Wellness Forever']
-    },
-    {
-      id: 6,
-      name: 'Ashwagandha 500mg',
-      brand: 'Himalaya',
-      category: 'ayurvedic',
-      price: 180,
-      discountPrice: 144,
-      stock: 60,
-      requiresPrescription: false,
-      form: 'Tablet',
-      packaging: 'Bottle of 60 tablets',
-      description: 'Ayurvedic herb for stress relief',
-      availableIn: ['Apollo Pharmacy', 'Guardian']
-    }
+    { id: 'Allopath', name: 'Allopath', count: 128 },
+    { id: 'Ayurveda', name: 'Ayurveda', count: 78 },
+    { id: 'Homeopath', name: 'Homeopath', count: 32 },
+    { id: 'Unani', name: 'Unani', count: 18 },
+    { id: 'General', name: 'General', count: 45 }
   ]
 
   const pharmacies = [
@@ -577,6 +682,131 @@ const PharmacyPage = () => {
       availableMedicines: [3, 4, 6]
     }
   ]
+
+  // Fetch medicines from API
+  const fetchMedicines = async (page = 1) => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      // Build query parameters
+      const params = new URLSearchParams({
+        api_key: API_KEY,
+        page: page
+      })
+
+      // Add search term if present
+      if (searchTerm.trim()) {
+        params.append('name', searchTerm.trim())
+      }
+
+      // Add medicine type if selected (from categories)
+      if (selectedCategory !== 'all') {
+        params.append('type', selectedCategory)
+      }
+
+      // Add manufacturer if present
+      if (manufacturer) {
+        params.append('manufacturer', manufacturer)
+      }
+
+      // Ensure at least one parameter is present
+      if (!searchTerm.trim() && selectedCategory === 'all' && !manufacturer) {
+        // If no parameters, don't make API call
+        setMedicines([])
+        setLoading(false)
+        return
+      }
+
+      const response = await fetch(`${BASE_URL}?${params}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch medicines')
+      }
+
+      const data = await response.json()
+      
+      // Transform API response to match your medicine structure
+      const apiMedicines = data.medicines || data.data || []
+      const transformedMedicines = apiMedicines.map((med, index) => ({
+        id: med.id || index + 1,
+        name: med.name,
+        brand: med.manufacturer || med.brand || 'Generic',
+        category: med.type || 'General',
+        price: med.mrp || med.price || 0,
+        discountPrice: med.selling_price || med.discountPrice || null,
+        stock: med.stock || Math.floor(Math.random() * 100) + 20, // Fallback stock
+        requiresPrescription: med.requires_prescription || false,
+        form: med.form || 'Tablet',
+        packaging: med.packaging || med.package_details || 'Standard packaging',
+        description: med.short_description || med.description || '',
+        availableIn: med.available_in || ['Apollo Pharmacy', 'MedPlus']
+      }))
+
+      setMedicines(transformedMedicines)
+      setCurrentPage(data.current_page || page)
+      setTotalPages(data.last_page || Math.ceil(data.total / 24))
+      
+    } catch (err) {
+      setError(err.message)
+      console.error('Error fetching medicines:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Debounced search
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout)
+    }
+
+    const timeout = setTimeout(() => {
+      setCurrentPage(1)
+      fetchMedicines(1)
+    }, 500)
+
+    setSearchTimeout(timeout)
+
+    return () => clearTimeout(timeout)
+  }, [searchTerm, selectedCategory, manufacturer])
+
+  // Load Google Maps API
+  useEffect(() => {
+    const loadGoogleMapsAPI = () => {
+      if (window.google && window.google.maps) {
+        setMapLoaded(true)
+        return
+      }
+
+      const script = document.createElement('script')
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`
+      script.async = true
+      script.defer = true
+      script.onload = () => setMapLoaded(true)
+      script.onerror = () => setMapError('Failed to load Google Maps API')
+      document.head.appendChild(script)
+    }
+
+    loadGoogleMapsAPI()
+  }, [])
+
+  // Get user location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          })
+        },
+        () => {
+          setUserLocation({ lat: 19.0760, lng: 72.8777 })
+        }
+      )
+    }
+  }, [])
 
   const addToCart = (medicine, pharmacyName = null) => {
     setCart(prevCart => {
@@ -637,13 +867,30 @@ const PharmacyPage = () => {
     setShowPayment(true)
   }
 
-  const handlePaymentSuccess = (paymentId) => {
+  const handlePaymentSuccess = (paymentData) => {
     setShowPayment(false)
     const newOrderId = 'ORD' + Date.now().toString().slice(-8)
     setOrderId(newOrderId)
     
+    // Save payment details
+    const orderDetails = {
+      orderId: newOrderId,
+      paymentId: paymentData.paymentId,
+      paymentMethod: paymentData.method,
+      amount: getCartTotal(),
+      items: cart.map(item => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.discountPrice || item.price
+      }))
+    }
+    
+    // Save to localStorage
+    localStorage.setItem('lastOrder', JSON.stringify(orderDetails))
+    
     const firstItem = cart[0]
-    const pharmacy = pharmacies.find(p => p.name === firstItem.selectedPharmacy)
+    const pharmacy = pharmacies.find(p => p.name === firstItem?.selectedPharmacy)
     setSelectedPharmacyLocation(pharmacy?.coordinates || pharmacies[0].coordinates)
     
     setCart([])
@@ -675,17 +922,7 @@ const PharmacyPage = () => {
   const applyFilters = (medicines) => {
     let filtered = [...medicines]
     
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(medicine => medicine.category === selectedCategory)
-    }
-    
-    if (searchTerm) {
-      filtered = filtered.filter(medicine =>
-        medicine.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        medicine.brand.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-    
+    // Apply sorting and price filters
     switch (sortFilter) {
       case 'price_low_high':
         filtered.sort((a, b) => (a.discountPrice || a.price) - (b.discountPrice || b.price))
@@ -722,21 +959,11 @@ const PharmacyPage = () => {
 
   const filteredMedicines = applyFilters(medicines)
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          })
-        },
-        () => {
-          setUserLocation({ lat: 19.0760, lng: 72.8777 })
-        }
-      )
+  const handleLoadMore = () => {
+    if (currentPage < totalPages) {
+      fetchMedicines(currentPage + 1)
     }
-  }, [])
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 py-4 md:py-8">
@@ -781,7 +1008,7 @@ const PharmacyPage = () => {
                 type="text" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search medicines, brands, or symptoms..."
+                placeholder="Search medicines by name..."
                 className="w-full pl-10 md:pl-12 pr-4 py-2 md:py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm md:text-base"
               />
             </div>
@@ -923,6 +1150,7 @@ const PharmacyPage = () => {
                   onClick={() => {
                     setSortFilter('default')
                     setSelectedCategory('all')
+                    setSearchTerm('')
                   }}
                   className="flex-1 border border-gray-300 text-gray-700 py-2 md:py-3 rounded-lg hover:bg-gray-50"
                 >
@@ -956,79 +1184,124 @@ const PharmacyPage = () => {
               )}
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
-              {filteredMedicines.map((medicine) => (
-                <div
-                  key={medicine.id}
-                  className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+            {loading && (
+              <div className="text-center py-12">
+                <Loader2 className="w-12 h-12 text-green-500 mx-auto mb-4 animate-spin" />
+                <p className="text-gray-600">Loading medicines...</p>
+              </div>
+            )}
+
+            {error && (
+              <div className="text-center py-12">
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                <p className="text-red-600 mb-2">Error loading medicines</p>
+                <p className="text-gray-500 text-sm">{error}</p>
+                <button
+                  onClick={() => fetchMedicines(1)}
+                  className="mt-4 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
                 >
-                  <div className="p-4 md:p-6">
-                    <div className="flex justify-between items-start mb-3 md:mb-4">
-                      <div>
-                        <div className="flex items-center gap-1 md:gap-2 mb-1">
-                          <h3 className="font-bold text-base md:text-lg text-gray-800">{medicine.name}</h3>
-                          {medicine.requiresPrescription && (
-                            <span className="text-xs bg-red-100 text-red-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded">
-                              Rx
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs md:text-sm text-gray-500">{medicine.brand}</p>
-                        <p className="text-xs text-gray-400 mt-1">{medicine.packaging}</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xl md:text-2xl font-bold text-gray-800">
-                          ₹{medicine.discountPrice || medicine.price}
-                        </div>
-                        {medicine.discountPrice && (
-                          <div className="text-xs md:text-sm text-gray-500 line-through">
-                            ₹{medicine.price}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  Try Again
+                </button>
+              </div>
+            )}
 
-                    <p className="text-xs md:text-sm text-gray-600 mb-3 md:mb-4">{medicine.description}</p>
+            {!loading && !error && medicines.length === 0 && searchTerm && (
+              <div className="text-center py-12">
+                <Pill className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No medicines found for "{searchTerm}"</p>
+                <p className="text-gray-500 text-sm mt-2">Try searching with a different name</p>
+              </div>
+            )}
 
-                    <div className="flex items-center justify-between text-xs md:text-sm text-gray-500 mb-3 md:mb-4">
-                      <span className="flex items-center gap-1">
-                        <Pill className="w-3 h-3 md:w-4 md:h-4" />
-                        {medicine.form}
-                      </span>
-                      <span className={`flex items-center gap-1 ${
-                        medicine.stock > 50 ? 'text-green-600' : 'text-yellow-600'
-                      }`}>
-                        {medicine.stock > 50 ? 'In Stock' : 'Low Stock'}
-                      </span>
-                    </div>
-
-                    <div className="mb-3 md:mb-4">
-                      <div className="text-xs md:text-sm text-gray-600 mb-1">Available at:</div>
-                      <div className="flex flex-wrap gap-1">
-                        {medicine.availableIn.slice(0, 2).map((pharmacy, idx) => (
-                          <span key={idx} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">
-                            {pharmacy}
-                          </span>
-                        ))}
-                        {medicine.availableIn.length > 2 && (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                            +{medicine.availableIn.length - 2} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => addToCart(medicine)}
-                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 md:py-3 rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-1 md:gap-2 text-sm md:text-base"
+            {!loading && !error && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
+                  {filteredMedicines.map((medicine) => (
+                    <div
+                      key={medicine.id}
+                      className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
                     >
-                      <ShoppingCart className="w-4 h-4 md:w-5 md:h-5" />
-                      Add to Cart
+                      <div className="p-4 md:p-6">
+                        <div className="flex justify-between items-start mb-3 md:mb-4">
+                          <div>
+                            <div className="flex items-center gap-1 md:gap-2 mb-1">
+                              <h3 className="font-bold text-base md:text-lg text-gray-800">{medicine.name}</h3>
+                              {medicine.requiresPrescription && (
+                                <span className="text-xs bg-red-100 text-red-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded">
+                                  Rx
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs md:text-sm text-gray-500">{medicine.brand}</p>
+                            <p className="text-xs text-gray-400 mt-1">{medicine.packaging}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xl md:text-2xl font-bold text-gray-800">
+                              ₹{medicine.discountPrice || medicine.price}
+                            </div>
+                            {medicine.discountPrice && (
+                              <div className="text-xs md:text-sm text-gray-500 line-through">
+                                ₹{medicine.price}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <p className="text-xs md:text-sm text-gray-600 mb-3 md:mb-4">{medicine.description}</p>
+
+                        <div className="flex items-center justify-between text-xs md:text-sm text-gray-500 mb-3 md:mb-4">
+                          <span className="flex items-center gap-1">
+                            <Pill className="w-3 h-3 md:w-4 md:h-4" />
+                            {medicine.form}
+                          </span>
+                          <span className={`flex items-center gap-1 ${
+                            medicine.stock > 50 ? 'text-green-600' : 'text-yellow-600'
+                          }`}>
+                            {medicine.stock > 50 ? 'In Stock' : 'Low Stock'}
+                          </span>
+                        </div>
+
+                        <div className="mb-3 md:mb-4">
+                          <div className="text-xs md:text-sm text-gray-600 mb-1">Available at:</div>
+                          <div className="flex flex-wrap gap-1">
+                            {medicine.availableIn.slice(0, 2).map((pharmacy, idx) => (
+                              <span key={idx} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">
+                                {pharmacy}
+                              </span>
+                            ))}
+                            {medicine.availableIn.length > 2 && (
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                +{medicine.availableIn.length - 2} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => addToCart(medicine)}
+                          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 md:py-3 rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-1 md:gap-2 text-sm md:text-base"
+                        >
+                          <ShoppingCart className="w-4 h-4 md:w-5 md:h-5" />
+                          Add to Cart
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {currentPage < totalPages && (
+                  <div className="text-center mb-8">
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={loading}
+                      className="bg-white border border-green-600 text-green-600 px-6 py-3 rounded-lg hover:bg-green-50 disabled:opacity-50"
+                    >
+                      {loading ? 'Loading...' : 'Load More Medicines'}
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+              </>
+            )}
 
             <div className="bg-white rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6">
               <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-4 md:mb-6 flex items-center">
@@ -1038,21 +1311,35 @@ const PharmacyPage = () => {
               
               <div className="mb-6">
                 <div className="relative w-full h-64 md:h-80 bg-gray-100 rounded-lg overflow-hidden mb-3 md:mb-4">
-                  {userLocation ? (
-                    <iframe
-                      width="100%"
-                      height="100%"
-                      frameBorder="0"
-                      style={{ border: 0 }}
-                      src={`https://www.google.com/maps/embed/v1/search?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=pharmacy+near+${userLocation.lat},${userLocation.lng}&zoom=14`}
-                      allowFullScreen
-                      title="Nearby Pharmacies"
+                  {mapError ? (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="text-center p-4">
+                        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-2" />
+                        <p className="text-gray-600">Failed to load map</p>
+                        <p className="text-sm text-gray-500 mt-2">{mapError}</p>
+                      </div>
+                    </div>
+                  ) : !mapLoaded ? (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <Loader2 className="w-12 h-12 text-green-500 mx-auto mb-2 animate-spin" />
+                        <p className="text-gray-600">Loading map...</p>
+                      </div>
+                    </div>
+                  ) : userLocation ? (
+                    <PharmacyMap 
+                      pharmacies={pharmacies}
+                      userLocation={userLocation}
+                      onPharmacySelect={(pharmacy) => {
+                        setSelectedStore(pharmacy)
+                        setShowStoreDetail(true)
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <div className="text-center">
                         <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                        <p className="text-gray-600">Loading map...</p>
+                        <p className="text-gray-600">Waiting for location...</p>
                       </div>
                     </div>
                   )}
@@ -1217,7 +1504,7 @@ const PharmacyPage = () => {
                       <span>Delivery</span>
                       <span className="text-green-600">FREE</span>
                     </div>
-                    <div className="flex justify-between text-lg font-bold text-gray-800 pt-2 md:pt-3 border-t text-sm md:text-base">
+                    <div className="flex justify-between text-sm font-bold text-gray-800 pt-2 md:pt-3 border-t text-sm md:text-base">
                       <span>Total</span>
                       <span>₹{getCartTotal()}</span>
                     </div>
@@ -1289,6 +1576,7 @@ const PharmacyPage = () => {
         <StoreDetailView
           pharmacy={selectedStore}
           medicines={medicines}
+          userLocation={userLocation}
           onClose={() => setShowStoreDetail(false)}
           onAddToCart={addToCart}
         />
@@ -1296,15 +1584,28 @@ const PharmacyPage = () => {
 
       {/* Payment Gateway */}
       {showPayment && (
-        <PaymentGateway 
+        <PaymentGateway
           amount={getCartTotal()}
           onSuccess={handlePaymentSuccess}
           onClose={() => setShowPayment(false)}
+          orderDetails={{
+            description: 'Medicine Purchase',
+            customerName: 'Customer Name', // Get from your auth system
+            customerEmail: 'customer@example.com', // Get from your auth system
+            customerPhone: '9999999999', // Get from your auth system
+            notes: {
+              address: 'Customer Address', // Get from your address system
+              items: cart.length
+            }
+          }}
+          businessName="MedCare Pharmacy"
+          businessLogo="https://your-logo-url.com/logo.png"
+          paymentMethods={['razorpay', 'cod']} // Enable both payment methods
         />
       )}
 
       {/* Delivery Tracking */}
-      {showDelivery && orderId && userLocation && selectedPharmacyLocation && (
+      {showDelivery && orderId && userLocation && selectedPharmacyLocation && mapLoaded && (
         <DeliveryTracking 
           orderId={orderId}
           onClose={() => setShowDelivery(false)}
