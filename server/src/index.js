@@ -1,33 +1,15 @@
 /**
  * Healthcare Consultation System - Main Entry Point
- * 
- * This file serves as the main entry point for the healthcare consultation backend.
- * It handles environment configuration, database connection, and server startup
- * with comprehensive error handling and graceful shutdown capabilities.
- * 
- * Features:
- * - Environment variables configuration
- * - MongoDB database connection with retry logic
- * - Express server initialization
- * - Comprehensive error handling
- * - Graceful shutdown handling (SIGTERM, SIGINT)
- * - Uncaught exception and rejection handling
- * - Healthcare system health monitoring
- * - Payment gateway integration (Razorpay)
- * - Request logging and monitoring
- * - Security middleware (helmet, rate limiting)
- * - API versioning
  */
 
 // ==========================================
 // IMPORT DEPENDENCIES
 // ==========================================
 
-// Import environment configuration FIRST (must be before other imports)
+// Import environment configuration FIRST
 import dotenv from "dotenv";
 
 // Configure environment variables from .env file
-// This MUST be at the top before any other imports that need env variables
 dotenv.config({
     path: './.env'
 });
@@ -41,7 +23,6 @@ import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
-import xssSanitize from "xss-sanitize";
 
 // Import routes
 import patientRoutes from "./routes/patient.routes.js";
@@ -56,11 +37,11 @@ import webhookRoutes from "./routes/webhook.routes.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { requestLogger } from "./middlewares/logger.middleware.js";
 
-// Import database utilities - THIS IS THE ONLY connectDB WE NEED
+// Import database utilities
 import connectDB, { checkDBHealth, getDBStats, isDBConnected } from "./db/index.js";
 
-// Import logger
-import { LoggerUtils } from "./utils/logger.js";
+// Import logger - fixed import (default import)
+import logger from "./utils/logger.js";
 
 // Import constants
 import { DB_NAME } from "./constants.js";
@@ -95,9 +76,6 @@ app.use(cookieParser());
 
 // Data sanitization against NoSQL injection
 app.use(mongoSanitize());
-
-// Data sanitization against XSS
-app.use(xssSanitize());
 
 // CORS configuration
 const corsOptions = {
@@ -181,7 +159,7 @@ app.get("/api/v1/health/detailed", async (req, res) => {
     try {
         dbStats = await getDBStats();
     } catch (error) {
-        LoggerUtils.error('Failed to get DB stats', error);
+        logger.error('Failed to get DB stats', error);
     }
     
     res.status(200).json({
@@ -246,7 +224,7 @@ app.use("/api", razorpayRoutes); // Simple Razorpay endpoints for backward compa
 
 // 404 handler for undefined routes
 app.use((req, res) => {
-    LoggerUtils.warn(`Route not found: ${req.method} ${req.originalUrl}`, {
+    logger.warn(`Route not found: ${req.method} ${req.originalUrl}`, {
         ip: req.ip,
         userAgent: req.get('User-Agent')
     });
@@ -325,13 +303,11 @@ const logServerInfo = () => {
     console.log('='.repeat(70) + '\n');
 
     // Log to file as well
-    if (LoggerUtils) {
-        LoggerUtils.info('Server started', {
-            port: PORT,
-            environment: process.env.NODE_ENV,
-            database: dbHealth ? 'Connected' : 'Disconnected'
-        });
-    }
+    logger.info('Server started', {
+        port: PORT,
+        environment: process.env.NODE_ENV,
+        database: dbHealth ? 'Connected' : 'Disconnected'
+    });
 };
 
 /**
@@ -353,13 +329,11 @@ const logServerShutdown = (reason) => {
     console.log('='.repeat(70) + '\n');
 
     // Log to file as well
-    if (LoggerUtils) {
-        LoggerUtils.warn('Server shutdown', { 
-            reason, 
-            uptime,
-            totalRequests: app.locals.totalRequests 
-        });
-    }
+    logger.warn('Server shutdown', { 
+        reason, 
+        uptime,
+        totalRequests: app.locals.totalRequests 
+    });
 };
 
 /**
@@ -383,22 +357,18 @@ const checkRequiredEnvVars = () => {
         });
         console.error('\n💡 Please check your .env file and ensure all required variables are set.');
         
-        if (LoggerUtils) {
-            LoggerUtils.error('Missing required environment variables', { missingVars });
-        }
+        logger.error('Missing required environment variables', { missingVars });
         return false;
     }
 
     console.log('✅ All required environment variables are present');
     
-    if (LoggerUtils) {
-        LoggerUtils.info('Environment variables validated', {
-            hasMongoURI: !!process.env.MONGODB_URI,
-            hasAccessToken: !!process.env.ACCESS_TOKEN_SECRET,
-            hasRefreshToken: !!process.env.REFRESH_TOKEN_SECRET,
-            hasRazorpayKey: !!process.env.RAZORPAY_KEY_ID
-        });
-    }
+    logger.info('Environment variables validated', {
+        hasMongoURI: !!process.env.MONGODB_URI,
+        hasAccessToken: !!process.env.ACCESS_TOKEN_SECRET,
+        hasRefreshToken: !!process.env.REFRESH_TOKEN_SECRET,
+        hasRazorpayKey: !!process.env.RAZORPAY_KEY_ID
+    });
     
     return true;
 };
@@ -435,11 +405,9 @@ const checkOptionalEnvVars = () => {
         });
         console.warn('   These features will not be available until configured.\n');
         
-        if (LoggerUtils) {
-            LoggerUtils.warn('Optional environment variables missing', { 
-                missing: missingOptional.map(v => v.varName) 
-            });
-        }
+        logger.warn('Optional environment variables missing', { 
+            missing: missingOptional.map(v => v.varName) 
+        });
     }
 };
 
@@ -449,35 +417,30 @@ const checkOptionalEnvVars = () => {
 
 /**
  * Connect to MongoDB with retry logic using imported connectDB
- * Attempts to reconnect if initial connection fails
  */
 const connectWithRetry = async () => {
     try {
         console.log(`🔄 Attempting to connect to MongoDB (Attempt ${DB_RETRY_CONFIG.currentRetry + 1}/${DB_RETRY_CONFIG.maxRetries})...`);
         
-        await connectDB(); // This uses the imported connectDB from db/index.js
+        await connectDB();
         
         console.log(`✅ Successfully connected to MongoDB: ${mongoose.connection.name}`);
-        DB_RETRY_CONFIG.currentRetry = 0; // Reset retry counter on success
+        DB_RETRY_CONFIG.currentRetry = 0;
         
-        if (LoggerUtils) {
-            LoggerUtils.info('Database connected successfully', {
-                host: mongoose.connection.host,
-                database: mongoose.connection.name
-            });
-        }
+        logger.info('Database connected successfully', {
+            host: mongoose.connection.host,
+            database: mongoose.connection.name
+        });
         
         return true;
         
     } catch (error) {
         console.error(`❌ MongoDB connection failed: ${error.message}`);
         
-        if (LoggerUtils) {
-            LoggerUtils.error('Database connection failed', {
-                attempt: DB_RETRY_CONFIG.currentRetry + 1,
-                error: error.message
-            });
-        }
+        logger.error('Database connection failed', {
+            attempt: DB_RETRY_CONFIG.currentRetry + 1,
+            error: error.message
+        });
         
         DB_RETRY_CONFIG.currentRetry++;
         
@@ -490,12 +453,10 @@ const connectWithRetry = async () => {
         } else {
             console.error(`❌ Failed to connect to MongoDB after ${DB_RETRY_CONFIG.maxRetries} attempts`);
             
-            if (LoggerUtils) {
-                LoggerUtils.emergency('Database connection failed after max retries', {
-                    maxRetries: DB_RETRY_CONFIG.maxRetries,
-                    error: error.message
-                });
-            }
+            logger.emergency('Database connection failed after max retries', {
+                maxRetries: DB_RETRY_CONFIG.maxRetries,
+                error: error.message
+            });
             
             throw error;
         }
@@ -508,13 +469,6 @@ const connectWithRetry = async () => {
 
 /**
  * Initialize and start the healthcare server
- * 
- * Steps:
- * 1. Check environment variables
- * 2. Connect to database (with retry)
- * 3. Start Express server
- * 4. Set up error handlers
- * 5. Set up graceful shutdown handlers
  */
 const startServer = async () => {
     try {
@@ -526,9 +480,7 @@ const startServer = async () => {
         
         if (!hasRequiredVars) {
             console.error('\n❌ Cannot start server without required environment variables');
-            if (LoggerUtils) {
-                LoggerUtils.emergency('Server startup failed - missing required environment variables');
-            }
+            logger.emergency('Server startup failed - missing required environment variables');
             process.exit(1);
         }
         
@@ -561,9 +513,7 @@ const startServer = async () => {
 
                     console.log("📊 Server Health Check:", healthInfo);
                     
-                    if (LoggerUtils) {
-                        LoggerUtils.info('Server health check', healthInfo);
-                    }
+                    logger.info('Server health check', healthInfo);
                 }, 3600000); // Every hour
             }
         });
@@ -572,11 +522,8 @@ const startServer = async () => {
         server.on("error", (error) => {
             console.error("❌ Server Error:", error);
             
-            if (LoggerUtils) {
-                LoggerUtils.error('Server error', { error: error.message, code: error.code });
-            }
+            logger.error('Server error', { error: error.message, code: error.code });
             
-            // Handle specific error types
             if (error.code === 'EADDRINUSE') {
                 console.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
                 process.exit(1);
@@ -594,28 +541,24 @@ const startServer = async () => {
 
         /**
          * Handle uncaught exceptions
-         * Critical errors that weren't caught by try-catch
          */
         process.on('uncaughtException', (error) => {
             console.error('\n❌ UNCAUGHT EXCEPTION:', error);
             console.error('Stack trace:', error.stack);
             
-            if (LoggerUtils) {
-                LoggerUtils.error('UNCAUGHT EXCEPTION', {
-                    message: error.message,
-                    stack: error.stack,
-                    name: error.name
-                });
-                
-                LoggerUtils.logSecurityEvent('uncaught_exception', 'critical', 'system', {
-                    error: error.message,
-                    stack: error.stack
-                });
-            }
+            logger.error('UNCAUGHT EXCEPTION', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
+            
+            logger.logSecurityEvent('uncaught_exception', 'critical', 'system', {
+                error: error.message,
+                stack: error.stack
+            });
             
             logServerShutdown('Uncaught Exception');
             
-            // Give time for logging before exit
             setTimeout(() => {
                 process.exit(1);
             }, 1000);
@@ -623,27 +566,23 @@ const startServer = async () => {
 
         /**
          * Handle unhandled promise rejections
-         * Promises that were rejected but not caught
          */
         process.on('unhandledRejection', (reason, promise) => {
             console.error('\n❌ UNHANDLED PROMISE REJECTION:');
             console.error('Reason:', reason);
             console.error('Promise:', promise);
             
-            if (LoggerUtils) {
-                LoggerUtils.error('UNHANDLED PROMISE REJECTION', {
-                    reason: reason?.message || String(reason),
-                    promise: promise
-                });
-                
-                LoggerUtils.logSecurityEvent('unhandled_rejection', 'high', 'system', {
-                    reason: reason?.message || String(reason)
-                });
-            }
+            logger.error('UNHANDLED PROMISE REJECTION', {
+                reason: reason?.message || String(reason),
+                promise: promise
+            });
+            
+            logger.logSecurityEvent('unhandled_rejection', 'high', 'system', {
+                reason: reason?.message || String(reason)
+            });
             
             logServerShutdown('Unhandled Promise Rejection');
             
-            // Close server gracefully
             server.close(() => {
                 process.exit(1);
             });
@@ -655,14 +594,11 @@ const startServer = async () => {
 
         /**
          * Handle SIGTERM signal
-         * Sent by process managers (PM2, Docker, Kubernetes) to gracefully stop the app
          */
         process.on('SIGTERM', async () => {
             console.log('\n🛑 SIGTERM signal received');
             
-            if (LoggerUtils) {
-                LoggerUtils.warn('SIGTERM signal received');
-            }
+            logger.warn('SIGTERM signal received');
             
             logServerShutdown('SIGTERM Signal');
             
@@ -672,33 +608,25 @@ const startServer = async () => {
             
             console.log('🌐 Closing server...');
             server.close(() => {
-                if (LoggerUtils) {
-                    LoggerUtils.info('Server closed successfully');
-                }
+                logger.info('Server closed successfully');
                 console.log('✅ Server closed successfully');
                 process.exit(0);
             });
             
-            // Force exit if graceful shutdown takes too long (30 seconds)
             setTimeout(() => {
                 console.error('❌ Graceful shutdown timeout, forcing exit');
-                if (LoggerUtils) {
-                    LoggerUtils.error('Graceful shutdown timeout, forcing exit');
-                }
+                logger.error('Graceful shutdown timeout, forcing exit');
                 process.exit(1);
             }, 30000);
         });
 
         /**
          * Handle SIGINT signal
-         * Sent when user presses Ctrl+C in terminal
          */
         process.on('SIGINT', async () => {
             console.log('\n\n🛑 SIGINT signal received (Ctrl+C)');
             
-            if (LoggerUtils) {
-                LoggerUtils.warn('SIGINT signal received');
-            }
+            logger.warn('SIGINT signal received');
             
             logServerShutdown('User Interruption (Ctrl+C)');
             
@@ -708,41 +636,32 @@ const startServer = async () => {
             
             console.log('🌐 Closing server...');
             server.close(() => {
-                if (LoggerUtils) {
-                    LoggerUtils.info('Server closed successfully');
-                }
+                logger.info('Server closed successfully');
                 console.log('✅ Server closed successfully');
                 console.log('👋 Goodbye!\n');
                 process.exit(0);
             });
             
-            // Force exit if graceful shutdown takes too long (10 seconds)
             setTimeout(() => {
                 console.error('❌ Graceful shutdown timeout, forcing exit');
-                if (LoggerUtils) {
-                    LoggerUtils.error('Graceful shutdown timeout, forcing exit');
-                }
+                logger.error('Graceful shutdown timeout, forcing exit');
                 process.exit(1);
             }, 10000);
         });
 
     } catch (error) {
-        // Fatal error during server startup
         console.error('\n❌ FATAL ERROR: Failed to start healthcare server');
         console.error('Error details:', error.message);
         console.error('Stack trace:', error.stack);
         
-        if (LoggerUtils) {
-            LoggerUtils.emergency('FATAL ERROR: Server startup failed', {
-                message: error.message,
-                stack: error.stack,
-                name: error.name
-            });
-        }
+        logger.emergency('FATAL ERROR: Server startup failed', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
         
         logServerShutdown('Fatal Startup Error');
         
-        // Exit with error code
         process.exit(1);
     }
 };
@@ -753,52 +672,3 @@ const startServer = async () => {
 
 // Execute server startup
 startServer();
-
-/**
- * ==========================================
- * UPDATED ENVIRONMENT VARIABLES
- * ==========================================
- * 
- * Create a .env file in the root directory with these variables:
- * 
- * # Server Configuration
- * PORT=8000
- * NODE_ENV=development
- * 
- * # Database
- * MONGODB_URI=mongodb://localhost:27017
- * DB_NAME=healthcare-consultation
- * DB_MAX_RETRIES=5
- * DB_RETRY_DELAY=5000
- * 
- * # JWT Secrets (REQUIRED)
- * ACCESS_TOKEN_SECRET=your-super-secret-access-token-key-minimum-32-characters
- * ACCESS_TOKEN_EXPIRY=15m
- * REFRESH_TOKEN_SECRET=your-super-secret-refresh-token-key-minimum-32-characters
- * REFRESH_TOKEN_EXPIRY=7d
- * 
- * # Razorpay Payment Gateway (REQUIRED for payments)
- * RAZORPAY_KEY_ID=rzp_live_xxxxx
- * RAZORPAY_KEY_SECRET=live_secret_xxxxx
- * 
- * # CORS
- * CORS_ORIGIN=http://localhost:3000,http://localhost:5173
- * 
- * # Cloudinary (Optional - for file uploads)
- * CLOUDINARY_CLOUD_NAME=your-cloud-name
- * CLOUDINARY_API_KEY=your-api-key
- * CLOUDINARY_API_SECRET=your-api-secret
- * 
- * # Email Service (Optional - for notifications)
- * EMAIL_SERVICE=gmail
- * EMAIL_USER=your-email@gmail.com
- * EMAIL_PASS=your-app-specific-password
- * SMTP_HOST=smtp.gmail.com
- * SMTP_PORT=587
- * 
- * # Frontend URL
- * FRONTEND_URL=http://localhost:3000
- * 
- * # Logging
- * LOG_LEVEL=info
- */
