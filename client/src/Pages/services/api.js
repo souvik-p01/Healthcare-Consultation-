@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 // Base URL for API requests
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL
+  ? `${import.meta.env.VITE_BACKEND_URL}/api/v1`
+  : 'http://localhost:8000/api/v1';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -14,7 +16,7 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -30,7 +32,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
+      localStorage.removeItem('accessToken');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -39,14 +41,14 @@ api.interceptors.response.use(
   }
 );
 
-// Auth services
+// Auth services (matches /api/v1/users/* routes used by AppContext)
 export const authAPI = {
-  login: (email, password) => api.post('/auth/login', { email, password }),
-  register: (data) => api.post('/auth/register', data),
-  getMe: () => api.get('/auth/me'),
-  logout: () => api.get('/auth/logout'),
-  forgotPassword: (email) => api.post('/auth/forgotpassword', { email }),
-  resetPassword: (token, password) => api.put(`/auth/resetpassword/${token}`, { password }),
+  login: (email, password) => api.post('/users/login', { email, password }),
+  register: (data) => api.post('/users/register', data),
+  getMe: () => api.get('/users/current'),
+  logout: () => api.post('/users/logout'),
+  forgotPassword: (email) => api.post('/users/forgot-password', { email }),
+  resetPassword: (token, password) => api.post('/users/reset-password', { token, newPassword: password, confirmPassword: password }),
 };
 
 // Technician services
@@ -102,6 +104,17 @@ export const aiAPI = {
   analyzeTestResults: (testData) => api.post('/ai/analyze-test', testData),
   suggestMaintenance: (equipmentData) => api.post('/ai/suggest-maintenance', equipmentData),
   qualityCheck: (testResults) => api.post('/ai/quality-check', testResults),
+};
+
+// Payment services
+export const paymentAPI = {
+  createOrder: (data) => api.post('/payments/create-order', data),
+  confirmPayment: (data) => api.post('/payments/confirm', data),
+  getPayments: (params) => api.get('/payments', { params }),
+  getPaymentById: (id) => api.get(`/payments/${id}`),
+  processRefund: (id, data) => api.post(`/payments/${id}/refund`, data),
+  getStatistics: () => api.get('/payments/statistics'),
+  getPaymentMethods: () => api.get('/payments/payment-methods'),
 };
 
 export default api;

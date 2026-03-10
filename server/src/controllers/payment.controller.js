@@ -439,18 +439,80 @@ const processRefund = asyncHandler(async (req, res) => {
 // For manual payment creation, it's already independent of gateway.
 
 /**
- * GET PAYMENT STATISTICS (unchanged logic, but works with Razorpay data)
+ * GET PAYMENT STATISTICS
+ * GET /api/v1/payments/statistics
  */
 const getPaymentStatistics = asyncHandler(async (req, res) => {
-    // ... your existing implementation (no Stripe dependency) ...
-    // It should work fine because it queries the Payment collection.
+    const userId = req.user._id;
+    const userRole = req.user.role;
+
+    const matchQuery = userRole === 'admin' ? {} : { userId };
+
+    const [totalStats, byStatus, byService, monthly] = await Promise.all([
+        Payment.aggregate([
+            { $match: matchQuery },
+            { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+        ]),
+        Payment.aggregate([
+            { $match: matchQuery },
+            { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } }
+        ]),
+        Payment.aggregate([
+            { $match: matchQuery },
+            { $group: { _id: '$serviceType', count: { $sum: 1 }, amount: { $sum: '$amount' } } }
+        ]),
+        Payment.aggregate([
+            { $match: { ...matchQuery, status: 'completed' } },
+            { $group: {
+                _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                amount: { $sum: '$amount' }, count: { $sum: 1 }
+            }},
+            { $sort: { '_id.year': -1, '_id.month': -1 } },
+            { $limit: 12 }
+        ])
+    ]);
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            total: totalStats[0]?.total || 0,
+            count: totalStats[0]?.count || 0,
+            byStatus: byStatus.reduce((acc, s) => { acc[s._id] = { count: s.count, amount: s.amount }; return acc; }, {}),
+            byService: byService.reduce((acc, s) => { acc[s._id] = { count: s.count, amount: s.amount }; return acc; }, {}),
+            monthly
+        }, 'Payment statistics fetched')
+    );
 });
 
 /**
- * CREATE MANUAL PAYMENT (unchanged)
+ * CREATE MANUAL PAYMENT
+ * POST /api/v1/payments/manual
  */
 const createManualPayment = asyncHandler(async (req, res) => {
-    // ... your existing implementation ...
+    const { patientId, doctorId, appointmentId, amount, currency = 'INR', serviceType, description, paymentMethod = 'cash' } = req.body;
+    const userId = req.user._id;
+
+    if (!amount || amount <= 0) throw new ApiError(400, 'Valid amount required');
+    if (!serviceType) throw new ApiError(400, 'Service type required');
+
+    const invoiceNumber = await generateInvoiceNumber();
+
+    const payment = await Payment.create({
+        userId,
+        patientId,
+        doctorId,
+        appointmentId,
+        amount,
+        currency,
+        serviceType,
+        serviceDescription: description || `Manual payment for ${serviceType}`,
+        paymentMethod,
+        paymentGateway: 'manual',
+        status: 'completed',
+        completedAt: new Date(),
+        invoice: { invoiceNumber, invoiceDate: new Date() }
+    });
+
+    return res.status(201).json(new ApiResponse(201, { payment }, 'Manual payment created'));
 });
 
 /**

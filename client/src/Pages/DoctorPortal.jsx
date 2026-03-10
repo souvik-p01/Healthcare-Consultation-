@@ -39,6 +39,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAppContext } from '../context/AppContext';
 import AiAssistance from './AIAssistantPage';
 import Telemedicine from './services/Telemedicine';
 import HealthReports from './services/HealthReports';
@@ -46,6 +47,7 @@ import { doctorService } from './services/DoctorApi';
 
 const DoctorPortal = () => {
   const navigate = useNavigate();
+  const { user: authUser } = useAppContext();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [notifications, setNotifications] = useState([
     { id: 1, title: 'New Patient Appointment', desc: 'Jane Smith scheduled for 3:30 PM', time: '10 min ago', read: false },
@@ -282,8 +284,8 @@ const DoctorPortal = () => {
 
   // Handle logout
   const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('doctor_token');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
     navigate('/login');
   };
