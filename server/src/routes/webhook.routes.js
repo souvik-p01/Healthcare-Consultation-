@@ -1,9 +1,8 @@
-import { Router } from 'express';
 import express from 'express';
 import crypto from 'crypto';
 import { Payment } from '../models/payment.model.js';
 
-const router = Router();
+const router = express.Router();
 
 router.post('/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
     try {
@@ -22,7 +21,7 @@ router.post('/razorpay', express.raw({ type: 'application/json' }), async (req, 
         const event = JSON.parse(body);
 
         if (event.event === 'payment.captured') {
-            const { order_id, id: payment_id, status } = event.payload.payment.entity;
+            const { order_id, id: payment_id } = event.payload.payment.entity;
             await Payment.findOneAndUpdate(
                 { gatewayReference: order_id },
                 { status: 'completed', transactionId: payment_id }
@@ -39,6 +38,10 @@ router.post('/razorpay', express.raw({ type: 'application/json' }), async (req, 
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
+});
+
+router.get('/test', (req, res) => {
+    res.status(200).json({ success: true, message: 'Webhook endpoint is working', timestamp: new Date().toISOString() });
 });
 
 export default router;

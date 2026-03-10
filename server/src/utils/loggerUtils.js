@@ -3,16 +3,6 @@
  * 
  * HIPAA-compliant logging for healthcare applications
  * Secure logging with sensitive data protection and audit trails
- * 
- * Features:
- * - HIPAA-compliant audit trails (7-year retention)
- * - PHI/PII data sanitization
- * - Multi-level logging with healthcare-specific levels
- * - Real-time monitoring capabilities
- * - Security event tracking
- * - Medical record change tracking
- * - Patient access logging
- * - Integration with existing utilities
  */
 
 import winston from 'winston';
@@ -41,8 +31,8 @@ export const LOG_CONFIG = {
         warn: 1,
         info: 2,
         debug: 3,
-        audit: 4,     // Healthcare-specific audit level
-        security: 5,  // Security events
+        audit: 4,
+        security: 5,
         trace: 6
     },
     COLORS: {
@@ -77,38 +67,32 @@ class HealthcareLogger {
      * Create Winston logger with healthcare-specific configuration
      */
     createLogger() {
-        // Add colors
         winston.addColors(LOG_CONFIG.COLORS);
 
         const { combine, timestamp, printf, colorize, errors, json } = winston.format;
 
-        // Healthcare-specific log format for console
         const consoleFormat = printf(({ level, message, timestamp, ...metadata }) => {
             const sanitizedMessage = this.sanitizeSensitiveData(message);
             const metaString = Object.keys(metadata).length > 0 
                 ? ` | ${this.sanitizeSensitiveData(JSON.stringify(metadata))}` 
                 : '';
             
-            // Format based on log level
             const emoji = this.getLogEmoji(level);
             return `${emoji} [${timestamp}] ${level.toUpperCase()}: ${sanitizedMessage}${metaString}`;
         });
 
-        // JSON format for file storage (for easy parsing)
         const jsonFormat = json();
 
-        // Daily rotate file transport for audit logs (HIPAA requirement - 7 years)
         const auditTransport = new winston.transports.DailyRotateFile({
             filename: path.join(logsDir, 'healthcare-audit-%DATE%.log'),
             datePattern: 'YYYY-MM-DD',
             level: 'audit',
             format: combine(timestamp(), jsonFormat),
-            maxFiles: '7y', // Keep audit logs for 7 years (HIPAA requirement)
+            maxFiles: '7y',
             maxSize: '50m',
             auditFile: path.join(logsDir, 'audit-metadata.json')
         });
 
-        // Security events transport
         const securityTransport = new winston.transports.DailyRotateFile({
             filename: path.join(logsDir, 'healthcare-security-%DATE%.log'),
             datePattern: 'YYYY-MM-DD',
@@ -118,7 +102,6 @@ class HealthcareLogger {
             maxSize: '50m'
         });
 
-        // Error transport
         const errorTransport = new winston.transports.DailyRotateFile({
             filename: path.join(logsDir, 'healthcare-error-%DATE%.log'),
             datePattern: 'YYYY-MM-DD',
@@ -128,7 +111,6 @@ class HealthcareLogger {
             maxSize: '50m'
         });
 
-        // Combined logs transport
         const combinedTransport = new winston.transports.DailyRotateFile({
             filename: path.join(logsDir, 'healthcare-combined-%DATE%.log'),
             datePattern: 'YYYY-MM-DD',
@@ -142,19 +124,16 @@ class HealthcareLogger {
             level: process.env.LOG_LEVEL || 'info',
             format: combine(
                 errors({ stack: true }),
-                timestamp({ format: DATETIME_CONFIG.DATE_FORMATS.REPORT || 'YYYY-MM-DD HH:mm:ss' })
+                timestamp({ format: 'YYYY-MM-DD HH:mm:ss' })
             ),
             transports: [
-                // Console transport for development
                 new winston.transports.Console({
                     format: combine(
                         colorize({ all: true }),
-                        timestamp({ format: DATETIME_CONFIG.DATE_FORMATS.DISPLAY || 'MMM dd, yyyy HH:mm:ss' }),
+                        timestamp({ format: 'MMM dd, yyyy HH:mm:ss' }),
                         consoleFormat
                     )
                 }),
-                
-                // File transports
                 errorTransport,
                 auditTransport,
                 securityTransport,
@@ -197,7 +176,6 @@ class HealthcareLogger {
 
     /**
      * Sanitize sensitive healthcare data from logs
-     * HIPAA compliance: Remove PHI/PII from logs
      */
     sanitizeSensitiveData(data) {
         if (data === null || data === undefined) {
@@ -206,28 +184,17 @@ class HealthcareLogger {
 
         let sanitized = typeof data === 'string' ? data : JSON.stringify(data);
 
-        // PHI/PII patterns to redact
         const sensitivePatterns = [
-            // Social Security Numbers
             { pattern: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[REDACTED_SSN]' },
-            // Phone numbers (US format)
             { pattern: /\b(\+?1[-.]?)?\(?\d{3}\)?[-.]?\d{3}[-.]?\d{4}\b/g, replacement: '[REDACTED_PHONE]' },
-            // Email addresses
             { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replacement: '[REDACTED_EMAIL]' },
-            // Medical Record Numbers (alphanumeric, 6-15 chars)
             { pattern: /\b[A-Z0-9]{6,15}\b/g, replacement: '[REDACTED_MRN]' },
-            // Insurance IDs
             { pattern: /\b[A-Z]{2,5}[-]?\d{4,10}\b/g, replacement: '[REDACTED_INSURANCE]' },
-            // Names (only redact if they appear in specific contexts)
             { pattern: /("patientName"?\s*:\s*")[^"]+(")/gi, replacement: '$1[REDACTED_NAME]$2' },
             { pattern: /("doctorName"?\s*:\s*")[^"]+(")/gi, replacement: '$1[REDACTED_NAME]$2' },
-            // Addresses
             { pattern: /\d{1,5}\s+\w+\s+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln)\b/gi, replacement: '[REDACTED_ADDRESS]' },
-            // Dates of birth
             { pattern: /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, replacement: '[REDACTED_DOB]' },
-            // Credit card numbers
             { pattern: /\b(?:\d[ -]*?){13,16}\b/g, replacement: '[REDACTED_CARD]' },
-            // Bank account numbers
             { pattern: /\b\d{8,17}\b/g, replacement: '[REDACTED_ACCOUNT]' }
         ];
 
@@ -239,7 +206,7 @@ class HealthcareLogger {
     }
 
     /**
-     * Mask IDs for privacy protection (shows only last 4 chars)
+     * Mask IDs for privacy protection
      */
     maskId(id) {
         if (!id) return 'unknown';
@@ -249,7 +216,7 @@ class HealthcareLogger {
     }
 
     /**
-     * Add to in-memory audit trail (for real-time monitoring)
+     * Add to in-memory audit trail
      */
     addToAuditTrail(logEntry) {
         this.auditTrail.push({
@@ -257,7 +224,6 @@ class HealthcareLogger {
             timestamp: new Date().toISOString()
         });
         
-        // Keep only last 1000 entries in memory
         if (this.auditTrail.length > 1000) {
             this.auditTrail = this.auditTrail.slice(-1000);
         }
@@ -272,7 +238,6 @@ class HealthcareLogger {
             timestamp: new Date().toISOString()
         });
         
-        // Keep only last 500 security events in memory
         if (this.securityEvents.length > 500) {
             this.securityEvents = this.securityEvents.slice(-500);
         }
@@ -282,7 +247,6 @@ class HealthcareLogger {
      * Start periodic audit log cleanup
      */
     startAuditCleanup() {
-        // Run cleanup every day at midnight
         setInterval(() => {
             this.cleanupOldLogs();
         }, 24 * 60 * 60 * 1000);
@@ -292,17 +256,11 @@ class HealthcareLogger {
      * Clean up old logs based on retention policy
      */
     cleanupOldLogs() {
-        // This is handled by winston-daily-rotate-file
-        // Just log that cleanup occurred
         this.info('Log cleanup cycle completed');
     }
 
     /**
-     * Log patient access activity (HIPAA requirement)
-     * @param {string} patientId - Patient identifier
-     * @param {string} action - Action performed (view, edit, delete)
-     * @param {string} userId - User performing action
-     * @param {Object} details - Additional details
+     * Log patient access activity
      */
     logPatientAccess(patientId, action, userId, details = {}) {
         const auditLog = {
@@ -324,10 +282,6 @@ class HealthcareLogger {
 
     /**
      * Log medical record changes
-     * @param {string} recordId - Medical record identifier
-     * @param {string} action - Action performed
-     * @param {string} userId - User performing action
-     * @param {Object} changes - Changes made
      */
     logMedicalRecordChange(recordId, action, userId, changes = {}) {
         const auditLog = {
@@ -348,10 +302,6 @@ class HealthcareLogger {
 
     /**
      * Log prescription activity
-     * @param {string} prescriptionId - Prescription identifier
-     * @param {string} action - Action performed
-     * @param {string} pharmacistId - Pharmacist identifier
-     * @param {Object} details - Prescription details
      */
     logPrescriptionActivity(prescriptionId, action, pharmacistId, details = {}) {
         const auditLog = {
@@ -373,10 +323,6 @@ class HealthcareLogger {
 
     /**
      * Log appointment activity
-     * @param {string} appointmentId - Appointment identifier
-     * @param {string} action - Action performed
-     * @param {string} staffId - Staff identifier
-     * @param {Object} details - Appointment details
      */
     logAppointmentActivity(appointmentId, action, staffId, details = {}) {
         const auditLog = {
@@ -397,10 +343,6 @@ class HealthcareLogger {
 
     /**
      * Log security events
-     * @param {string} eventType - Type of security event
-     * @param {string} severity - Severity (low, medium, high, critical)
-     * @param {string} userId - User identifier
-     * @param {Object} details - Event details
      */
     logSecurityEvent(eventType, severity, userId, details = {}) {
         const securityLog = {
@@ -415,7 +357,6 @@ class HealthcareLogger {
             timestamp: new Date().toISOString()
         };
 
-        // Log at appropriate level based on severity
         if (severity === 'critical' || severity === 'high') {
             this.error('SECURITY_EVENT', securityLog);
         } else if (severity === 'medium') {
@@ -426,7 +367,6 @@ class HealthcareLogger {
 
         this.addToSecurityEvents(securityLog);
         
-        // Send alert for critical security events
         if (severity === 'critical') {
             this.sendSecurityAlert(securityLog);
         }
@@ -434,21 +374,13 @@ class HealthcareLogger {
 
     /**
      * Send security alert for critical events
-     * @param {Object} securityLog - Security event details
      */
     sendSecurityAlert(securityLog) {
-        // Implement your alert mechanism (email, SMS, Slack, etc.)
         console.error('🚨 CRITICAL SECURITY ALERT:', securityLog);
-        
-        // You can integrate with your notification system here
-        // Example: sendEmail, sendSMS, callWebhook, etc.
     }
 
     /**
-     * Log API request for healthcare monitoring
-     * @param {Object} req - Express request object
-     * @param {Object} res - Express response object
-     * @param {number} responseTime - Response time in ms
+     * Log API request
      */
     logApiRequest(req, res, responseTime) {
         const logData = {
@@ -472,12 +404,7 @@ class HealthcareLogger {
     }
 
     /**
-     * Log healthcare business transaction
-     * @param {string} transactionType - Type of transaction
-     * @param {string} entityId - Entity identifier
-     * @param {number} amount - Transaction amount
-     * @param {string} userId - User identifier
-     * @param {Object} details - Transaction details
+     * Log business transaction
      */
     logBusinessTransaction(transactionType, entityId, amount, userId, details = {}) {
         const transactionLog = {
@@ -497,9 +424,6 @@ class HealthcareLogger {
 
     /**
      * Log payment activity
-     * @param {string} paymentId - Payment identifier
-     * @param {string} action - Action performed
-     * @param {Object} details - Payment details
      */
     logPaymentActivity(paymentId, action, details = {}) {
         const paymentLog = {
@@ -527,8 +451,6 @@ class HealthcareLogger {
 
     /**
      * Emergency log for critical healthcare events
-     * @param {string} message - Emergency message
-     * @param {Object} details - Emergency details
      */
     emergency(message, details = {}) {
         const emergencyLog = {
@@ -539,27 +461,18 @@ class HealthcareLogger {
         };
 
         this.logger.error('🚨 EMERGENCY HEALTHCARE EVENT', emergencyLog);
-
-        // Send immediate notification
         this.sendEmergencyAlert(emergencyLog);
     }
 
     /**
      * Send emergency alert
-     * @param {Object} emergencyLog - Emergency details
      */
     sendEmergencyAlert(emergencyLog) {
-        // Implement your emergency notification system
         console.error('🚑 EMERGENCY RESPONSE NEEDED:', emergencyLog);
-        
-        // Integrate with pager system, SMS, etc.
-        // Example: notify on-call doctor, send to emergency response team
     }
 
     /**
-     * Get recent audit trail for monitoring
-     * @param {number} limit - Number of entries to return
-     * @returns {Array} Recent audit trail entries
+     * Get recent audit trail
      */
     getRecentAuditTrail(limit = 100) {
         return this.auditTrail.slice(-limit);
@@ -567,8 +480,6 @@ class HealthcareLogger {
 
     /**
      * Get recent security events
-     * @param {number} limit - Number of events to return
-     * @returns {Array} Recent security events
      */
     getRecentSecurityEvents(limit = 50) {
         return this.securityEvents.slice(-limit);
@@ -576,24 +487,16 @@ class HealthcareLogger {
 
     /**
      * Search audit logs
-     * @param {Object} criteria - Search criteria
-     * @returns {Promise<Array>} Matching audit entries
      */
     async searchAuditLogs(criteria) {
-        // Implement search across audit log files
-        // This is a placeholder - implement based on your storage solution
         this.info('Audit log search requested', { criteria });
         return [];
     }
 
     /**
      * Generate compliance report
-     * @param {Date} startDate - Start date for report
-     * @param {Date} endDate - End date for report
-     * @returns {Promise<Object>} Compliance report
      */
     async generateComplianceReport(startDate, endDate) {
-        // Generate HIPAA compliance report
         const report = {
             period: {
                 start: startDate.toISOString(),
@@ -608,7 +511,7 @@ class HealthcareLogger {
         return report;
     }
 
-    // Proxy methods to Winston logger with sanitization
+    // Proxy methods to Winston logger
     error(message, meta) {
         this.logger.error(
             this.sanitizeSensitiveData(message), 
@@ -662,8 +565,6 @@ class HealthcareLogger {
     }
 }
 
-// Create singleton instance
+// Create and export the logger instance as default export
 const healthcareLogger = new HealthcareLogger();
-
-// Export the singleton instance and class (LOG_CONFIG is already exported above)
-export { healthcareLogger as LoggerUtils, HealthcareLogger };
+export default healthcareLogger;
