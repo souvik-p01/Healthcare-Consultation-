@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { useAppContext } from '../context/AppContext';
 import { 
   Calendar, 
   Brain, 
@@ -35,16 +38,15 @@ import Telemedicine from './services/Telemedicine';
 import HealthReports from './services/HealthReports';
 import PharmacyPage from './PharmacyPage';
 import EmergencyPage from './EmergencyPage';
+import PaymentGateway from '../components/PaymentGateway';
 
 
 
 const PatientPortal = () => {
+  const { user: authUser, logoutUser, apiCall } = useAppContext();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Appointment Reminder', desc: 'Dr. Sarah Johnson at 2:00 PM', time: '10 min ago', read: false },
-    { id: 2, title: 'Lab Results Ready', desc: 'Blood test results available', time: '1 hour ago', read: false },
-    { id: 3, title: 'Prescription Refill', desc: 'Medication ready for pickup', time: '2 hours ago', read: true }
-  ]);
+  const [notifications, setNotifications] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -52,19 +54,47 @@ const PatientPortal = () => {
   const [symptoms, setSymptoms] = useState('');
   const [duration, setDuration] = useState('1-3 days');
   const [severity, setSeverity] = useState('Mild');
-  
-  const [user] = useState({
-    name: 'John Doe',
-    age: 34,
-    bloodType: 'O+',
-    lastCheckup: '2024-02-15',
-    patientId: 'PT12345',
+  const [appointments, setAppointments] = useState([]);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState(null);
+
+  const user = {
+    name: authUser ? `${authUser.firstName} ${authUser.lastName}` : 'Patient',
+    age: authUser?.age || '--',
+    bloodType: authUser?.bloodType || '--',
+    patientId: authUser?._id?.slice(-6)?.toUpperCase() || 'PT0000',
     healthScore: 85,
-    memberSince: 2023,
-    email: 'john.doe@example.com',
-    phone: '+91 98765 43210',
-    address: 'Bishnupur, West Bengal, India'
-  });
+    email: authUser?.email || '',
+    phone: authUser?.phoneNumber || '',
+    address: authUser?.address?.city || ''
+  };
+
+  useEffect(() => {
+    const fetchPatientData = async () => {
+      try {
+        setDashboardLoading(true);
+        const [notifRes, apptRes] = await Promise.allSettled([
+          apiCall('/patients/notifications'),
+          apiCall('/patients/appointments')
+        ]);
+        if (notifRes.status === 'fulfilled' && notifRes.value?.data) {
+          setNotifications((notifRes.value.data || []).map(n => ({
+            id: n._id, title: n.title, desc: n.message,
+            time: new Date(n.createdAt).toLocaleTimeString(), read: n.read
+          })));
+        }
+        if (apptRes.status === 'fulfilled' && apptRes.value?.data) {
+          setAppointments(apptRes.value.data || []);
+        }
+      } catch (e) {
+        console.error('Patient dashboard fetch error:', e);
+      } finally {
+        setDashboardLoading(false);
+      }
+    };
+    fetchPatientData();
+  }, []);
 
   const healthMetrics = [
     { title: 'Heart Rate', value: '72', unit: 'bpm', icon: Heart, status: 'normal', change: '+2%' },
@@ -118,7 +148,7 @@ const PatientPortal = () => {
     }
   ];
 
-  const upcomingAppointments = [
+  const upcomingAppointments = appointments.length > 0 ? appointments : [
     { 
       id: 1,
       doctor: "Dr. Sarah Johnson", 
@@ -188,15 +218,21 @@ const PatientPortal = () => {
     }, 2000);
   }, [symptoms]);
 
-  const markNotificationAsRead = useCallback((id) => {
+  const markNotificationAsRead = useCallback(async (id) => {
+    try {
+      await apiCall(`/patients/notifications/${id}/read`, { method: 'POST' });
+    } catch (e) { /* silent */ }
     setNotifications(prev => prev.map(notif => 
       notif.id === id ? { ...notif, read: true } : notif
     ));
-  }, []);
+  }, [apiCall]);
 
-  const markAllNotificationsAsRead = useCallback(() => {
+  const markAllNotificationsAsRead = useCallback(async () => {
+    try {
+      await apiCall('/patients/notifications/mark-all-read', { method: 'POST' });
+    } catch (e) { /* silent */ }
     setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
-  }, []);
+  }, [apiCall]);
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
@@ -594,6 +630,23 @@ const PatientPortal = () => {
                           >
                             <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
                           </button>
+                          {apt.status === 'confirmed' && (
+                            <button
+                              onClick={() => {
+                                setPaymentDetails({
+                                  amount: apt.consultationFee || 500,
+                                  serviceType: 'consultation',
+                                  description: `Consultation with ${apt.doctor}`,
+                                  appointmentId: apt.id || apt._id,
+                                });
+                                setShowPayment(true);
+                              }}
+                              className="p-1 md:p-1.5 hover:bg-green-50 rounded text-green-600 transition-colors text-xs font-medium"
+                              title="Pay Now"
+                            >
+                              Pay
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -895,7 +948,7 @@ const PatientPortal = () => {
               Emergency Help
             </button>
             <button 
-              onClick={() => alert('Logging out...')}
+              onClick={logoutUser}
               className="w-full flex items-center gap-3 px-3 md:px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors text-sm md:text-base"
             >
               <LogOut className="w-3 h-3 md:w-4 md:h-4" />
@@ -1091,6 +1144,30 @@ const PatientPortal = () => {
       >
         <Ambulance className="w-5 h-5" />
       </button>
+
+      {/* Payment Gateway Modal */}
+      {showPayment && paymentDetails && (
+        <PaymentGateway
+          amount={paymentDetails.amount}
+          orderDetails={{
+            serviceType: paymentDetails.serviceType || 'consultation',
+            description: paymentDetails.description || 'Medical Consultation',
+            appointmentId: paymentDetails.appointmentId,
+            customerName: user.name,
+            customerEmail: user.email,
+            customerPhone: user.phone,
+          }}
+          onSuccess={(result) => {
+            setShowPayment(false);
+            setPaymentDetails(null);
+            toast.success(`Payment successful! ID: ${result.paymentId}`);
+          }}
+          onClose={() => {
+            setShowPayment(false);
+            setPaymentDetails(null);
+          }}
+        />
+      )}
     </div>
   );
 };

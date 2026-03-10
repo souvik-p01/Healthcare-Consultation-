@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useCallback } from 'react';
 import { doctorService } from '../Pages/services/DoctorApi';
-import { technicianAPI, testAPI, equipmentAPI, notificationAPI, aiAPI } from '../Pages/services/api';
+import { technicianAPI, testAPI, equipmentAPI, notificationAPI, aiAPI, paymentAPI } from '../Pages/services/api';
 import socketService from '../Pages/services/socket';
 
 const ApiContext = createContext({});
@@ -75,6 +75,17 @@ export const ApiProvider = ({ children }) => {
     qualityCheck: useCallback((testResults) => aiAPI.qualityCheck(testResults), []),
   };
 
+  // Payment API methods
+  const payment = {
+    createOrder: useCallback((data) => paymentAPI.createOrder(data), []),
+    confirmPayment: useCallback((data) => paymentAPI.confirmPayment(data), []),
+    getPayments: useCallback((params) => paymentAPI.getPayments(params), []),
+    getPaymentById: useCallback((id) => paymentAPI.getPaymentById(id), []),
+    processRefund: useCallback((id, data) => paymentAPI.processRefund(id, data), []),
+    getStatistics: useCallback(() => paymentAPI.getStatistics(), []),
+    getPaymentMethods: useCallback(() => paymentAPI.getPaymentMethods(), []),
+  };
+
   // Socket methods
   const socket = {
     connect: useCallback((token) => socketService.connect(token), []),
@@ -91,6 +102,7 @@ export const ApiProvider = ({ children }) => {
     equipment,
     notifications,
     ai,
+    payment,
     socket,
   };
 

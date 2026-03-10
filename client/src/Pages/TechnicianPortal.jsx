@@ -39,7 +39,7 @@ import {
   PauseCircle,
   StopCircle
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAppContext } from '../context/AppContext';
 import { 
   technicianAPI, 
   testAPI, 
@@ -51,7 +51,7 @@ import socketService from '../Pages/services/socket';
 import AiAssistance from './AIAssistantPage';
 
 const TechnicianPortal = () => {
-  const { user, logout: authLogout } = useAuth();
+  const { user, logoutUser: authLogout } = useAppContext();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [notifications, setNotifications] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');

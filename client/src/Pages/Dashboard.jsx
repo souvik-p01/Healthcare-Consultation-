@@ -10,14 +10,20 @@ const Dashboard = () => {
   useEffect(() => {
     if (!loading && !user) {
       navigate('/login');
+      return;
     }
     
-    // Check if profile needs completion
     if (user && !loading) {
       const needsCompletion = checkProfileCompletion(user, userRole);
       if (needsCompletion) {
         navigate('/complete-profile');
+        return;
       }
+      // Redirect to role-specific portal
+      if (userRole === 'patient') navigate('/patient-portal', { replace: true });
+      else if (userRole === 'doctor') navigate('/doctor-portal', { replace: true });
+      else if (userRole === 'technician') navigate('/technician-portal', { replace: true });
+      else if (userRole === 'admin') navigate('/admin', { replace: true });
     }
   }, [user, userRole, loading, navigate, checkProfileCompletion]);
 

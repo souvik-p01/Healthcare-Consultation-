@@ -1,31 +1,29 @@
-const express = require('express');
-const {
-  getDashboard,
-  getTechnicianTests,
-  startTest,
-  completeTest,
-  getTechnicianEquipment,
-  controlEquipment,
-  updateProfile,
-  getPerformanceMetrics
-} = require('../controllers/technicianController');
-const { protect, authorize } = require('../middleware/auth');
-const { isTechnician } = require('../middleware/roleCheck');
+import { Router } from 'express';
+import { verifyJWT } from '../middlewares/auth.middleware.js';
+import { restrictTo } from '../middlewares/auth.middleware.js';
+import {
+    getTechnicianDashboard,
+    getTechnicianTests,
+    startTest,
+    completeTest,
+    getTechnicianEquipment,
+    controlEquipment,
+    updateTechnicianProfile,
+    getPerformanceMetrics,
+} from '../controllers/technician.controller.js';
 
-const router = express.Router();
+const router = Router();
 
-// All routes require authentication and technician role
-router.use(protect);
-router.use(authorize('technician'));
-router.use(isTechnician);
+router.use(verifyJWT);
+router.use(restrictTo('technician', 'admin'));
 
-router.get('/dashboard', getDashboard);
+router.get('/dashboard', getTechnicianDashboard);
 router.get('/tests', getTechnicianTests);
 router.post('/tests/:id/start', startTest);
 router.post('/tests/:id/complete', completeTest);
 router.get('/equipment', getTechnicianEquipment);
 router.post('/equipment/:id/control', controlEquipment);
-router.put('/profile', updateProfile);
+router.put('/profile', updateTechnicianProfile);
 router.get('/performance', getPerformanceMetrics);
 
-module.exports = router;
+export default router;

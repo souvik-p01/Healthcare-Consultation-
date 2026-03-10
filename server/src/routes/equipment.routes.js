@@ -1,37 +1,36 @@
-const express = require('express');
-const {
-  getEquipment,
-  getEquipmentById,
-  createEquipment,
-  updateEquipment,
-  deleteEquipment,
-  scheduleMaintenance,
-  completeMaintenance,
-  createAlert,
-  resolveAlert,
-  getEquipmentStatistics
-} = require('../controllers/equipmentController');
-const { protect, authorize } = require('../middleware/auth');
+import { Router } from 'express';
+import { verifyJWT, restrictTo } from '../middlewares/auth.middleware.js';
+import {
+    getEquipment,
+    getEquipmentById,
+    createEquipment,
+    updateEquipment,
+    deleteEquipment,
+    scheduleMaintenance,
+    completeMaintenance,
+    createAlert,
+    resolveAlert,
+    getEquipmentStatistics,
+} from '../controllers/equipment.controller.js';
 
-const router = express.Router();
+const router = Router();
 
-router.use(protect);
+router.use(verifyJWT);
 
 router.route('/')
-  .get(authorize('technician', 'admin', 'supervisor'), getEquipment)
-  .post(authorize('admin', 'supervisor'), createEquipment);
+    .get(restrictTo('technician', 'admin'), getEquipment)
+    .post(restrictTo('admin'), createEquipment);
 
-router.route('/stats')
-  .get(authorize('technician', 'admin', 'supervisor'), getEquipmentStatistics);
+router.get('/stats', restrictTo('technician', 'admin'), getEquipmentStatistics);
 
 router.route('/:id')
-  .get(authorize('technician', 'admin', 'supervisor'), getEquipmentById)
-  .put(authorize('technician', 'admin', 'supervisor'), updateEquipment)
-  .delete(authorize('admin'), deleteEquipment);
+    .get(restrictTo('technician', 'admin'), getEquipmentById)
+    .put(restrictTo('technician', 'admin'), updateEquipment)
+    .delete(restrictTo('admin'), deleteEquipment);
 
-router.post('/:id/maintenance', authorize('technician', 'admin', 'supervisor'), scheduleMaintenance);
-router.post('/:id/maintenance/complete', authorize('technician', 'admin', 'supervisor'), completeMaintenance);
-router.post('/:id/alerts', authorize('technician', 'admin', 'supervisor'), createAlert);
-router.put('/:id/alerts/:alertId/resolve', authorize('technician', 'admin', 'supervisor'), resolveAlert);
+router.post('/:id/maintenance', restrictTo('technician', 'admin'), scheduleMaintenance);
+router.post('/:id/maintenance/complete', restrictTo('technician', 'admin'), completeMaintenance);
+router.post('/:id/alerts', restrictTo('technician', 'admin'), createAlert);
+router.put('/:id/alerts/:alertId/resolve', restrictTo('technician', 'admin'), resolveAlert);
 
-module.exports = router;
+export default router;

@@ -29,7 +29,7 @@ const getApiBaseUrl = () => {
     }
     
     // Default development URL
-    return 'http://localhost:5000/api/v1';
+    return (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000') + '/api/v1';
 };
 
 const API_BASE_URL = getApiBaseUrl();
