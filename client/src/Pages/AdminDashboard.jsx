@@ -15,7 +15,9 @@ import {
   UserPlus, UserMinus, Lock, Unlock, Mail
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL
+  ? `${import.meta.env.VITE_BACKEND_URL}/api/v1`
+  : 'http://localhost:8000/api/v1';
 
 // Custom Components
 const LoadingSpinner = () => (
@@ -196,6 +198,8 @@ const AdminDashboard = () => {
       setIsAuthenticated(true);
       localStorage.setItem('adminToken', data.data.accessToken);
       localStorage.setItem('adminUser', JSON.stringify(data.data.user));
+      localStorage.setItem('accessToken', data.data.accessToken);
+      localStorage.setItem('user', JSON.stringify(data.data.user));
       
       showNotification('Login successful!', 'success');
     } catch (err) {
@@ -397,13 +401,16 @@ const AdminDashboard = () => {
 
   // Initialize
   useEffect(() => {
-    const savedToken = localStorage.getItem('adminToken');
-    const savedUser = localStorage.getItem('adminUser');
+    const savedToken = localStorage.getItem('adminToken') || localStorage.getItem('accessToken');
+    const savedUser = localStorage.getItem('adminUser') || localStorage.getItem('user');
     
     if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUserInfo(JSON.parse(savedUser));
-      setIsAuthenticated(true);
+      const parsedUser = JSON.parse(savedUser);
+      if (parsedUser.role === 'admin') {
+        setToken(savedToken);
+        setUserInfo(parsedUser);
+        setIsAuthenticated(true);
+      }
     }
   }, []);
 

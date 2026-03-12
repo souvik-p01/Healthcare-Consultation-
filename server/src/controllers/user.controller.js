@@ -100,7 +100,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
     // 2. ✅ ADDED: Backend Role Validation
     // Only allow specific roles for public registration
-    const allowedRoles = ["patient", "doctor", "nurse"];
+    const allowedRoles = ["patient", "doctor", "nurse", "technician"];
     
     if (!allowedRoles.includes(role)) {
         throw new ApiError(

@@ -5,9 +5,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const razorpayInstance = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
+const getRazorpayInstance = () => new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID || 'placeholder',
+    key_secret: process.env.RAZORPAY_KEY_SECRET || 'placeholder',
 });
 
 /**
@@ -20,7 +20,7 @@ export const createRazorpayOrder = async ({ amount, currency = 'INR', receipt })
         receipt: receipt || `receipt_${Date.now()}`,
         payment_capture: 1,
     };
-    return await razorpayInstance.orders.create(options);
+    return await getRazorpayInstance().orders.create(options);
 };
 
 /**
@@ -39,14 +39,14 @@ export const verifyRazorpaySignature = (orderId, paymentId, signature) => {
  * Fetch payment details from Razorpay
  */
 export const fetchRazorpayPayment = async (paymentId) => {
-    return await razorpayInstance.payments.fetch(paymentId);
+    return await getRazorpayInstance().payments.fetch(paymentId);
 };
 
 /**
  * Refund a payment
  */
 export const refundRazorpayPayment = async (paymentId, amount, notes = {}) => {
-    return await razorpayInstance.payments.refund(paymentId, {
+    return await getRazorpayInstance().payments.refund(paymentId, {
         amount: Math.round(amount * 100),
         notes,
     });

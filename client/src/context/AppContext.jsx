@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import axios from 'axios';
+import { paymentAPI } from '../Pages/services/api';
 
 // Create the context
 export const AppContext = createContext();
@@ -279,28 +280,58 @@ export const AppContextProvider = ({ children }) => {
     }
   };
 
+  // Payment APIs
+  const createPaymentOrder = async (data) => {
+    try {
+      const response = await paymentAPI.createOrder(data);
+      return response.data;
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to create payment order');
+      throw error;
+    }
+  };
+
+  const confirmPayment = async (data) => {
+    try {
+      const response = await paymentAPI.confirmPayment(data);
+      toast.success('Payment confirmed successfully!');
+      return response.data;
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Payment confirmation failed');
+      throw error;
+    }
+  };
+
+  const getPayments = async (params) => {
+    try {
+      const response = await paymentAPI.getPayments(params);
+      return response.data;
+    } catch (error) {
+      toast.error('Failed to fetch payments');
+      throw error;
+    }
+  };
+
   // Initialize user on app load
   useEffect(() => {
-    if (token) {
+    const storedToken = localStorage.getItem('accessToken');
+    if (storedToken) {
       getCurrentUser().catch(() => {
-        // If getting current user fails, clear token
         setToken(null);
         localStorage.removeItem('accessToken');
       });
     }
-  }, [token]);
+  }, []); // run once on mount
 
   // Auto-refresh token before expiry
   useEffect(() => {
-    if (token) {
-      const interval = setInterval(() => {
-        refreshToken().catch(() => {
-          console.log('Token refresh failed, user will need to login again');
-        });
-      }, 14 * 60 * 1000); // Refresh every 14 minutes (token expires in 15 minutes)
-
-      return () => clearInterval(interval);
-    }
+    if (!token) return;
+    const interval = setInterval(() => {
+      refreshToken().catch(() => {
+        console.log('Token refresh failed, user will need to login again');
+      });
+    }, 14 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [token]);
 
   const value = {
@@ -335,6 +366,11 @@ export const AppContextProvider = ({ children }) => {
     getAllDoctors,
     getDashboardStats,
     getAllUsers,
+    
+    // Payment APIs
+    createPaymentOrder,
+    confirmPayment,
+    getPayments,
     
     // Utility
     apiCall,

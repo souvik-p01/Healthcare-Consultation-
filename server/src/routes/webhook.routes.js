@@ -1,55 +1,47 @@
-/**
- * Webhook Routes - Handle payment webhooks from Razorpay
- * 
- * This file contains routes for handling webhook callbacks from payment gateways.
- * Webhooks are used to receive real-time updates about payment events.
- */
-
-import express from "express";
-import { handleRazorpayWebhook } from "../controllers/webhook.controller.js";
-import logger from "../utils/logger.js"; // Changed to default import
+import express from 'express';
+import crypto from 'crypto';
+import { Payment } from '../models/payment.model.js';
 
 const router = express.Router();
 
-/**
- * Razorpay webhook endpoint
- * 
- * This endpoint receives webhook events from Razorpay for:
- * - payment.authorized
- * - payment.captured
- * - payment.failed
- * - payment.refunded
- * - order.paid
- * - subscription.charged
- * 
- * IMPORTANT: This route must use raw body parser, not JSON parser
- */
-router.post("/razorpay", 
-    express.raw({ type: 'application/json' }), 
-    handleRazorpayWebhook
-);
+router.post('/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        const signature = req.headers['x-razorpay-signature'];
+        const body = req.body;
 
-/**
- * Test webhook endpoint (for development/testing)
- */
-router.get("/test", (req, res) => {
-    logger.info("Webhook test endpoint called");
-    res.status(200).json({
-        success: true,
-        message: "Webhook endpoint is working",
-        timestamp: new Date().toISOString()
-    });
+        const expectedSignature = crypto
+            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+            .update(body)
+            .digest('hex');
+
+        if (signature !== expectedSignature) {
+            return res.status(400).json({ success: false, message: 'Invalid signature' });
+        }
+
+        const event = JSON.parse(body);
+
+        if (event.event === 'payment.captured') {
+            const { order_id, id: payment_id } = event.payload.payment.entity;
+            await Payment.findOneAndUpdate(
+                { gatewayReference: order_id },
+                { status: 'completed', transactionId: payment_id }
+            );
+        } else if (event.event === 'payment.failed') {
+            const { order_id } = event.payload.payment.entity;
+            await Payment.findOneAndUpdate(
+                { gatewayReference: order_id },
+                { status: 'failed' }
+            );
+        }
+
+        res.status(200).json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 });
 
-/**
- * Webhook health check
- */
-router.get("/health", (req, res) => {
-    res.status(200).json({
-        success: true,
-        message: "Webhook service is healthy",
-        timestamp: new Date().toISOString()
-    });
+router.get('/test', (req, res) => {
+    res.status(200).json({ success: true, message: 'Webhook endpoint is working', timestamp: new Date().toISOString() });
 });
 
 export default router;

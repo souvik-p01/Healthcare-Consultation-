@@ -1,6 +1,5 @@
 import express from 'express';
-import { verifyJWT } from '../middlewares/auth.middleware.js';
-import { authorize } from '../middlewares/role.middleware.js';
+import { verifyJWT, restrictTo } from '../middlewares/auth.middleware.js';
 import {
     getUserNotifications,
     getUnreadNotifications,
@@ -41,6 +40,13 @@ router.route('/preferences')
 router.route('/test')
     .post(sendTestNotification);
 
+// Static routes MUST come before parameterized routes
+router.route('/mark-all-read')
+    .patch(markAllNotificationsAsRead);
+
+router.route('/clear-all')
+    .delete(clearAllNotifications);
+
 // Notification-specific routes
 router.route('/:notificationId')
     .get(getNotificationById)
@@ -49,23 +55,17 @@ router.route('/:notificationId')
 router.route('/:notificationId/read')
     .patch(markNotificationAsRead);
 
-router.route('/mark-all-read')
-    .patch(markAllNotificationsAsRead);
-
-router.route('/clear-all')
-    .delete(clearAllNotifications);
-
 // Admin-only routes
 router.route('/manual')
-    .post(authorize('admin'), createManualNotification);
+    .post(restrictTo('admin'), createManualNotification);
 
 router.route('/statistics')
-    .get(authorize('admin'), getNotificationStatistics);
+    .get(restrictTo('admin'), getNotificationStatistics);
 
 router.route('/templates')
-    .get(authorize('admin'), getNotificationTemplates);
+    .get(restrictTo('admin'), getNotificationTemplates);
 
 router.route('/:notificationId/retry')
-    .post(authorize('admin'), retryFailedNotification);
+    .post(restrictTo('admin'), retryFailedNotification);
 
 export default router;
