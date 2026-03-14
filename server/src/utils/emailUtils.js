@@ -10,6 +10,8 @@
  * - Prescription notifications
  * - Medical report delivery
  * - Emergency notifications
+ * - Payment confirmations
+ * - Payment receipts
  * - Email audit logging
  * - Secure email handling
  * - Error handling and retry mechanisms
@@ -39,7 +41,10 @@ const EMAIL_CONFIG = {
         NOTIFICATION: 'notification',
         VERIFICATION: 'verification',
         EMERGENCY: 'emergency',
-        WELCOME: 'welcome'
+        WELCOME: 'welcome',
+        INVOICE: 'invoice',
+        PAYMENT: 'payment',
+        RECEIPT: 'receipt' // Added receipt category
     }
 };
 
@@ -166,7 +171,10 @@ const generateEmailTemplate = (content, title, category = 'notification') => {
         'verification': '#28a745',
         'welcome': '#2c5aa0',
         'notification': '#6c757d',
-        'emergency': '#dc3545'
+        'emergency': '#dc3545',
+        'invoice': '#ffc107',
+        'payment': '#28a745',
+        'receipt': '#17a2b8' // Added receipt color
     }[category] || '#2c5aa0';
 
     return `
@@ -241,6 +249,13 @@ const generateEmailTemplate = (content, title, category = 'notification') => {
                 border-left: 4px solid ${backgroundColor};
                 margin: 20px 0;
             }
+            .success-box {
+                background: #d4edda;
+                padding: 20px;
+                border-radius: 6px;
+                border-left: 4px solid #28a745;
+                margin: 20px 0;
+            }
             .warning-box {
                 background: #fff3cd;
                 border: 1px solid #ffeaa7;
@@ -271,6 +286,48 @@ const generateEmailTemplate = (content, title, category = 'notification') => {
             .feature h4 {
                 margin: 0 0 10px 0;
                 color: #2c5aa0;
+            }
+            .invoice-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+            }
+            .invoice-table th {
+                background: #f8f9fa;
+                padding: 12px;
+                text-align: left;
+                border-bottom: 2px solid #dee2e6;
+            }
+            .invoice-table td {
+                padding: 12px;
+                border-bottom: 1px solid #dee2e6;
+            }
+            .invoice-table tfoot td {
+                font-weight: bold;
+                background: #f8f9fa;
+            }
+            .invoice-total {
+                font-size: 20px;
+                color: ${backgroundColor};
+                text-align: right;
+                margin: 20px 0;
+            }
+            .receipt-details {
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+                border: 1px dashed #17a2b8;
+            }
+            .receipt-header {
+                text-align: center;
+                margin-bottom: 20px;
+                padding-bottom: 20px;
+                border-bottom: 2px solid #17a2b8;
+            }
+            .receipt-header h2 {
+                color: #17a2b8;
+                margin: 10px 0;
             }
             @media (max-width: 600px) {
                 .content { padding: 30px 20px; }
@@ -557,6 +614,468 @@ export const sendAppointmentReminder = async (patientEmail, appointmentData, opt
     } catch (error) {
         console.error('❌ Failed to send appointment reminder:', error);
         throw new Error(`Appointment reminder email failed: ${error.message}`);
+    }
+};
+
+/**
+ * Send payment confirmation email
+ */
+export const sendPaymentConfirmation = async (patientEmail, paymentData, options = {}) => {
+    try {
+        const emailId = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const content = `
+            <h2>Hello ${paymentData.patientName},</h2>
+            
+            <div class="success-box" style="text-align: center;">
+                <h3>✅ Payment Successful!</h3>
+                <p style="font-size: 18px;">Thank you for your payment</p>
+            </div>
+            
+            <div class="info-box">
+                <h3>💰 Payment Details</h3>
+                <p><strong>Transaction ID:</strong> ${paymentData.transactionId}</p>
+                <p><strong>Payment Date:</strong> ${paymentData.paymentDate}</p>
+                <p><strong>Payment Method:</strong> ${paymentData.paymentMethod}</p>
+                <p><strong>Amount Paid:</strong> $${paymentData.amount.toFixed(2)}</p>
+                <p><strong>Invoice Number:</strong> ${paymentData.invoiceNumber}</p>
+                <p><strong>Payment Status:</strong> <span style="color: #28a745;">${paymentData.paymentStatus}</span></p>
+            </div>
+            
+            ${paymentData.invoiceDetails ? `
+            <h3>Invoice Summary:</h3>
+            <table class="invoice-table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Consultation Fee</td>
+                        <td>$${paymentData.invoiceDetails.consultationFee?.toFixed(2) || '0.00'}</td>
+                    </tr>
+                    ${paymentData.invoiceDetails.additionalCharges ? Object.entries(paymentData.invoiceDetails.additionalCharges).map(([key, value]) => `
+                    <tr>
+                        <td>${key}</td>
+                        <td>$${value.toFixed(2)}</td>
+                    </tr>
+                    `).join('') : ''}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td><strong>Total Paid</strong></td>
+                        <td><strong>$${paymentData.amount.toFixed(2)}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+            ` : ''}
+            
+            <div class="info-box">
+                <h4>📋 What's Next?</h4>
+                <ul>
+                    <li>A receipt has been sent to your email</li>
+                    <li>You can view your payment history in your patient portal</li>
+                    <li>For any questions about this payment, please contact our billing department</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${paymentData.receiptLink || '#'}" class="button">View Receipt</a>
+                <a href="${paymentData.portalLink || '#'}" class="button button-secondary">Go to Patient Portal</a>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
+            to: patientEmail,
+            subject: `Payment Confirmation - Transaction ${paymentData.transactionId}`,
+            html: generateEmailTemplate(content, 'Payment Confirmation', 'payment'),
+            priority: 'high',
+            attachments: paymentData.attachments || [],
+            headers: {
+                'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.PAYMENT,
+                'X-Email-ID': emailId,
+                'X-Transaction-ID': paymentData.transactionId,
+                'X-Invoice-Number': paymentData.invoiceNumber,
+                'X-Patient-ID': paymentData.patientId || 'unknown'
+            }
+        };
+        
+        const result = await sendEmail(mailOptions, {
+            emailId,
+            category: EMAIL_CONFIG.CATEGORIES.PAYMENT,
+            recipientType: 'patient',
+            template: 'payment-confirmation',
+            sentBy: options.sentBy || 'billing-system',
+            recipient: patientEmail
+        });
+        
+        console.log('✅ Payment confirmation email sent:', {
+            emailId,
+            patientEmail: patientEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
+            transactionId: paymentData.transactionId,
+            amount: paymentData.amount
+        });
+        
+        return {
+            success: true,
+            emailId,
+            messageId: result.messageId,
+            category: EMAIL_CONFIG.CATEGORIES.PAYMENT,
+            transactionId: paymentData.transactionId
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to send payment confirmation:', error);
+        throw new Error(`Payment confirmation email failed: ${error.message}`);
+    }
+};
+
+/**
+ * Send payment receipt email
+ */
+export const sendPaymentReceipt = async (patientEmail, receiptData, options = {}) => {
+    try {
+        const emailId = `RECEIPT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const content = `
+            <div class="receipt-header">
+                <h2>🧾 Payment Receipt</h2>
+                <p>Thank you for your payment</p>
+            </div>
+            
+            <div class="receipt-details">
+                <h3 style="text-align: center; color: #17a2b8; margin-bottom: 20px;">RECEIPT</h3>
+                
+                <p><strong>Receipt Number:</strong> ${receiptData.receiptNumber}</p>
+                <p><strong>Date:</strong> ${receiptData.receiptDate}</p>
+                <p><strong>Transaction ID:</strong> ${receiptData.transactionId}</p>
+                <p><strong>Payment Method:</strong> ${receiptData.paymentMethod}</p>
+                
+                <hr style="margin: 20px 0;">
+                
+                <h4>Patient Information:</h4>
+                <p><strong>Name:</strong> ${receiptData.patientName}</p>
+                <p><strong>Email:</strong> ${receiptData.patientEmail}</p>
+                <p><strong>Patient ID:</strong> ${receiptData.patientId}</p>
+                
+                <hr style="margin: 20px 0;">
+                
+                <h4>Payment Details:</h4>
+                <table style="width: 100%;">
+                    <tr>
+                        <td><strong>Description:</strong></td>
+                        <td>${receiptData.description || 'Healthcare Services'}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Amount:</strong></td>
+                        <td>$${receiptData.amount.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Tax:</strong></td>
+                        <td>$${receiptData.tax?.toFixed(2) || '0.00'}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total:</strong></td>
+                        <td><strong>$${receiptData.total?.toFixed(2) || receiptData.amount.toFixed(2)}</strong></td>
+                    </tr>
+                </table>
+                
+                <hr style="margin: 20px 0;">
+                
+                <p><strong>Invoice Reference:</strong> ${receiptData.invoiceNumber || 'N/A'}</p>
+                <p><strong>Appointment Reference:</strong> ${receiptData.appointmentId || 'N/A'}</p>
+                
+                <div style="background: #e8f4f8; padding: 15px; border-radius: 6px; margin-top: 20px;">
+                    <p style="margin: 0; text-align: center;">This is an official receipt for your healthcare payment. Please retain this for your records.</p>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${receiptData.downloadLink || '#'}" class="button">Download PDF Receipt</a>
+                <a href="${receiptData.printLink || '#'}" class="button button-secondary">Print Receipt</a>
+            </div>
+            
+            <div class="security-notice">
+                <p><strong>🔒 This is an official receipt for tax and insurance purposes.</strong></p>
+                <p>For any discrepancies, please contact our billing department within 30 days.</p>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
+            to: patientEmail,
+            subject: `Payment Receipt - ${receiptData.receiptNumber}`,
+            html: generateEmailTemplate(content, 'Payment Receipt', 'receipt'),
+            priority: 'high',
+            attachments: receiptData.attachments || [],
+            headers: {
+                'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.RECEIPT,
+                'X-Email-ID': emailId,
+                'X-Receipt-Number': receiptData.receiptNumber,
+                'X-Transaction-ID': receiptData.transactionId,
+                'X-Patient-ID': receiptData.patientId || 'unknown'
+            }
+        };
+        
+        const result = await sendEmail(mailOptions, {
+            emailId,
+            category: EMAIL_CONFIG.CATEGORIES.RECEIPT,
+            recipientType: 'patient',
+            template: 'payment-receipt',
+            sentBy: options.sentBy || 'billing-system',
+            recipient: patientEmail
+        });
+        
+        console.log('✅ Payment receipt email sent:', {
+            emailId,
+            patientEmail: patientEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
+            receiptNumber: receiptData.receiptNumber,
+            amount: receiptData.amount
+        });
+        
+        return {
+            success: true,
+            emailId,
+            messageId: result.messageId,
+            category: EMAIL_CONFIG.CATEGORIES.RECEIPT,
+            receiptNumber: receiptData.receiptNumber
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to send payment receipt:', error);
+        throw new Error(`Payment receipt email failed: ${error.message}`);
+    }
+};
+
+/**
+ * Send refund confirmation email
+ */
+export const sendRefundConfirmation = async (patientEmail, refundData, options = {}) => {
+    try {
+        const emailId = `REFUND-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const content = `
+            <h2>Hello ${refundData.patientName},</h2>
+            
+            <div class="info-box" style="background: #f8d7da; border-left-color: #dc3545;">
+                <h3 style="color: #dc3545;">↩️ Refund Processed</h3>
+                <p>Your refund has been successfully processed.</p>
+            </div>
+            
+            <div class="info-box">
+                <h3>💰 Refund Details</h3>
+                <p><strong>Refund ID:</strong> ${refundData.refundId}</p>
+                <p><strong>Original Transaction ID:</strong> ${refundData.originalTransactionId}</p>
+                <p><strong>Refund Date:</strong> ${refundData.refundDate}</p>
+                <p><strong>Refund Method:</strong> ${refundData.refundMethod}</p>
+                <p><strong>Refund Amount:</strong> $${refundData.amount.toFixed(2)}</p>
+                <p><strong>Reason:</strong> ${refundData.reason}</p>
+                <p><strong>Status:</strong> <span style="color: #28a745;">${refundData.status}</span></p>
+            </div>
+            
+            <div class="warning-box">
+                <h4>📋 Important Information:</h4>
+                <ul>
+                    <li>Refund may take 5-10 business days to appear in your account</li>
+                    <li>You will receive a separate confirmation from your bank</li>
+                    <li>Contact your bank for questions about refund timing</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${refundData.supportLink || '#'}" class="button">Contact Support</a>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
+            to: patientEmail,
+            subject: `Refund Confirmation - ${refundData.refundId}`,
+            html: generateEmailTemplate(content, 'Refund Confirmation', 'payment'),
+            priority: 'high',
+            headers: {
+                'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.PAYMENT,
+                'X-Email-ID': emailId,
+                'X-Refund-ID': refundData.refundId,
+                'X-Patient-ID': refundData.patientId || 'unknown'
+            }
+        };
+        
+        const result = await sendEmail(mailOptions, {
+            emailId,
+            category: EMAIL_CONFIG.CATEGORIES.PAYMENT,
+            recipientType: 'patient',
+            template: 'refund-confirmation',
+            sentBy: options.sentBy || 'billing-system',
+            recipient: patientEmail
+        });
+        
+        console.log('✅ Refund confirmation email sent:', {
+            emailId,
+            patientEmail: patientEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
+            refundId: refundData.refundId,
+            amount: refundData.amount
+        });
+        
+        return {
+            success: true,
+            emailId,
+            messageId: result.messageId,
+            category: EMAIL_CONFIG.CATEGORIES.PAYMENT,
+            refundId: refundData.refundId
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to send refund confirmation:', error);
+        throw new Error(`Refund confirmation email failed: ${error.message}`);
+    }
+};
+
+/**
+ * Send invoice email to patient
+ */
+export const sendInvoice = async (patientEmail, invoiceData, options = {}) => {
+    try {
+        const emailId = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Generate invoice items HTML
+        const itemsHtml = invoiceData.items.map(item => `
+            <tr>
+                <td>${item.description}</td>
+                <td>${item.quantity}</td>
+                <td>$${item.price.toFixed(2)}</td>
+                <td>$${(item.quantity * item.price).toFixed(2)}</td>
+            </tr>
+        `).join('');
+
+        const content = `
+            <h2>Hello ${invoiceData.patientName},</h2>
+            <p>Your invoice has been generated for your recent healthcare services.</p>
+            
+            <div class="info-box">
+                <h3>🧾 Invoice Details</h3>
+                <p><strong>Invoice Number:</strong> ${invoiceData.invoiceNumber}</p>
+                <p><strong>Invoice Date:</strong> ${invoiceData.invoiceDate}</p>
+                <p><strong>Due Date:</strong> ${invoiceData.dueDate}</p>
+                <p><strong>Payment Status:</strong> ${invoiceData.paymentStatus}</p>
+            </div>
+            
+            <h3>Services Provided:</h3>
+            <table class="invoice-table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Quantity</th>
+                        <th>Unit Price</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" style="text-align: right;"><strong>Subtotal:</strong></td>
+                        <td>$${invoiceData.subtotal.toFixed(2)}</td>
+                    </tr>
+                    ${invoiceData.discountAmount > 0 ? `
+                    <tr>
+                        <td colspan="3" style="text-align: right;"><strong>Discount (${invoiceData.discountRate}%):</strong></td>
+                        <td>-$${invoiceData.discountAmount.toFixed(2)}</td>
+                    </tr>
+                    ` : ''}
+                    ${invoiceData.taxAmount > 0 ? `
+                    <tr>
+                        <td colspan="3" style="text-align: right;"><strong>Tax (${invoiceData.taxRate}%):</strong></td>
+                        <td>$${invoiceData.taxAmount.toFixed(2)}</td>
+                    </tr>
+                    ` : ''}
+                    <tr>
+                        <td colspan="3" style="text-align: right;"><strong>Total:</strong></td>
+                        <td><strong>$${invoiceData.total.toFixed(2)}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <div class="invoice-total">
+                Amount Due: $${invoiceData.total.toFixed(2)}
+            </div>
+            
+            ${invoiceData.paymentStatus === 'pending' ? `
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${invoiceData.paymentLink || '#'}" class="button">Pay Now</a>
+                <a href="${invoiceData.downloadLink || '#'}" class="button button-secondary">Download PDF</a>
+            </div>
+            
+            <div class="warning-box">
+                <h4>📌 Payment Information:</h4>
+                <ul>
+                    <li>Please make payment by the due date to avoid late fees</li>
+                    <li>We accept all major credit cards and insurance payments</li>
+                    <li>Contact our billing department for payment plans or questions</li>
+                    <li>Your invoice is also available in your patient portal</li>
+                </ul>
+            </div>
+            ` : invoiceData.paymentStatus === 'paid' ? `
+            <div class="info-box" style="background: #d4edda; border-left-color: #28a745;">
+                <h4 style="color: #28a745;">✅ Payment Received</h4>
+                <p>Thank you for your payment. A receipt has been sent separately.</p>
+            </div>
+            ` : ''}
+            
+            ${invoiceData.notes ? `
+            <div class="info-box">
+                <h4>📝 Notes:</h4>
+                <p>${invoiceData.notes}</p>
+            </div>
+            ` : ''}
+        `;
+
+        const mailOptions = {
+            from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
+            to: patientEmail,
+            subject: `Invoice ${invoiceData.invoiceNumber} from Healthcare System`,
+            html: generateEmailTemplate(content, `Invoice #${invoiceData.invoiceNumber}`, 'invoice'),
+            priority: 'high',
+            attachments: invoiceData.attachments || [],
+            headers: {
+                'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.INVOICE,
+                'X-Email-ID': emailId,
+                'X-Invoice-Number': invoiceData.invoiceNumber,
+                'X-Patient-ID': invoiceData.patientId || 'unknown'
+            }
+        };
+        
+        const result = await sendEmail(mailOptions, {
+            emailId,
+            category: EMAIL_CONFIG.CATEGORIES.INVOICE,
+            recipientType: 'patient',
+            template: 'invoice',
+            sentBy: options.sentBy || 'billing-system',
+            recipient: patientEmail
+        });
+        
+        console.log('✅ Invoice email sent:', {
+            emailId,
+            patientEmail: patientEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
+            invoiceNumber: invoiceData.invoiceNumber,
+            amount: invoiceData.total
+        });
+        
+        return {
+            success: true,
+            emailId,
+            messageId: result.messageId,
+            category: EMAIL_CONFIG.CATEGORIES.INVOICE,
+            invoiceNumber: invoiceData.invoiceNumber
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to send invoice email:', error);
+        throw new Error(`Invoice email failed: ${error.message}`);
     }
 };
 

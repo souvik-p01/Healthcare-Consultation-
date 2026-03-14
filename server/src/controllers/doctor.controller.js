@@ -40,13 +40,7 @@ const getDoctorProfile = asyncHandler(async (req, res) => {
         .select("-password -refreshToken")
         .populate({
             path: 'doctorId',
-            populate: [
-                { path: 'specialties' },
-                { path: 'educations' },
-                { path: 'experiences' },
-                { path: 'certifications' },
-                { path: 'schedules' }
-            ]
+            select: '-__v -createdAt -updatedAt'
         })
         .lean();
 
@@ -58,17 +52,25 @@ const getDoctorProfile = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Doctor profile not found");
     }
 
-    console.log('✅ Doctor profile fetched successfully:', user.doctorId.medicalLicense);
+    // Format response for frontend
+    const doctorProfile = {
+        ...user.doctorId,
+        fullName: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        avatar: user.avatar,
+        userId: user._id,
+        name: `${user.firstName} ${user.lastName}`
+    };
+
+    console.log('✅ Doctor profile fetched successfully');
 
     return res
         .status(200)
         .json(
             new ApiResponse(
                 200,
-                {
-                    user: user,
-                    doctor: user.doctorId
-                },
+                doctorProfile,
                 "Doctor profile fetched successfully"
             )
         );
@@ -85,26 +87,25 @@ const updateDoctorProfile = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const {
         // Professional information
-        specialization,
+        specializations,
         qualifications,
-        department,
-        experience,
         consultationFee,
+        followUpFee,
+        experience,
         bio,
         // Contact information
         officePhone,
         emergencyContact,
         // Schedule and availability
-        workingHours,
-        availableDays,
-        breakTimes,
+        schedule,
+        availability,
         // Professional details
         awards,
         publications,
         languages,
         // Service information
-        servicesOffered,
-        treatmentApproach
+        consultationTypes,
+        currency = 'INR'
     } = req.body;
 
     console.log("✏ Updating doctor profile for user:", userId);
@@ -119,21 +120,21 @@ const updateDoctorProfile = asyncHandler(async (req, res) => {
     const doctorUpdateData = {};
     
     // Professional information
-    if (specialization) doctorUpdateData.specialization = specialization;
+    if (specializations) doctorUpdateData.specializations = specializations;
     if (qualifications) doctorUpdateData.qualifications = qualifications;
-    if (department) doctorUpdateData.department = department;
-    if (experience) doctorUpdateData.experience = experience;
     if (consultationFee) doctorUpdateData.consultationFee = consultationFee;
+    if (followUpFee) doctorUpdateData.followUpFee = followUpFee;
+    if (experience) doctorUpdateData.experience = experience;
     if (bio) doctorUpdateData.bio = bio;
+    if (currency) doctorUpdateData.currency = currency;
     
     // Contact information
     if (officePhone) doctorUpdateData.officePhone = officePhone;
     if (emergencyContact) doctorUpdateData.emergencyContact = emergencyContact;
     
     // Schedule and availability
-    if (workingHours) doctorUpdateData.workingHours = workingHours;
-    if (availableDays) doctorUpdateData.availableDays = availableDays;
-    if (breakTimes) doctorUpdateData.breakTimes = breakTimes;
+    if (schedule) doctorUpdateData.schedule = schedule;
+    if (availability) doctorUpdateData.availability = availability;
     
     // Professional details
     if (awards) doctorUpdateData.awards = awards;
@@ -141,8 +142,7 @@ const updateDoctorProfile = asyncHandler(async (req, res) => {
     if (languages) doctorUpdateData.languages = languages;
     
     // Service information
-    if (servicesOffered) doctorUpdateData.servicesOffered = servicesOffered;
-    if (treatmentApproach) doctorUpdateData.treatmentApproach = treatmentApproach;
+    if (consultationTypes) doctorUpdateData.consultationTypes = consultationTypes;
 
     if (Object.keys(doctorUpdateData).length === 0) {
         throw new ApiError(400, "At least one field is required to update");
@@ -153,18 +153,25 @@ const updateDoctorProfile = asyncHandler(async (req, res) => {
         user.doctorId,
         { $set: doctorUpdateData },
         { new: true, runValidators: true }
-    ).populate('specialties educations experiences certifications schedules');
+    );
 
-    console.log('✅ Doctor profile updated successfully:', updatedDoctor.medicalLicense);
+    // Format response for frontend
+    const responseData = {
+        ...updatedDoctor.toObject(),
+        fullName: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        avatar: user.avatar
+    };
+
+    console.log('✅ Doctor profile updated successfully');
 
     return res
         .status(200)
         .json(
             new ApiResponse(
                 200,
-                {
-                    doctor: updatedDoctor
-                },
+                responseData,
                 "Doctor profile updated successfully"
             )
         );
@@ -182,8 +189,7 @@ const getDoctorAppointments = asyncHandler(async (req, res) => {
     const { 
         status, 
         type, 
-        dateFrom, 
-        dateTo, 
+        date, 
         page = 1, 
         limit = 10 
     } = req.query;
@@ -200,13 +206,14 @@ const getDoctorAppointments = asyncHandler(async (req, res) => {
     const query = { doctorId: userId };
     
     if (status) query.status = status;
-    if (type) query.type = type;
+    if (type) query.consultationType = type;
     
-    // Date range filter
-    if (dateFrom || dateTo) {
-        query.appointmentDate = {};
-        if (dateFrom) query.appointmentDate.$gte = new Date(dateFrom);
-        if (dateTo) query.appointmentDate.$lte = new Date(dateTo);
+    // Date filter - support for specific date
+    if (date) {
+        const startDate = new Date(date);
+        const endDate = new Date(date);
+        endDate.setDate(endDate.getDate() + 1);
+        query.appointmentDate = { $gte: startDate, $lt: endDate };
     }
 
     const skip = (page - 1) * limit;
@@ -215,21 +222,43 @@ const getDoctorAppointments = asyncHandler(async (req, res) => {
     const appointments = await Appointment.find(query)
         .populate({
             path: 'patientId',
+            select: 'userId',
             populate: {
                 path: 'userId',
-                select: 'firstName lastName phoneNumber dateOfBirth gender bloodGroup avatar'
+                select: 'firstName lastName phoneNumber dateOfBirth gender avatar'
             }
         })
-        .populate({
-            path: 'medicalRecordId',
-            select: 'recordType diagnosis'
-        })
-        .sort({ appointmentDate: 1, appointmentTime: 1 })
+        .populate('prescriptionId', 'prescriptionNumber diagnosis prescribedDate')
+        .populate('medicalRecordId', 'recordNumber diagnosis recordType')
+        .sort({ appointmentDate: 1, startTime: 1 })
         .skip(skip)
         .limit(parseInt(limit))
         .lean();
 
     const total = await Appointment.countDocuments(query);
+
+    // Format appointments for frontend
+    const formattedAppointments = appointments.map(appointment => ({
+        id: appointment._id,
+        patientId: appointment.patientId?._id,
+        name: appointment.patientId?.userId 
+            ? `${appointment.patientId.userId.firstName} ${appointment.patientId.userId.lastName}`
+            : 'Unknown Patient',
+        time: appointment.startTime && appointment.endTime 
+            ? `${appointment.startTime} - ${appointment.endTime}`
+            : 'Time not set',
+        type: appointment.consultationType || 'in-person',
+        condition: appointment.reason || 'Follow-up',
+        status: appointment.status || 'scheduled',
+        avatar: appointment.patientId?.userId?.avatar || '',
+        age: appointment.patientId?.userId?.dateOfBirth 
+            ? new Date().getFullYear() - new Date(appointment.patientId.userId.dateOfBirth).getFullYear()
+            : 'N/A',
+        gender: appointment.patientId?.userId?.gender || 'N/A',
+        notes: appointment.notes || '',
+        appointmentDate: appointment.appointmentDate,
+        bloodType: appointment.patientId?.bloodGroup || 'N/A'
+    }));
 
     console.log(`✅ Found ${appointments.length} appointments for doctor`);
 
@@ -239,7 +268,7 @@ const getDoctorAppointments = asyncHandler(async (req, res) => {
             new ApiResponse(
                 200,
                 {
-                    appointments,
+                    appointments: formattedAppointments,
                     pagination: {
                         currentPage: parseInt(page),
                         totalPages: Math.ceil(total / limit),
@@ -261,7 +290,7 @@ const getDoctorAppointments = asyncHandler(async (req, res) => {
  */
 const getTodaysAppointments = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const { status = 'scheduled,confirmed', page = 1, limit = 20 } = req.query;
+    const { status = 'confirmed,scheduled', page = 1, limit = 20 } = req.query;
 
     console.log("📅 Fetching today's appointments for doctor:", userId);
 
@@ -293,17 +322,39 @@ const getTodaysAppointments = asyncHandler(async (req, res) => {
     const appointments = await Appointment.find(query)
         .populate({
             path: 'patientId',
+            select: 'userId bloodGroup',
             populate: {
                 path: 'userId',
-                select: 'firstName lastName phoneNumber dateOfBirth gender bloodGroup avatar'
+                select: 'firstName lastName phoneNumber dateOfBirth gender avatar'
             }
         })
-        .sort({ appointmentTime: 1 })
+        .sort({ startTime: 1 })
         .skip(skip)
         .limit(parseInt(limit))
         .lean();
 
     const total = await Appointment.countDocuments(query);
+
+    // Format appointments for frontend
+    const formattedAppointments = appointments.map(appointment => ({
+        id: appointment._id,
+        name: appointment.patientId?.userId 
+            ? `${appointment.patientId.userId.firstName} ${appointment.patientId.userId.lastName}`
+            : 'Unknown Patient',
+        time: appointment.startTime && appointment.endTime 
+            ? `${appointment.startTime} - ${appointment.endTime}`
+            : 'Time not set',
+        type: appointment.consultationType || 'in-person',
+        condition: appointment.reason || 'Follow-up',
+        status: appointment.status,
+        avatar: appointment.patientId?.userId?.avatar || '',
+        age: appointment.patientId?.userId?.dateOfBirth 
+            ? new Date().getFullYear() - new Date(appointment.patientId.userId.dateOfBirth).getFullYear()
+            : 'N/A',
+        gender: appointment.patientId?.userId?.gender || 'N/A',
+        bloodType: appointment.patientId?.bloodGroup || 'N/A',
+        notes: appointment.notes || ''
+    }));
 
     // Group appointments by status for quick overview
     const statusCounts = await Appointment.aggregate([
@@ -325,7 +376,7 @@ const getTodaysAppointments = asyncHandler(async (req, res) => {
                 200,
                 {
                     date: today,
-                    appointments,
+                    appointments: formattedAppointments,
                     summary: statusSummary,
                     pagination: {
                         currentPage: parseInt(page),
@@ -402,16 +453,29 @@ const getDoctorsPatients = asyncHandler(async (req, res) => {
     // Combine appointment stats with patient details
     const patientsWithStats = patients.map(patient => {
         const appointmentStats = patientAppointments.find(
-            pa => pa._id.toString() === patient._id.toString()
+            pa => pa._id && pa._id.toString() === patient._id.toString()
         );
         
         return {
-            ...patient,
-            appointmentStats: {
-                lastAppointment: appointmentStats?.lastAppointment,
-                totalAppointments: appointmentStats?.totalAppointments || 0,
-                completedAppointments: appointmentStats?.completedAppointments || 0
-            }
+            id: patient._id,
+            name: patient.userId 
+                ? `${patient.userId.firstName} ${patient.userId.lastName}`
+                : 'Unknown Patient',
+            email: patient.userId?.email,
+            phoneNumber: patient.userId?.phoneNumber,
+            age: patient.userId?.dateOfBirth 
+                ? new Date().getFullYear() - new Date(patient.userId.dateOfBirth).getFullYear()
+                : 'N/A',
+            gender: patient.userId?.gender,
+            bloodType: patient.bloodGroup,
+            avatar: patient.userId?.avatar,
+            condition: patient.chronicConditions?.[0] || 'General Checkup',
+            lastVisit: appointmentStats?.lastAppointment 
+                ? new Date(appointmentStats.lastAppointment).toLocaleDateString()
+                : 'Never',
+            totalAppointments: appointmentStats?.totalAppointments || 0,
+            completedAppointments: appointmentStats?.completedAppointments || 0,
+            status: appointmentStats?.completedAppointments > 0 ? 'Active' : 'New'
         };
     });
 
@@ -434,6 +498,106 @@ const getDoctorsPatients = asyncHandler(async (req, res) => {
                     }
                 },
                 "Doctor's patients fetched successfully"
+            )
+        );
+});
+
+/**
+ * GET PATIENT DETAILS
+ * Get specific patient details with medical history
+ * 
+ * GET /api/v1/doctors/patients/:patientId
+ * Requires: verifyJWT middleware, doctor role
+ */
+const getPatientDetails = asyncHandler(async (req, res) => {
+    const { patientId } = req.params;
+    const userId = req.user._id;
+
+    console.log("👤 Fetching patient details:", patientId, "by doctor:", userId);
+
+    if (!patientId) {
+        throw new ApiError(400, "Patient ID is required");
+    }
+
+    // Verify that doctor has relationship with this patient (has appointments)
+    const hasRelationship = await Appointment.findOne({
+        doctorId: userId,
+        patientId: patientId
+    });
+
+    if (!hasRelationship) {
+        throw new ApiError(403, "Access denied. No appointment history with this patient.");
+    }
+
+    // Get patient with full details
+    const patient = await Patient.findById(patientId)
+        .populate({
+            path: 'userId',
+            select: 'firstName lastName email phoneNumber dateOfBirth gender avatar'
+        })
+        .lean();
+
+    if (!patient) {
+        throw new ApiError(404, "Patient not found");
+    }
+
+    // Get medical history
+    const medicalRecords = await MedicalRecord.find({ 
+        patientId: patientId 
+    })
+    .populate({
+        path: 'doctorId',
+        select: 'firstName lastName specialization'
+    })
+    .sort({ recordDate: -1 })
+    .limit(10)
+    .lean();
+
+    // Get prescriptions
+    const prescriptions = await Prescription.find({ 
+        patientId: patientId,
+        doctorId: userId
+    })
+    .sort({ prescribedDate: -1 })
+    .limit(10)
+    .lean();
+
+    // Get upcoming appointments
+    const upcomingAppointments = await Appointment.find({
+        patientId: patientId,
+        doctorId: userId,
+        status: { $in: ['scheduled', 'confirmed'] },
+        appointmentDate: { $gte: new Date() }
+    })
+    .sort({ appointmentDate: 1 })
+    .limit(5)
+    .lean();
+
+    const patientDetails = {
+        ...patient,
+        name: patient.userId 
+            ? `${patient.userId.firstName} ${patient.userId.lastName}`
+            : 'Unknown Patient',
+        age: patient.userId?.dateOfBirth 
+            ? new Date().getFullYear() - new Date(patient.userId.dateOfBirth).getFullYear()
+            : 'N/A',
+        gender: patient.userId?.gender,
+        email: patient.userId?.email,
+        phoneNumber: patient.userId?.phoneNumber,
+        medicalHistory: medicalRecords,
+        prescriptions: prescriptions,
+        upcomingAppointments: upcomingAppointments
+    };
+
+    console.log(`✅ Patient details fetched successfully`);
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                patientDetails,
+                "Patient details fetched successfully"
             )
         );
 });
@@ -493,7 +657,7 @@ const getPatientMedicalHistory = asyncHandler(async (req, res) => {
         })
         .populate({
             path: 'appointmentId',
-            select: 'appointmentDate type'
+            select: 'appointmentDate consultationType'
         })
         .sort({ recordDate: -1 })
         .skip(skip)
@@ -617,14 +781,6 @@ const createPrescription = asyncHandler(async (req, res) => {
                 select: 'firstName lastName phoneNumber dateOfBirth gender'
             }
         })
-        .populate({
-            path: 'doctorId',
-            select: 'firstName lastName specialization qualification medicalLicense'
-        })
-        .populate({
-            path: 'appointmentId',
-            select: 'appointmentDate type'
-        })
         .lean();
 
     // Update appointment with prescription reference if appointmentId provided
@@ -657,6 +813,8 @@ const createPrescription = asyncHandler(async (req, res) => {
 const updateDoctorAvailability = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const {
+        schedule,
+        availability,
         workingHours,
         availableDays,
         breakTimes,
@@ -675,6 +833,8 @@ const updateDoctorAvailability = asyncHandler(async (req, res) => {
 
     const updateData = {};
 
+    if (schedule) updateData.schedule = schedule;
+    if (availability) updateData.availability = availability;
     if (workingHours) updateData.workingHours = workingHours;
     if (availableDays) updateData.availableDays = availableDays;
     if (breakTimes) updateData.breakTimes = breakTimes;
@@ -691,7 +851,7 @@ const updateDoctorAvailability = asyncHandler(async (req, res) => {
         user.doctorId,
         { $set: updateData },
         { new: true, runValidators: true }
-    ).select('workingHours availableDays breakTimes isAvailable unavailableUntil unavailabilityReason');
+    );
 
     console.log('✅ Doctor availability updated successfully');
 
@@ -721,7 +881,12 @@ const getDoctorDashboard = asyncHandler(async (req, res) => {
     console.log("📊 Fetching dashboard data for doctor:", userId);
 
     // Get user to access doctorId
-    const user = await User.findById(userId);
+    const user = await User.findById(userId)
+        .populate({
+            path: 'doctorId',
+            select: 'specializations experience consultationFee ratings stats'
+        });
+
     if (!user || !user.doctorId) {
         throw new ApiError(404, "Doctor profile not found");
     }
@@ -742,21 +907,25 @@ const getDoctorDashboard = asyncHandler(async (req, res) => {
     })
     .populate({
         path: 'patientId',
+        select: 'userId bloodGroup',
         populate: {
             path: 'userId',
-            select: 'firstName lastName avatar'
+            select: 'firstName lastName avatar dateOfBirth gender'
         }
     })
-    .sort({ appointmentTime: 1 })
+    .sort({ startTime: 1 })
     .limit(10)
     .lean();
 
-    // Get appointment statistics
+    // Get appointment statistics for current month
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+
     const appointmentStats = await Appointment.aggregate([
         {
             $match: { 
                 doctorId: userId,
-                appointmentDate: { $gte: new Date(today.getFullYear(), today.getMonth(), 1) }
+                appointmentDate: { $gte: currentMonthStart, $lt: nextMonthStart }
             }
         },
         {
@@ -770,11 +939,12 @@ const getDoctorDashboard = asyncHandler(async (req, res) => {
     // Get patient statistics
     const totalPatients = await Appointment.distinct('patientId', { doctorId: userId });
     
-    const newPatientsThisMonth = await Appointment.aggregate([
+    // New patients this month
+    const newPatientsAggregate = await Appointment.aggregate([
         {
             $match: { 
                 doctorId: userId,
-                appointmentDate: { $gte: new Date(today.getFullYear(), today.getMonth(), 1) }
+                appointmentDate: { $gte: currentMonthStart, $lt: nextMonthStart }
             }
         },
         {
@@ -785,7 +955,7 @@ const getDoctorDashboard = asyncHandler(async (req, res) => {
         },
         {
             $match: {
-                firstAppointment: { $gte: new Date(today.getFullYear(), today.getMonth(), 1) }
+                firstAppointment: { $gte: currentMonthStart, $lt: nextMonthStart }
             }
         },
         {
@@ -799,6 +969,7 @@ const getDoctorDashboard = asyncHandler(async (req, res) => {
     })
     .populate({
         path: 'patientId',
+        select: 'userId',
         populate: {
             path: 'userId',
             select: 'firstName lastName'
@@ -809,19 +980,78 @@ const getDoctorDashboard = asyncHandler(async (req, res) => {
     .lean();
 
     // Convert appointment stats to object
-    const stats = {};
+    const stats = {
+        scheduled: 0,
+        confirmed: 0,
+        completed: 0,
+        cancelled: 0
+    };
     appointmentStats.forEach(stat => {
-        stats[stat._id] = stat.count;
+        if (stat._id && stats.hasOwnProperty(stat._id)) {
+            stats[stat._id] = stat.count;
+        }
     });
 
+    // Format dashboard data for frontend
     const dashboardData = {
         doctorInfo: {
             name: `${user.firstName} ${user.lastName}`,
-            specialization: user.specialization,
-            department: user.department
+            specialty: user.doctorId.specializations?.[0] || 'General',
+            experience: user.doctorId.experience?.totalYears || 0,
+            rating: user.doctorId.ratings?.average || 0,
+            totalPatients: user.doctorId.stats?.totalPatients || totalPatients.length || 0,
+            email: user.email,
+            phone: user.phoneNumber,
+            address: user.address || 'Main Hospital, Room 405',
+            qualifications: user.doctorId.qualifications?.map(q => q.degree) || [],
+            availability: 'Mon-Fri: 9 AM - 5 PM', // This should come from schedule
+            nextAvailable: 'Tomorrow, 10:00 AM'
         },
+        todayStats: [
+            { 
+                label: 'Patients Today', 
+                value: todaysAppointments.length.toString(), 
+                change: '+2 from yesterday',
+                trend: 'up'
+            },
+            { 
+                label: 'Video Consultations', 
+                value: todaysAppointments.filter(a => a.consultationType === 'video').length.toString(), 
+                change: '+3 from yesterday',
+                trend: 'up'
+            },
+            { 
+                label: 'Prescriptions', 
+                value: recentPrescriptions.length.toString(),
+                change: '+4 from yesterday',
+                trend: 'up'
+            },
+            { 
+                label: 'Reports Reviewed', 
+                value: '6', // This would come from medical records
+                change: '+1 from yesterday',
+                trend: 'up'
+            }
+        ],
         todaysSchedule: {
-            appointments: todaysAppointments,
+            appointments: todaysAppointments.map(apt => ({
+                id: apt._id,
+                name: apt.patientId?.userId 
+                    ? `${apt.patientId.userId.firstName} ${apt.patientId.userId.lastName}`
+                    : 'Unknown Patient',
+                time: apt.startTime && apt.endTime 
+                    ? `${apt.startTime} - ${apt.endTime}`
+                    : 'Time not set',
+                type: apt.consultationType || 'in-person',
+                condition: apt.reason || 'Follow-up',
+                status: apt.status || 'scheduled',
+                avatar: apt.patientId?.userId?.avatar || '',
+                age: apt.patientId?.userId?.dateOfBirth 
+                    ? new Date().getFullYear() - new Date(apt.patientId.userId.dateOfBirth).getFullYear()
+                    : 'N/A',
+                gender: apt.patientId?.userId?.gender || 'N/A',
+                bloodType: apt.patientId?.bloodGroup || 'N/A'
+            })),
             total: todaysAppointments.length
         },
         statistics: {
@@ -831,16 +1061,11 @@ const getDoctorDashboard = asyncHandler(async (req, res) => {
             },
             patients: {
                 total: totalPatients.length,
-                newThisMonth: newPatientsThisMonth[0]?.newPatients || 0
+                newThisMonth: newPatientsAggregate[0]?.newPatients || 0
             }
         },
         recentActivity: {
             prescriptions: recentPrescriptions
-        },
-        quickActions: {
-            canCreatePrescription: true,
-            canViewSchedule: true,
-            canUpdateAvailability: true
         }
     };
 
@@ -934,10 +1159,6 @@ const addMedicalRecord = asyncHandler(async (req, res) => {
                 select: 'firstName lastName dateOfBirth gender'
             }
         })
-        .populate({
-            path: 'doctorId',
-            select: 'firstName lastName specialization'
-        })
         .lean();
 
     // Update appointment with medical record reference if appointmentId provided
@@ -960,6 +1181,96 @@ const addMedicalRecord = asyncHandler(async (req, res) => {
     );
 });
 
+/**
+ * GET DOCTOR SCHEDULE
+ * Get doctor's schedule and availability
+ * 
+ * GET /api/v1/doctors/schedule
+ * Requires: verifyJWT middleware, doctor role
+ */
+const getDoctorSchedule = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+
+    console.log("📅 Fetching schedule for doctor:", userId);
+
+    // Get user to access doctorId
+    const user = await User.findById(userId);
+    if (!user || !user.doctorId) {
+        throw new ApiError(404, "Doctor profile not found");
+    }
+
+    const doctor = await Doctor.findById(user.doctorId)
+        .select('schedule availability workingHours availableDays');
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                doctor,
+                "Doctor schedule fetched successfully"
+            )
+        );
+});
+
+/**
+ * UPDATE APPOINTMENT STATUS
+ * Update status of a specific appointment
+ * 
+ * PATCH /api/v1/doctors/appointments/:appointmentId
+ * Requires: verifyJWT middleware, doctor role
+ */
+const updateAppointmentStatus = asyncHandler(async (req, res) => {
+    const { appointmentId } = req.params;
+    const userId = req.user._id;
+    const { status, notes } = req.body;
+
+    console.log("🔄 Updating appointment status:", appointmentId, "by doctor:", userId);
+
+    if (!appointmentId || !status) {
+        throw new ApiError(400, "Appointment ID and status are required");
+    }
+
+    // Verify that doctor owns this appointment
+    const appointment = await Appointment.findOne({
+        _id: appointmentId,
+        doctorId: userId
+    });
+
+    if (!appointment) {
+        throw new ApiError(404, "Appointment not found or access denied");
+    }
+
+    const updateData = { status };
+    if (notes) updateData.notes = notes;
+
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+        appointmentId,
+        { $set: updateData },
+        { new: true }
+    )
+    .populate({
+        path: 'patientId',
+        select: 'userId',
+        populate: {
+            path: 'userId',
+            select: 'firstName lastName phoneNumber'
+        }
+    });
+
+    console.log('✅ Appointment status updated successfully');
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                updatedAppointment,
+                "Appointment status updated successfully"
+            )
+        );
+});
+
 // Export all doctor controller functions
 export {
     getDoctorProfile,
@@ -967,22 +1278,24 @@ export {
     getDoctorAppointments,
     getTodaysAppointments,
     getDoctorsPatients,
+    getPatientDetails,
     getPatientMedicalHistory,
     createPrescription,
     updateDoctorAvailability,
     getDoctorDashboard,
-    addMedicalRecord
+    addMedicalRecord,
+    getDoctorSchedule,
+    updateAppointmentStatus
 };
 
 /**
  * Additional doctor controllers that can be added:
- * - getDoctorSchedule (detailed schedule view)
- * - updateAppointmentNotes (add clinical notes)
- * - getPrescriptionHistory
- * - bulkUpdateAppointments
  * - getDoctorStatistics (detailed analytics)
  * - setVacationMode
  * - getDoctorReviews (when review system implemented)
  * - updateConsultationFee
- * - getDoctorEarnings (financial analytics)
- */
+ * - getDoctorEarnings (financial analytics)
+ * - searchPatients (advanced search functionality)
+ * - bulkUpdateAppointments
+ * - getPrescriptionHistory
+ */
