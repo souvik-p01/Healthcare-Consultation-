@@ -1,8 +1,15 @@
-// src/controllers/auth.controller.js
+// server/src/controllers/auth.controller.js
 import { User } from "../models/User.model.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { OAuth2Client } from "google-auth-library";
 
+// Initialize Google OAuth client
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+/**
+ * Generate Access and Refresh Tokens
+ */
 const generateTokens = (user) => {
     const accessToken = jwt.sign(
         {
@@ -25,6 +32,21 @@ const generateTokens = (user) => {
     return { accessToken, refreshToken };
 };
 
+/**
+ * Set token cookies
+ */
+const setTokenCookies = (res, refreshToken) => {
+    res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+};
+
+/**
+ * REGISTER USER
+ */
 export const register = async (req, res) => {
     try {
         const { firstName, lastName, name, email, password, phoneNumber, phone, role = 'patient' } = req.body;
@@ -55,19 +77,15 @@ export const register = async (req, res) => {
             email,
             password,
             phoneNumber: phoneNumber || phone,
-            role
+            role,
+            authProvider: 'local'
         });
 
         // Generate tokens
         const { accessToken, refreshToken } = generateTokens(user);
 
         // Set refresh token in cookie
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-        });
+        setTokenCookies(res, refreshToken);
 
         return res.status(201).json({
             success: true,
@@ -83,6 +101,7 @@ export const register = async (req, res) => {
                     role: user.role
                 },
                 accessToken
+                // Note: refreshToken is in cookie only, not in response body
             }
         });
 
@@ -96,6 +115,9 @@ export const register = async (req, res) => {
     }
 };
 
+/**
+ * LOGIN USER
+ */
 export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -126,12 +148,7 @@ export const login = async (req, res) => {
         const { accessToken, refreshToken } = generateTokens(user);
 
         // Set refresh token in cookie
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-        });
+        setTokenCookies(res, refreshToken);
 
         return res.status(200).json({
             success: true,
@@ -147,6 +164,7 @@ export const login = async (req, res) => {
                     role: user.role
                 },
                 accessToken
+                // Note: refreshToken is in cookie only, not in response body
             }
         });
 
@@ -160,12 +178,124 @@ export const login = async (req, res) => {
     }
 };
 
+/**
+ * GOOGLE AUTHENTICATION
+ */
+export const googleAuth = async (req, res) => {
+    try {
+        const { credential } = req.body;
+
+        if (!credential) {
+            return res.status(400).json({
+                success: false,
+                message: "Google credential is required"
+            });
+        }
+
+        // Verify Google token
+        const ticket = await googleClient.verifyIdToken({
+            idToken: credential,
+            audience: process.env.GOOGLE_CLIENT_ID
+        });
+
+        const payload = ticket.getPayload();
+        const { email, name, picture, sub: googleId } = payload;
+
+        // Split name into firstName and lastName
+        const nameParts = name.split(' ');
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // Check if user exists
+        let user = await User.findOne({ 
+            $or: [
+                { email },
+                { googleId }
+            ]
+        });
+
+        if (!user) {
+            // Create new user
+            user = await User.create({
+                firstName,
+                lastName,
+                email,
+                googleId,
+                avatar: picture,
+                role: "patient",
+                isEmailVerified: true, // Google emails are pre-verified
+                authProvider: "google"
+            });
+        } else {
+            // Update existing user with Google info if needed
+            if (!user.googleId) {
+                user.googleId = googleId;
+                user.authProvider = "google";
+                user.avatar = picture || user.avatar;
+                user.isEmailVerified = true;
+                await user.save();
+            }
+        }
+
+        // Generate JWT tokens
+        const accessToken = jwt.sign(
+            { 
+                _id: user._id,
+                email: user.email,
+                role: user.role 
+            },
+            process.env.ACCESS_TOKEN_SECRET,
+            { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m" }
+        );
+
+        const refreshToken = jwt.sign(
+            { _id: user._id },
+            process.env.REFRESH_TOKEN_SECRET,
+            { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d" }
+        );
+
+        // Set refresh token in cookie
+        setTokenCookies(res, refreshToken);
+
+        // ✅ Return both tokens in response for Google auth (frontend may need refresh token)
+        return res.status(200).json({
+            success: true,
+            message: "Google authentication successful",
+            data: {
+                user: {
+                    _id: user._id,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    fullName: user.fullName,
+                    email: user.email,
+                    role: user.role,
+                    avatar: user.avatar,
+                    authProvider: user.authProvider
+                },
+                accessToken,
+                refreshToken // ✅ Include refresh token in response body
+            }
+        });
+
+    } catch (error) {
+        console.error("Google Auth Error:", error);
+        return res.status(401).json({
+            success: false,
+            message: "Google authentication failed",
+            error: error.message
+        });
+    }
+};
+
+/**
+ * LOGOUT USER
+ */
 export const logout = async (req, res) => {
     try {
         res.clearCookie('refreshToken', {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict'
+            sameSite: 'lax'
         });
 
         return res.status(200).json({
@@ -183,6 +313,9 @@ export const logout = async (req, res) => {
     }
 };
 
+/**
+ * REFRESH TOKEN
+ */
 export const refreshToken = async (req, res) => {
     try {
         const refreshToken = req.cookies.refreshToken;
@@ -217,11 +350,22 @@ export const refreshToken = async (req, res) => {
             { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m" }
         );
 
+        // Generate new refresh token (optional - for rotation)
+        const newRefreshToken = jwt.sign(
+            { _id: user._id },
+            process.env.REFRESH_TOKEN_SECRET,
+            { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d" }
+        );
+
+        // Update cookie with new refresh token
+        setTokenCookies(res, newRefreshToken);
+
         return res.status(200).json({
             success: true,
             message: "Token refreshed successfully",
             data: {
-                accessToken
+                accessToken,
+                refreshToken: newRefreshToken // Return new refresh token
             }
         });
 
@@ -246,6 +390,6 @@ export const refreshToken = async (req, res) => {
             success: false,
             message: "Internal server error",
             error: error.message
-        });
-    }
+        });
+    }
 };

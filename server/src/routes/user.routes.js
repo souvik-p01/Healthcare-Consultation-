@@ -23,7 +23,6 @@ import {
     logoutUser,
     refreshAccessToken,
     changeCurrentPassword,
-    getCurrentUser,
     updateAccountDetails,
     updateUserAvatar,
     getUserProfile,
@@ -37,7 +36,8 @@ import {
     deleteAccountController,
     getUserStatistics,
     updateUserRole,
-    deactivateUser
+    deactivateUser,
+    getCurrentUser  // ✅ Only add this one - changeCurrentPassword already exists
 } from "../controllers/user.controller.js";
 
 // Import middlewares
@@ -55,9 +55,9 @@ import {
     validateDOB,
     validateRequiredFields,
     sanitizePatient,
-    validateRole,  // ✅ Added role validation
-    validatePasswordStrength,  // ✅ Added password strength validation
-    validatePasswordMatch  // ✅ Added password match validation
+    validateRole,
+    validatePasswordStrength,
+    validatePasswordMatch
 } from "../middlewares/validation.middleware.js";
 
 import {
@@ -83,82 +83,72 @@ const router = Router();
 
 /**
  * @route   POST /api/v1/users/register
- * @desc    Register new user (Patient, Doctor, Admin, Nurse, Staff)
+ * @desc    Register new user (Patient, Doctor, Nurse, Technician)
  * @access  Public
- * @body    {
- *            firstName, lastName, email, phoneNumber, password, role,
- *            dateOfBirth (for patients), gender (for patients),
- *            specialization, medicalLicense, qualification (for doctors)
- *          }
  */
 router.post(
     "/register",
-    rateLimiter(), // Prevent spam registration
+    rateLimiter(),
     validateRequiredFields(['firstName', 'lastName', 'email', 'password']),
-    validateEmail, // Validate email format
-    validatePhone, // Validate phone number format
-    validateDOB, // Validate date of birth (if provided)
-    validateRole, // ✅ Validate role (patient, doctor, nurse only)
-    validatePasswordStrength, // ✅ Validate password requirements
-    validatePasswordMatch, // ✅ Ensure password and confirmPassword match
-    sanitizePatient, // Sanitize input data
-    uploadProfilePhoto.single('avatar'), // Optional avatar upload
-    handleUploadError, // Handle multer errors
-    registerUser // Controller function
+    validateEmail,
+    validatePhone,
+    validateDOB,
+    validateRole,
+    validatePasswordStrength,
+    validatePasswordMatch,
+    sanitizePatient,
+    uploadProfilePhoto.single('avatar'),
+    handleUploadError,
+    registerUser
 );
 
 /**
  * @route   POST /api/v1/users/login
  * @desc    Authenticate user and get tokens
  * @access  Public
- * @body    { email or phoneNumber, password }
  */
 router.post(
     "/login",
-    loginRateLimiter, // Strict rate limiting for login (5 attempts per 15 min)
-    loginUser // Controller function
+    loginRateLimiter,
+    loginUser
 );
 
 /**
  * @route   POST /api/v1/users/refresh-token
  * @desc    Refresh access token using refresh token
- * @access  Public (but requires valid refresh token)
- * @body    { refreshToken } or from cookies
+ * @access  Public
  */
 router.post(
     "/refresh-token",
     rateLimiter(),
-    refreshAccessToken // Controller function
+    refreshAccessToken
 );
 
 /**
  * @route   GET /api/v1/users/profile/:userId
- * @desc    Get public profile of any user (doctor/patient)
+ * @desc    Get public profile of any user
  * @access  Public
- * @params  userId - User ID
  */
 router.get(
     "/profile/:userId",
-    optionalVerifyJWT, // Optional authentication for additional info
-    getUserProfile // Controller function
+    optionalVerifyJWT,
+    getUserProfile
 );
 
 /**
  * @route   GET /api/v1/users/doctors
  * @desc    Get list of all active doctors with filters
  * @access  Public
- * @query   specialization, department, page, limit
  */
 router.get(
     "/doctors",
-    getAllDoctors // Controller function
+    getAllDoctors
 );
 
 /**
  * @route   POST /api/v1/users/verify-email
  * @desc    Verify user email address with token
  * @access  Public
- * @body    { token }
  */
 router.post(
     "/verify-email",
@@ -170,7 +160,6 @@ router.post(
  * @route   POST /api/v1/users/forgot-password
  * @desc    Send password reset email
  * @access  Public
- * @body    { email }
  */
 router.post(
     "/forgot-password",
@@ -182,7 +171,6 @@ router.post(
  * @route   POST /api/v1/users/reset-password
  * @desc    Reset password using reset token
  * @access  Public
- * @body    { token, newPassword, confirmPassword }
  */
 router.post(
     "/reset-password",
@@ -200,119 +188,106 @@ router.post(
 router.use(verifyJWT);
 
 /**
+ * @route   GET /api/v1/users/me
+ * @desc    Get current user details
+ * @access  Private
+ */
+router.get("/me", getCurrentUser);
+
+/**
+ * @route   PATCH /api/v1/users/me
+ * @desc    Update current user profile
+ * @access  Private
+ */
+router.patch("/me", updateProfile);
+
+/**
  * @route   POST /api/v1/users/logout
  * @desc    Logout user and clear tokens
- * @access  Private (All authenticated users)
+ * @access  Private
  */
-router.post(
-    "/logout",
-    logoutUser // Controller function
-);
+router.post("/logout", logoutUser);
 
 /**
  * @route   GET /api/v1/users/current
  * @desc    Get currently logged-in user details
- * @access  Private (All authenticated users)
+ * @access  Private
  */
-router.get(
-    "/current",
-    getCurrentUser // Controller function
-);
+router.get("/current", getCurrentUser);
 
 /**
  * @route   GET /api/v1/users/profile
  * @desc    Get current user profile
- * @access  Private (All authenticated users)
+ * @access  Private
  */
-router.get(
-    "/profile",
-    getProfile
-);
+router.get("/profile", getProfile);
 
 /**
  * @route   PATCH /api/v1/users/profile
  * @desc    Update current user profile
- * @access  Private (All authenticated users)
+ * @access  Private
  */
-router.patch(
-    "/profile",
-    updateProfile
-);
+router.patch("/profile", updateProfile);
 
 /**
  * @route   PATCH /api/v1/users/complete-profile
  * @desc    Complete user profile with role-specific information
- * @access  Private (All authenticated users)
- * @body    Role-specific fields for patients and doctors
+ * @access  Private
  */
-router.patch(
-    "/complete-profile",
-    completeProfile
-);
+router.patch("/complete-profile", completeProfile);
 
 /**
  * @route   POST /api/v1/users/change-password
- * @desc    Change user password
- * @access  Private (All authenticated users)
- * @body    { oldPassword, newPassword, confirmPassword }
+ * @desc    Change user password (with validation)
+ * @access  Private
  */
 router.post(
     "/change-password",
-    checkVerification, // Ensure email is verified for sensitive operations
+    checkVerification,
     validateRequiredFields(['oldPassword', 'newPassword', 'confirmPassword']),
-    validatePasswordStrength, // ✅ Add password strength validation
-    validatePasswordMatch, // ✅ Add password match validation
-    changeCurrentPassword // Controller function
+    validatePasswordStrength,
+    validatePasswordMatch,
+    changeCurrentPassword
 );
 
 /**
  * @route   PATCH /api/v1/users/update-account
- * @desc    Update user account details (name, phone, etc.)
- * @access  Private (All authenticated users)
- * @body    { firstName, lastName, phoneNumber, dateOfBirth, gender }
+ * @desc    Update user account details
+ * @access  Private
  */
 router.patch(
     "/update-account",
-    validatePhone, // Validate phone if provided
-    validateDOB, // Validate date of birth if provided
-    updateAccountDetails // Controller function
+    validatePhone,
+    validateDOB,
+    updateAccountDetails
 );
 
 /**
  * @route   PATCH /api/v1/users/avatar
  * @desc    Update user profile picture
- * @access  Private (All authenticated users)
- * @body    multipart/form-data with 'avatar' file
+ * @access  Private
  */
 router.patch(
     "/avatar",
-    uploadProfilePhoto.single('avatar'), // Handle single file upload with name 'avatar'
-    handleUploadError, // Handle upload errors (file size, type, etc.)
-    validateUploadedFiles, // Validate uploaded file
-    updateUserAvatar // Controller function
+    uploadProfilePhoto.single('avatar'),
+    handleUploadError,
+    validateUploadedFiles,
+    updateUserAvatar
 );
 
 /**
  * @route   POST /api/v1/users/resend-verification
  * @desc    Resend email verification link
- * @access  Private (All authenticated users)
+ * @access  Private
  */
-router.post(
-    "/resend-verification",
-    resendVerificationEmail
-);
+router.post("/resend-verification", resendVerificationEmail);
 
 /**
  * @route   DELETE /api/v1/users/delete-account
  * @desc    Soft delete user account
- * @access  Private (All authenticated users)
- * @body    { password, reason }
+ * @access  Private
  */
-router.delete(
-    "/delete-account",
-    strictRateLimiter,
-    deleteAccountController
-);
+router.delete("/delete-account", strictRateLimiter, deleteAccountController);
 
 /**
  * ==========================================
@@ -325,34 +300,20 @@ router.delete(
  * @desc    Get user statistics for admin dashboard
  * @access  Private (Admin only)
  */
-router.get(
-    "/statistics",
-    restrictTo('admin'),
-    getUserStatistics
-);
+router.get("/statistics", restrictTo('admin'), getUserStatistics);
 
 /**
  * @route   PATCH /api/v1/users/:userId/role
- * @desc    Update user role (admin only)
+ * @desc    Update user role
  * @access  Private (Admin only)
- * @body    { role }
  */
-router.patch(
-    "/:userId/role",
-    restrictTo('admin'),
-    updateUserRole
-);
+router.patch("/:userId/role", restrictTo('admin'), updateUserRole);
 
 /**
  * @route   PATCH /api/v1/users/:userId/deactivate
- * @desc    Deactivate user account (admin only)
+ * @desc    Deactivate user account
  * @access  Private (Admin only)
- * @body    { reason }
  */
-router.patch(
-    "/:userId/deactivate",
-    restrictTo('admin'),
-    deactivateUser
-);
+router.patch("/:userId/deactivate", restrictTo('admin'), deactivateUser);
 
 export default router;

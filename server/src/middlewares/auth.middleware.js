@@ -16,7 +16,6 @@ import { User } from "../models/User.model.js";
  */
 export const verifyJWT = asyncHandler(async (req, res, next) => {
     try {
-        // Extract token from cookie or Authorization header
         const token =
             req.cookies?.accessToken ||
             req.header("Authorization")?.replace("Bearer ", "").trim();
@@ -25,23 +24,18 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
             throw new ApiError(401, "Access denied. No token provided.");
         }
 
-        // Verify JWT token
-        const decodedToken =
-            verifyToken(token, process.env.ACCESS_TOKEN_SECRET) ||
-            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+        const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
-        // Fetch user details
-        const user =
-            (await User.findById(decodedToken.userId || decodedToken._id)
-                .select("-password -refreshToken")
-                .lean()) || null;
+        const user = await User.findById(decodedToken._id)
+            .select("-password -refreshToken")
+            .lean();
 
         if (!user) {
             throw new ApiError(401, "Invalid token. User not found.");
         }
 
         if (!user.isActive) {
-            throw new ApiError(403, "Account is inactive. Please contact support.");
+            throw new ApiError(403, "Account is inactive.");
         }
 
         req.user = {
@@ -52,9 +46,10 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         };
 
         next();
+
     } catch (error) {
-        console.error("🔐 JWT Verification Error:", error.message);
-        throw new ApiError(401, error.message || "Invalid access token.");
+        console.error("JWT Verification Error:", error.message);
+        throw new ApiError(401, "Invalid access token.");
     }
 });
 
@@ -64,7 +59,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
 export const optionalVerifyJWT = asyncHandler(async (req, res, next) => {
     try {
         const token =
-            req.cookies?.accessToken ||
+            res.cookie('refreshToken', refreshToken) ||
             req.header("Authorization")?.replace("Bearer ", "").trim();
 
         if (token) {

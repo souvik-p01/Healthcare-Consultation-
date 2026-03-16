@@ -1,0 +1,11 @@
+1. Patient
+    userone1@gmail.com 
+    password - User@one1
+
+2. Doctor
+    usertwo2@gmail.com 
+    password - User@two2
+
+3. Technician
+    userthree3@gmail.com 
+    password - User@three3

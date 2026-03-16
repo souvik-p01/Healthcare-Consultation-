@@ -38,7 +38,7 @@ export const validateRole = (req, res, next) => {
         const { role = 'patient' } = req.body;
         
         // ✅ Allowed roles for public registration
-        const allowedRoles = ["patient", "doctor", "nurse"];
+        const allowedRoles = ["patient", "doctor", "nurse", "technician", "staff"];
         
         // Check if role is allowed
         if (!allowedRoles.includes(role)) {

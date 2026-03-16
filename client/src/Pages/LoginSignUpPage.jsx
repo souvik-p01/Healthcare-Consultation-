@@ -15,6 +15,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppContext } from '../context/AppContext';
+import GoogleLoginButton from '../components/GoogleLoginButton'; // ✅ Add this import
 
 const LoginSignUpPage = () => {
   const {
@@ -46,8 +47,9 @@ const LoginSignUpPage = () => {
   const [userCaptchaInput, setUserCaptchaInput] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Add to prevent double submission
 
-  /* ---------------- ✅ FIXED: Redirect only after login (not signup) ---------------- */
+  /* ---------------- ✅ Redirect only after login (not signup) ---------------- */
   useEffect(() => {
     if (user && !isSignUp) {
       navigate('/dashboard');
@@ -103,7 +105,10 @@ const LoginSignUpPage = () => {
   /* ---------------- Submit Handler ---------------- */
   const onSubmitHandler = async (e) => {
     e.preventDefault();
-
+    
+    // ✅ Prevent double submission
+    if (isSubmitting) return;
+    
     if (userCaptchaInput !== captchaText) {
       toast.error('Captcha does not match');
       triggerShake();
@@ -112,6 +117,8 @@ const LoginSignUpPage = () => {
     }
 
     try {
+      setIsSubmitting(true); // ✅ Disable further submissions
+      
       if (isSignUp) {
         if (formData.password !== formData.confirmPassword) {
           toast.error('Passwords do not match');
@@ -150,6 +157,8 @@ const LoginSignUpPage = () => {
       }
     } catch {
       triggerShake();
+    } finally {
+      setIsSubmitting(false); // ✅ Re-enable after completion
     }
   };
 
@@ -235,7 +244,7 @@ const LoginSignUpPage = () => {
                   />
                 </div>
                 
-                {/* ✅ ADDED: Role Selector */}
+                {/* ✅ Role Selector */}
                 <select
                   name="role"
                   value={formData.role}
@@ -320,12 +329,31 @@ const LoginSignUpPage = () => {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || isSubmitting} // ✅ Disable when submitting
               className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition-colors disabled:bg-blue-400"
             >
               {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
             </button>
           </form>
+
+          {/* ✅ Google Login Button Section */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <GoogleLoginButton 
+                buttonText={isSignUp ? "Sign up with Google" : "Sign in with Google"} 
+                isSignUp={isSignUp}
+              />
+            </div>
+          </div>
 
           <p className="text-center mt-4 text-gray-600">
             {isSignUp ? 'Already have an account?' : "Don't have an account?"}

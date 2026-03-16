@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Heart, 
   Phone, 
@@ -22,22 +22,26 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { AppContext } from '../context/AppContext';
+import { useAppContext } from '../context/AppContext';
 
 // Hero Section Component
 const HeroSection = () => {
   const navigate = useNavigate();
-  const { showLogin, userRole } = useContext(AppContext);
+  const { user, showLogin, userRole, loading } = useAppContext();
   const [showVideo, setShowVideo] = useState(false);
   const videoRef = useRef(null);
 
   const handleClick = () => {
-    if (showLogin) {
-      if (userRole === 'Patient') navigate('/patient-portal');
-      else if (userRole === 'Doctor') navigate('/doctor-portal');
-      else if (userRole === 'Technician') navigate('/technician-portal');
-      else return null;
-    } else navigate('/login');
+    if (user) {
+      // User is logged in
+      if (userRole === 'patient') navigate('/patient-portal');
+      else if (userRole === 'doctor') navigate('/doctor-portal');
+      else if (userRole === 'technician') navigate('/technician-portal');
+      else navigate('/dashboard');
+    } else {
+      // User is not logged in
+      navigate('/login');
+    }
   };
 
   const handleWatchDemo = () => {
@@ -71,35 +75,49 @@ const HeroSection = () => {
   }, [showVideo]);
 
   // Add fade-in and scale-in animation styles
-  const animationStyles = `
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
+  useEffect(() => {
+    const animationStyles = `
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
-      to {
-        opacity: 1;
-      }
-    }
 
-    @keyframes scaleIn {
-      from {
-        opacity: 0;
-        transform: scale(0.9);
+      @keyframes scaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
-      to {
-        opacity: 1;
-        transform: scale(1);
+
+      .animate-fadeIn {
+        animation: fadeIn 0.3s ease-out;
       }
-    }
 
-    .animate-fadeIn {
-      animation: fadeIn 0.3s ease-out;
-    }
+      .animate-scaleIn {
+        animation: scaleIn 0.4s ease-out;
+      }
+    `;
 
-    .animate-scaleIn {
-      animation: scaleIn 0.4s ease-out;
-    }
-  `;
+    const styleElement = document.createElement('style');
+    styleElement.textContent = animationStyles;
+    styleElement.id = 'hero-section-animations';
+    document.head.appendChild(styleElement);
+    
+    return () => {
+      const existingStyle = document.getElementById('hero-section-animations');
+      if (existingStyle) {
+        document.head.removeChild(existingStyle);
+      }
+    };
+  }, []);
 
   return (
     <>
@@ -126,7 +144,7 @@ const HeroSection = () => {
                   type="button"
                   aria-label="Get Started"
                 >
-                  Get Started
+                  {user ? 'Go to Dashboard' : 'Get Started'}
                 </button>
                 <button 
                   onClick={handleWatchDemo}
@@ -138,11 +156,14 @@ const HeroSection = () => {
                   Watch Demo
                 </button>
               </div>
+              {loading && (
+                <p className="mt-4 text-blue-200">Loading...</p>
+              )}
             </div>
             <div className="relative">
               <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-2xl p-8">
                 <img 
-                  src="../../src/assets/CoverPhoto.png" 
+                  src="/src/assets/CoverPhoto.png" 
                   alt="Healthcare professionals using digital tablets and medical equipment" 
                   className="rounded-lg shadow-2xl w-full h-auto"
                   loading="lazy"
@@ -160,16 +181,14 @@ const HeroSection = () => {
       {/* Video Popup Modal */}
       {showVideo && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90"
-          style={{ animation: 'fadeIn 0.3s ease-out' }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 animate-fadeIn"
           onClick={handleCloseVideo}
           role="dialog"
           aria-modal="true"
           aria-labelledby="video-modal-title"
         >
           <div 
-            className="relative w-full max-w-5xl mx-4"
-            style={{ animation: 'scaleIn 0.4s ease-out' }}
+            className="relative w-full max-w-5xl mx-4 animate-scaleIn"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
@@ -192,13 +211,13 @@ const HeroSection = () => {
                 autoPlay
                 playsInline
                 aria-label="Healthcare platform demo video"
-                poster="../../src/assets/video-poster.jpg"
+                poster="/src/assets/video-poster.jpg"
               >
-                <source src="../../src/assets/video.mp4" type="video/mp4" />
-                <source src="../../src/assets/video.webm" type="video/webm" />
+                <source src="/src/assets/video.mp4" type="video/mp4" />
+                <source src="/src/assets/video.webm" type="video/webm" />
                 <track
                   kind="captions"
-                  src="../../src/assets/video-captions.vtt"
+                  src="/src/assets/video-captions.vtt"
                   srcLang="en"
                   label="English"
                   default
@@ -209,17 +228,6 @@ const HeroSection = () => {
           </div>
         </div>
       )}
-
-      {/* Add animation styles to document head */}
-      {useEffect(() => {
-        const styleElement = document.createElement('style');
-        styleElement.textContent = animationStyles;
-        document.head.appendChild(styleElement);
-        
-        return () => {
-          document.head.removeChild(styleElement);
-        };
-      }, [])}
     </>
   );
 };

@@ -1,3 +1,4 @@
+// App.jsx
 import React, { useState } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
@@ -8,7 +9,7 @@ import "./index.css";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Navigation from "./components/Navigation";
-import ProtectedRoute from "./components/ProtectedRoute";
+import ProtectedRoute from "./components/ProtectedRoute"; // Fixed duplicate import
 
 /* -------- Pages -------- */
 import Home from "./Pages/Home";
@@ -41,8 +42,7 @@ import WellnessPrograms from "./Pages/services/WellnessPrograms";
 /* -------- Admin Dashboard -------- */
 import AdminDashboard from "./Pages/AdminDashboard";
 
-
-/* -------- Extra -------- */
+/* -------- Error Pages -------- */
 const Unauthorized = () => (
   <div className="min-h-screen flex items-center justify-center text-center bg-gray-50">
     <div className="bg-white p-8 rounded-xl shadow-lg max-w-md">
@@ -81,16 +81,22 @@ const App = () => {
 
   // Check if current route is admin route
   const isAdminRoute = location.pathname.startsWith('/admin');
+  
+  // Check if current route is auth route (login)
+  const isAuthRoute = location.pathname === '/login';
+  
+  // Check if current route is public (no header/footer needed for some pages)
+  const isPublicRoute = isAdminRoute || isAuthRoute;
 
   return (
     <div className="min-h-screen flex flex-col w-full">
-      {/* Show header only on non-admin routes */}
-      {!isAdminRoute && (
+      {/* Show header only on non-admin and non-auth routes */}
+      {!isPublicRoute && (
         <Header isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
       )}
 
-      {/* Show AI Navigation only on AI pages */}
-      {location.pathname.startsWith("/services") && <Navigation />}
+      {/* Show AI Navigation only on AI services pages */}
+      {location.pathname.startsWith("/services") && !isPublicRoute && <Navigation />}
 
       <main className="flex-grow">
         <Routes>
@@ -102,7 +108,7 @@ const App = () => {
           <Route path="/login" element={<LoginSignUpPage />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* ===== Admin Routes ===== */}
+          {/* ===== Admin Routes (No Header/Footer) ===== */}
           <Route path="/admin/*" element={<AdminDashboard />} />
 
           {/* ===== Protected Common Routes ===== */}
@@ -152,11 +158,11 @@ const App = () => {
             }
           />
 
-          {/* ===== AI Healthcare ===== */}
+          {/* ===== AI Healthcare Services ===== */}
           <Route 
             path="/services/assistant" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "technician", "admin"]}>
                 <AIAssistantPage />
               </ProtectedRoute>
             } 
@@ -165,7 +171,7 @@ const App = () => {
           <Route 
             path="/services/consultations" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
                 <ConsultationsPage />
               </ProtectedRoute>
             } 
@@ -174,7 +180,7 @@ const App = () => {
           <Route 
             path="/services/emergency" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "technician", "admin"]}>
                 <EmergencyPage />
               </ProtectedRoute>
             } 
@@ -183,7 +189,7 @@ const App = () => {
           <Route 
             path="/services/pharmacy" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
                 <PharmacyPage />
               </ProtectedRoute>
             } 
@@ -192,7 +198,7 @@ const App = () => {
           <Route 
             path="/services/monitoring" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "technician", "admin"]}>
                 <MonitoringPage />
               </ProtectedRoute>
             } 
@@ -201,7 +207,7 @@ const App = () => {
           <Route 
             path="/services/records" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
                 <RecordsPage />
               </ProtectedRoute>
             } 
@@ -211,7 +217,7 @@ const App = () => {
           <Route 
             path="/services/telemedicine" 
             element={
-              <ProtectedRoute allowedRoles={["patient", "doctor", "provider"]}>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "provider", "admin"]}>
                 <Telemedicine />
               </ProtectedRoute>
             } 
@@ -220,7 +226,7 @@ const App = () => {
           <Route 
             path="/services/lab-tests" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "technician", "admin"]}>
                 <LabTests />
               </ProtectedRoute>
             } 
@@ -229,7 +235,7 @@ const App = () => {
           <Route 
             path="/services/health-reports" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
                 <HealthReports />
               </ProtectedRoute>
             } 
@@ -238,34 +244,38 @@ const App = () => {
           <Route 
             path="/services/wellness-programs" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
                 <WellnessPrograms />
               </ProtectedRoute>
             } 
           />
 
           {/* ===== Redirects ===== */}
-          <Route path="/admin" element={<Navigate to="/admin/" replace />} />
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/portal" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/signup" element={<Navigate to="/login" replace />} />
+          <Route path="/signin" element={<Navigate to="/login" replace />} />
 
           {/* ===== 404 Route ===== */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
 
-      {/* Show footer only on non-admin routes */}
-      {!isAdminRoute && <Footer />}
+      {/* Show footer only on non-admin, non-auth, and non-service pages */}
+      {!isPublicRoute && !location.pathname.startsWith("/services") && <Footer />}
 
       <ToastContainer 
-        position="bottom-right"
-        autoClose={5000}
+        position="top-right"
+        autoClose={3000}
         hideProgressBar={false}
-        newestOnTop={false}
+        newestOnTop
         closeOnClick
         rtl={false}
         pauseOnFocusLoss
         draggable
         pauseOnHover
         theme="colored"
+        limit={3}
       />
     </div>
   );

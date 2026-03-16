@@ -38,7 +38,7 @@ import { errorHandler } from "./middlewares/error.middleware.js";
 import { requestLogger } from "./middlewares/logging.middleware.js";
 
 // Import database utilities
-import connectDB, { checkDBHealth, getDBStats, isDBConnected } from "./db/index.js";
+import connectDB, { checkDBHealth, disconnectDB } from "./db/index.js";
 
 // Import logger
 import logger from "./utils/loggerUtils.js";
@@ -74,8 +74,33 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 
-// Data sanitization against NoSQL injection
-app.use(mongoSanitize());
+// ===== FIXED: Data sanitization against NoSQL injection =====
+// Instead of using the default middleware which tries to modify req.query,
+// we'll use a custom approach that sanitizes the body, query, and params safely
+app.use((req, res, next) => {
+    // Sanitize req.body if it exists
+    if (req.body) {
+        req.body = mongoSanitize.sanitize(req.body);
+    }
+    
+    // Sanitize req.params if it exists
+    if (req.params) {
+        req.params = mongoSanitize.sanitize(req.params);
+    }
+    
+    // For req.query, we need to be careful - can't assign directly
+    // Instead, we'll create a new object and copy sanitized values
+    if (req.query) {
+        const sanitizedQuery = mongoSanitize.sanitize({...req.query});
+        // Clear and reassign each property individually
+        Object.keys(req.query).forEach(key => {
+            delete req.query[key];
+        });
+        Object.assign(req.query, sanitizedQuery);
+    }
+    
+    next();
+});
 
 // CORS configuration
 const corsOptions = {
@@ -133,9 +158,9 @@ app.get("/api/v1/health", async (req, res) => {
         environment: process.env.NODE_ENV || "development",
         database: {
             status: dbHealth.status,
-            name: dbHealth.database,
+            name: dbHealth.name,
             state: dbHealth.readyState,
-            collections: dbHealth.collections
+            isConnected: dbHealth.isConnected
         },
         system: {
             uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`,
@@ -154,21 +179,13 @@ app.get("/api/v1/health", async (req, res) => {
 // Detailed health check for monitoring systems
 app.get("/api/v1/health/detailed", async (req, res) => {
     const dbHealth = checkDBHealth();
-    let dbStats = null;
-    
-    try {
-        dbStats = await getDBStats();
-    } catch (error) {
-        logger.error('Failed to get DB stats', error);
-    }
     
     res.status(200).json({
         success: true,
         timestamp: new Date().toISOString(),
         services: {
             api: { status: 'healthy', uptime: process.uptime() },
-            database: dbHealth,
-            storage: dbStats ? 'healthy' : 'degraded'
+            database: dbHealth
         },
         metrics: {
             totalRequests: app.locals.totalRequests,
@@ -224,7 +241,7 @@ app.use("/api", razorpayRoutes); // Simple Razorpay endpoints for backward compa
 
 // 404 handler for undefined routes
 app.use((req, res) => {
-    logger.warn(`Route not found: ${req.method} ${req.originalUrl}`, {
+    console.warn(`Route not found: ${req.method} ${req.originalUrl}`, {
         ip: req.ip,
         userAgent: req.get('User-Agent')
     });
@@ -278,18 +295,19 @@ const DB_RETRY_CONFIG = {
  * Log server startup information
  */
 const logServerInfo = () => {
-    const dbHealth = isDBConnected();
+    const dbHealth = checkDBHealth();
+    const isDBConnected = dbHealth.isConnected;
     
     console.log('\n' + '='.repeat(70));
     console.log('🏥 HEALTHCARE CONSULTATION SYSTEM');
     console.log('='.repeat(70));
     console.log("🚀 Server started successfully");
     console.log(`🌐 Server URL: http://localhost:${PORT}`);
-    console.log(`📊 Database: ${dbHealth ? 'Connected' : 'Disconnected'}`);
+    console.log(`📊 Database: ${isDBConnected ? '✅ Connected' : '❌ Disconnected'}`);
     console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📅 Started at: ${SERVER_START_TIME.toLocaleString()}`);
     console.log(`⏱  Uptime: 0 seconds`);
-    console.log(`💳 Payment Gateway: ${process.env.RAZORPAY_KEY_ID ? 'Configured' : 'Not Configured'}`);
+    console.log(`💳 Payment Gateway: ${process.env.RAZORPAY_KEY_ID ? '✅ Configured' : '⚠️ Not Configured'}`);
     console.log('='.repeat(70));
     console.log('✅ Available Endpoints:');
     console.log('   - GET  http://localhost:' + PORT + '/api/v1/health');
@@ -302,12 +320,14 @@ const logServerInfo = () => {
     console.log('   - POST http://localhost:' + PORT + '/api/v1/payments/confirm');
     console.log('='.repeat(70) + '\n');
 
-    // Log to file as well
-    logger.info('Server started', {
-        port: PORT,
-        environment: process.env.NODE_ENV,
-        database: dbHealth ? 'Connected' : 'Disconnected'
-    });
+    // Log to file as well (if logger exists)
+    if (logger && logger.info) {
+        logger.info('Server started', {
+            port: PORT,
+            environment: process.env.NODE_ENV,
+            database: isDBConnected ? 'Connected' : 'Disconnected'
+        });
+    }
 };
 
 /**
@@ -328,12 +348,18 @@ const logServerShutdown = (reason) => {
     console.log(`📊 Total requests served: ${app.locals.totalRequests || 0}`);
     console.log('='.repeat(70) + '\n');
 
-    // Log to file as well
-    logger.warn('Server shutdown', { 
-        reason, 
-        uptime,
-        totalRequests: app.locals.totalRequests 
-    });
+    // Log to file as well (if logger exists)
+    if (logger && logger.warn) {
+        logger.warn('Server shutdown', { 
+            reason, 
+            uptime,
+            totalRequests: app.locals.totalRequests 
+        });
+    }
+    
+    if (logger && logger.logSecurityEvent) {
+        logger.logSecurityEvent('server_shutdown', 'info', 'system', { reason });
+    }
 };
 
 /**
@@ -357,18 +383,22 @@ const checkRequiredEnvVars = () => {
         });
         console.error('\n💡 Please check your .env file and ensure all required variables are set.');
         
-        logger.error('Missing required environment variables', { missingVars });
+        if (logger && logger.error) {
+            logger.error('Missing required environment variables', { missingVars });
+        }
         return false;
     }
 
     console.log('✅ All required environment variables are present');
     
-    logger.info('Environment variables validated', {
-        hasMongoURI: !!process.env.MONGODB_URI,
-        hasAccessToken: !!process.env.ACCESS_TOKEN_SECRET,
-        hasRefreshToken: !!process.env.REFRESH_TOKEN_SECRET,
-        hasRazorpayKey: !!process.env.RAZORPAY_KEY_ID
-    });
+    if (logger && logger.info) {
+        logger.info('Environment variables validated', {
+            hasMongoURI: !!process.env.MONGODB_URI,
+            hasAccessToken: !!process.env.ACCESS_TOKEN_SECRET,
+            hasRefreshToken: !!process.env.REFRESH_TOKEN_SECRET,
+            hasRazorpayKey: !!process.env.RAZORPAY_KEY_ID
+        });
+    }
     
     return true;
 };
@@ -405,9 +435,11 @@ const checkOptionalEnvVars = () => {
         });
         console.warn('   These features will not be available until configured.\n');
         
-        logger.warn('Optional environment variables missing', { 
-            missing: missingOptional.map(v => v.varName) 
-        });
+        if (logger && logger.warn) {
+            logger.warn('Optional environment variables missing', { 
+                missing: missingOptional.map(v => v.varName) 
+            });
+        }
     }
 };
 
@@ -424,23 +456,29 @@ const connectWithRetry = async () => {
         
         await connectDB();
         
-        console.log(`✅ Successfully connected to MongoDB: ${mongoose.connection.name}`);
+        console.log(`✅ Successfully connected to MongoDB`);
         DB_RETRY_CONFIG.currentRetry = 0;
         
-        logger.info('Database connected successfully', {
-            host: mongoose.connection.host,
-            database: mongoose.connection.name
-        });
+        const dbHealth = checkDBHealth();
+        
+        if (logger && logger.info) {
+            logger.info('Database connected successfully', {
+                host: dbHealth.host,
+                database: dbHealth.name
+            });
+        }
         
         return true;
         
     } catch (error) {
         console.error(`❌ MongoDB connection failed: ${error.message}`);
         
-        logger.error('Database connection failed', {
-            attempt: DB_RETRY_CONFIG.currentRetry + 1,
-            error: error.message
-        });
+        if (logger && logger.error) {
+            logger.error('Database connection failed', {
+                attempt: DB_RETRY_CONFIG.currentRetry + 1,
+                error: error.message
+            });
+        }
         
         DB_RETRY_CONFIG.currentRetry++;
         
@@ -453,10 +491,12 @@ const connectWithRetry = async () => {
         } else {
             console.error(`❌ Failed to connect to MongoDB after ${DB_RETRY_CONFIG.maxRetries} attempts`);
             
-            logger.emergency('Database connection failed after max retries', {
-                maxRetries: DB_RETRY_CONFIG.maxRetries,
-                error: error.message
-            });
+            if (logger && logger.emergency) {
+                logger.emergency('Database connection failed after max retries', {
+                    maxRetries: DB_RETRY_CONFIG.maxRetries,
+                    error: error.message
+                });
+            }
             
             throw error;
         }
@@ -480,7 +520,9 @@ const startServer = async () => {
         
         if (!hasRequiredVars) {
             console.error('\n❌ Cannot start server without required environment variables');
-            logger.emergency('Server startup failed - missing required environment variables');
+            if (logger && logger.emergency) {
+                logger.emergency('Server startup failed - missing required environment variables');
+            }
             process.exit(1);
         }
         
@@ -502,18 +544,21 @@ const startServer = async () => {
                 setInterval(() => {
                     const uptime = Math.floor((Date.now() - SERVER_START_TIME.getTime()) / 1000);
                     const memoryUsage = process.memoryUsage();
-                    const dbHealth = isDBConnected();
+                    const dbHealth = checkDBHealth();
+                    const isDBConnected = dbHealth.isConnected;
 
                     const healthInfo = {
                         uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${uptime % 60}s`,
                         memory: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
-                        database: dbHealth ? 'Connected' : 'Disconnected',
+                        database: isDBConnected ? 'Connected' : 'Disconnected',
                         totalRequests: app.locals.totalRequests
                     };
 
                     console.log("📊 Server Health Check:", healthInfo);
                     
-                    logger.info('Server health check', healthInfo);
+                    if (logger && logger.info) {
+                        logger.info('Server health check', healthInfo);
+                    }
                 }, 3600000); // Every hour
             }
         });
@@ -522,7 +567,9 @@ const startServer = async () => {
         server.on("error", (error) => {
             console.error("❌ Server Error:", error);
             
-            logger.error('Server error', { error: error.message, code: error.code });
+            if (logger && logger.error) {
+                logger.error('Server error', { error: error.message, code: error.code });
+            }
             
             if (error.code === 'EADDRINUSE') {
                 console.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
@@ -546,16 +593,20 @@ const startServer = async () => {
             console.error('\n❌ UNCAUGHT EXCEPTION:', error);
             console.error('Stack trace:', error.stack);
             
-            logger.error('UNCAUGHT EXCEPTION', {
-                message: error.message,
-                stack: error.stack,
-                name: error.name
-            });
+            if (logger && logger.error) {
+                logger.error('UNCAUGHT EXCEPTION', {
+                    message: error.message,
+                    stack: error.stack,
+                    name: error.name
+                });
+            }
             
-            logger.logSecurityEvent('uncaught_exception', 'critical', 'system', {
-                error: error.message,
-                stack: error.stack
-            });
+            if (logger && logger.logSecurityEvent) {
+                logger.logSecurityEvent('uncaught_exception', 'critical', 'system', {
+                    error: error.message,
+                    stack: error.stack
+                });
+            }
             
             logServerShutdown('Uncaught Exception');
             
@@ -572,20 +623,24 @@ const startServer = async () => {
             console.error('Reason:', reason);
             console.error('Promise:', promise);
             
-            logger.error('UNHANDLED PROMISE REJECTION', {
-                reason: reason?.message || String(reason),
-                promise: promise
-            });
+            if (logger && logger.error) {
+                logger.error('UNHANDLED PROMISE REJECTION', {
+                    reason: reason?.message || String(reason),
+                    promise: promise
+                });
+            }
             
-            logger.logSecurityEvent('unhandled_rejection', 'high', 'system', {
-                reason: reason?.message || String(reason)
-            });
+            if (logger && logger.logSecurityEvent) {
+                logger.logSecurityEvent('unhandled_rejection', 'high', 'system', {
+                    reason: reason?.message || String(reason)
+                });
+            }
             
             logServerShutdown('Unhandled Promise Rejection');
             
-            server.close(() => {
+            setTimeout(() => {
                 process.exit(1);
-            });
+            }, 1000);
         });
 
         // ==========================================
@@ -598,24 +653,30 @@ const startServer = async () => {
         process.on('SIGTERM', async () => {
             console.log('\n🛑 SIGTERM signal received');
             
-            logger.warn('SIGTERM signal received');
+            if (logger && logger.warn) {
+                logger.warn('SIGTERM signal received');
+            }
             
             logServerShutdown('SIGTERM Signal');
             
             console.log('📊 Closing database connections...');
-            await mongoose.connection.close();
+            await disconnectDB();
             console.log('✅ Database connections closed');
             
             console.log('🌐 Closing server...');
             server.close(() => {
-                logger.info('Server closed successfully');
+                if (logger && logger.info) {
+                    logger.info('Server closed successfully');
+                }
                 console.log('✅ Server closed successfully');
                 process.exit(0);
             });
             
             setTimeout(() => {
                 console.error('❌ Graceful shutdown timeout, forcing exit');
-                logger.error('Graceful shutdown timeout, forcing exit');
+                if (logger && logger.error) {
+                    logger.error('Graceful shutdown timeout, forcing exit');
+                }
                 process.exit(1);
             }, 30000);
         });
@@ -626,17 +687,21 @@ const startServer = async () => {
         process.on('SIGINT', async () => {
             console.log('\n\n🛑 SIGINT signal received (Ctrl+C)');
             
-            logger.warn('SIGINT signal received');
+            if (logger && logger.warn) {
+                logger.warn('SIGINT signal received');
+            }
             
             logServerShutdown('User Interruption (Ctrl+C)');
             
             console.log('📊 Closing database connections...');
-            await mongoose.connection.close();
+            await disconnectDB();
             console.log('✅ Database connections closed');
             
             console.log('🌐 Closing server...');
             server.close(() => {
-                logger.info('Server closed successfully');
+                if (logger && logger.info) {
+                    logger.info('Server closed successfully');
+                }
                 console.log('✅ Server closed successfully');
                 console.log('👋 Goodbye!\n');
                 process.exit(0);
@@ -644,7 +709,9 @@ const startServer = async () => {
             
             setTimeout(() => {
                 console.error('❌ Graceful shutdown timeout, forcing exit');
-                logger.error('Graceful shutdown timeout, forcing exit');
+                if (logger && logger.error) {
+                    logger.error('Graceful shutdown timeout, forcing exit');
+                }
                 process.exit(1);
             }, 10000);
         });
@@ -654,11 +721,13 @@ const startServer = async () => {
         console.error('Error details:', error.message);
         console.error('Stack trace:', error.stack);
         
-        logger.emergency('FATAL ERROR: Server startup failed', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
+        if (logger && logger.emergency) {
+            logger.emergency('FATAL ERROR: Server startup failed', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
+        }
         
         logServerShutdown('Fatal Startup Error');
         
