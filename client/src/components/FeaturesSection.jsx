@@ -1,13 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Heart, 
   Phone, 
-  Mail, 
-  MapPin, 
   Star, 
-  Users, 
-  Calendar, 
   Shield, 
   Stethoscope, 
   Activity, 
@@ -17,47 +13,20 @@ import {
   UserCheck,
   Settings,
   ChevronDown,
-  Menu,
   X,
-  Play,
   CheckCircle,
   LogIn,
   AlertCircle
 } from 'lucide-react';
-
-// Mock authentication check (replace with your actual auth logic)
-const checkAuthStatus = () => {
-  // Check if user is logged in (from localStorage, context, redux, etc.)
-  return localStorage.getItem('isLoggedIn') === 'true' || 
-         localStorage.getItem('userToken') || 
-         sessionStorage.getItem('isAuthenticated') === 'true';
-};
+import { useAppContext } from '../context/AppContext';
 
 // Features Section Component
 const FeaturesSection = () => {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { isAuthenticated, user } = useAppContext();
+  const isLoggedIn = isAuthenticated;
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
-
-  // Check authentication status on component mount
-  useEffect(() => {
-    const checkAuth = () => {
-      const loggedIn = checkAuthStatus();
-      setIsLoggedIn(loggedIn);
-    };
-    
-    checkAuth();
-    
-    // Listen for auth changes (you might need to implement this based on your auth system)
-    window.addEventListener('storage', checkAuth);
-    window.addEventListener('authChange', checkAuth);
-    
-    return () => {
-      window.removeEventListener('storage', checkAuth);
-      window.removeEventListener('authChange', checkAuth);
-    };
-  }, []);
 
   // Service routes mapping
   const serviceRoutes = {
