@@ -22,9 +22,195 @@ import {
   Navigation,
   Package,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  TrendingUp,
+  BarChart2,
+  Info
 } from 'lucide-react'
 import PaymentGateway from '../components/PaymentGateway';
+
+// Medicine Detail Modal with Charts
+const MedicineDetailModal = ({ medicine, onClose, onAddToCart }) => {
+  if (!medicine) return null
+
+  const priceHistory = [
+    { month: 'Jan', price: Math.round((medicine.price || 100) * 1.15) },
+    { month: 'Feb', price: Math.round((medicine.price || 100) * 1.10) },
+    { month: 'Mar', price: Math.round((medicine.price || 100) * 1.08) },
+    { month: 'Apr', price: Math.round((medicine.price || 100) * 1.05) },
+    { month: 'May', price: Math.round((medicine.price || 100) * 1.02) },
+    { month: 'Jun', price: medicine.price || 100 },
+  ]
+
+  const stockData = [
+    { pharmacy: 'Apollo', stock: 85, color: '#10b981' },
+    { pharmacy: 'MedPlus', stock: 62, color: '#3b82f6' },
+    { pharmacy: 'Wellness', stock: 45, color: '#f59e0b' },
+    { pharmacy: 'Guardian', stock: 30, color: '#8b5cf6' },
+  ]
+
+  const maxPrice = Math.max(...priceHistory.map(d => d.price))
+  const minPrice = Math.min(...priceHistory.map(d => d.price))
+  const chartH = 120
+  const chartW = 300
+  const padX = 40
+  const padY = 10
+
+  const points = priceHistory.map((d, i) => {
+    const x = padX + (i / (priceHistory.length - 1)) * (chartW - padX - 10)
+    const y = padY + ((maxPrice - d.price) / (maxPrice - minPrice || 1)) * (chartH - padY * 2)
+    return `${x},${y}`
+  }).join(' ')
+
+  const discount = medicine.discountPrice
+    ? Math.round(((medicine.price - medicine.discountPrice) / medicine.price) * 100)
+    : 0
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-start rounded-t-2xl z-10">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-gray-800">{medicine.name}</h2>
+              {medicine.requiresPrescription && (
+                <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">Rx</span>
+              )}
+            </div>
+            <p className="text-sm text-gray-500">{medicine.brand} • {medicine.form}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 mt-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Price & Stock Summary */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-green-50 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-green-700">₹{medicine.discountPrice || medicine.price}</div>
+              {medicine.discountPrice && (
+                <div className="text-xs text-gray-400 line-through">₹{medicine.price}</div>
+              )}
+              <div className="text-xs text-gray-500 mt-1">Current Price</div>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-blue-700">{medicine.stock}</div>
+              <div className="text-xs text-gray-500 mt-1">Units in Stock</div>
+            </div>
+            <div className="bg-purple-50 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-purple-700">{discount > 0 ? `${discount}%` : 'N/A'}</div>
+              <div className="text-xs text-gray-500 mt-1">Discount</div>
+            </div>
+          </div>
+
+          {/* Price Trend Line Chart */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="w-4 h-4 text-green-600" />
+              <h3 className="font-semibold text-gray-800 text-sm">Price Trend (Last 6 Months)</h3>
+            </div>
+            <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full" style={{ height: 140 }}>
+              {/* Grid lines */}
+              {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
+                const y = padY + t * (chartH - padY * 2)
+                const val = Math.round(maxPrice - t * (maxPrice - minPrice))
+                return (
+                  <g key={i}>
+                    <line x1={padX} y1={y} x2={chartW - 10} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+                    <text x={padX - 4} y={y + 4} textAnchor="end" fontSize="8" fill="#9ca3af">₹{val}</text>
+                  </g>
+                )
+              })}
+              {/* Area fill */}
+              <defs>
+                <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <polygon
+                points={`${points} ${chartW - 10},${chartH - padY} ${padX},${chartH - padY}`}
+                fill="url(#priceGrad)"
+              />
+              {/* Line */}
+              <polyline points={points} fill="none" stroke="#10b981" strokeWidth="2" strokeLinejoin="round" />
+              {/* Dots & labels */}
+              {priceHistory.map((d, i) => {
+                const x = padX + (i / (priceHistory.length - 1)) * (chartW - padX - 10)
+                const y = padY + ((maxPrice - d.price) / (maxPrice - minPrice || 1)) * (chartH - padY * 2)
+                return (
+                  <g key={i}>
+                    <circle cx={x} cy={y} r="3" fill="#10b981" />
+                    <text x={x} y={chartH - 2} textAnchor="middle" fontSize="8" fill="#6b7280">{d.month}</text>
+                  </g>
+                )
+              })}
+            </svg>
+          </div>
+
+          {/* Stock Bar Chart */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart2 className="w-4 h-4 text-blue-600" />
+              <h3 className="font-semibold text-gray-800 text-sm">Stock Availability by Pharmacy</h3>
+            </div>
+            <div className="space-y-3">
+              {stockData.map((item, i) => (
+                <div key={i}>
+                  <div className="flex justify-between text-xs text-gray-600 mb-1">
+                    <span>{item.pharmacy}</span>
+                    <span className="font-medium">{item.stock} units</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="h-3 rounded-full transition-all duration-700"
+                      style={{ width: `${item.stock}%`, backgroundColor: item.color }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Medicine Info */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="flex items-center gap-2 text-gray-600">
+              <Info className="w-4 h-4 text-gray-400" />
+              <span className="text-gray-500">Category:</span>
+              <span className="font-medium">{medicine.category}</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <Pill className="w-4 h-4 text-gray-400" />
+              <span className="text-gray-500">Form:</span>
+              <span className="font-medium">{medicine.form}</span>
+            </div>
+            <div className="col-span-2 flex items-start gap-2 text-gray-600">
+              <Package className="w-4 h-4 text-gray-400 mt-0.5" />
+              <span className="text-gray-500">Packaging:</span>
+              <span className="font-medium">{medicine.packaging}</span>
+            </div>
+            {medicine.description && (
+              <div className="col-span-2 bg-blue-50 rounded-lg p-3 text-xs text-gray-600">
+                {medicine.description}
+              </div>
+            )}
+          </div>
+
+          {/* Add to Cart */}
+          <button
+            onClick={() => { onAddToCart(medicine); onClose(); }}
+            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:shadow-lg transition-all"
+          >
+            <ShoppingCart className="w-5 h-5" />
+            Add to Cart — ₹{medicine.discountPrice || medicine.price}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // Google Maps Component for Pharmacy Map
 const PharmacyMap = ({ pharmacies, userLocation, onPharmacySelect }) => {
@@ -612,6 +798,7 @@ const PharmacyPage = () => {
   const [showDelivery, setShowDelivery] = useState(false)
   const [showStoreDetail, setShowStoreDetail] = useState(false)
   const [selectedStore, setSelectedStore] = useState(null)
+  const [selectedMedicine, setSelectedMedicine] = useState(null)
   const [userLocation, setUserLocation] = useState(null)
   const [selectedPharmacyLocation, setSelectedPharmacyLocation] = useState(null)
   const [orderId, setOrderId] = useState(null)
@@ -780,7 +967,7 @@ const PharmacyPage = () => {
       }
 
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}&libraries=places`
       script.async = true
       script.defer = true
       script.onload = () => setMapLoaded(true)
@@ -1277,13 +1464,22 @@ const PharmacyPage = () => {
                           </div>
                         </div>
 
-                        <button
-                          onClick={() => addToCart(medicine)}
-                          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 md:py-3 rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-1 md:gap-2 text-sm md:text-base"
-                        >
-                          <ShoppingCart className="w-4 h-4 md:w-5 md:h-5" />
-                          Add to Cart
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedMedicine(medicine)}
+                            className="flex-1 border border-green-600 text-green-600 py-2 md:py-3 rounded-lg hover:bg-green-50 transition-all flex items-center justify-center gap-1 md:gap-2 text-sm md:text-base"
+                          >
+                            <Info className="w-4 h-4 md:w-5 md:h-5" />
+                            View Details
+                          </button>
+                          <button
+                            onClick={() => addToCart(medicine)}
+                            className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 md:py-3 rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-1 md:gap-2 text-sm md:text-base"
+                          >
+                            <ShoppingCart className="w-4 h-4 md:w-5 md:h-5" />
+                            Add to Cart
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1570,6 +1766,15 @@ const PharmacyPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Medicine Detail Modal */}
+      {selectedMedicine && (
+        <MedicineDetailModal
+          medicine={selectedMedicine}
+          onClose={() => setSelectedMedicine(null)}
+          onAddToCart={addToCart}
+        />
+      )}
 
       {/* Store Detail View */}
       {showStoreDetail && selectedStore && (

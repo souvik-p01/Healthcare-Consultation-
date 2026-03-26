@@ -1,140 +1,31 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { authAPI } from '../Pages/services/api';
-import socketService from '../Pages/services/socket';
-import { doctorService } from '../Pages/services/DoctorApi';
+// AuthContext is a thin wrapper that delegates to AppContext.
+// No localStorage usage — all auth state lives in AppContext backed by the backend.
+import { useAppContext } from './AppContext';
 
-const AuthContext = createContext({});
-
-export const useAuth = () => useContext(AuthContext);
-
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    // Check if user is logged in on mount
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    
-    if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
-      // Connect socket with token
-      socketService.connect(token);
-    }
-    setLoading(false);
-  }, []);
-
-  const login = async (email, password) => {
-    try {
-      setError(null);
-      const response = await authAPI.login(email, password);
-      const { token, user: userData } = response.data;
-      
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
-      
-      // Connect socket after login
-      socketService.connect(token);
-      
-      return response.data;
-    } catch (error) {
-      setError(error.response?.data?.error || 'Login failed');
-      throw error;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await authAPI.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      setUser(null);
-      socketService.disconnect();
-      window.location.href = '/login';
-    }
-  };
-
-  const register = async (userData) => {
-    try {
-      setError(null);
-      const response = await authAPI.register(userData);
-      const { token, user: newUser } = response.data;
-      
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(newUser));
-      setUser(newUser);
-      
-      socketService.connect(token);
-      
-      return response.data;
-    } catch (error) {
-      setError(error.response?.data?.error || 'Registration failed');
-      throw error;
-    }
-  };
-
-  const updateProfile = async (profileData) => {
-    try {
-      let response;
-      
-      // Use role-specific API
-      if (user?.role === 'doctor') {
-        response = await doctorService.updateProfile(profileData);
-      } else {
-        response = await authAPI.getMe();
-      }
-      
-      const updatedUser = { ...user, ...response.data.user };
-      
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      setUser(updatedUser);
-      
-      return response.data;
-    } catch (error) {
-      console.error('Update profile error:', error);
-      throw error;
-    }
-  };
-
-  const refreshUserData = async () => {
-    try {
-      const response = await authAPI.getMe();
-      const refreshedUser = response.data.user;
-      
-      localStorage.setItem('user', JSON.stringify(refreshedUser));
-      setUser(refreshedUser);
-      
-      return refreshedUser;
-    } catch (error) {
-      console.error('Refresh user data error:', error);
-      throw error;
-    }
-  };
-
-  const value = {
+export const useAuth = () => {
+  const {
     user,
     loading,
-    error,
-    login,
-    logout,
-    register,
+    isAuthenticated,
+    loginUser,
+    logoutUser,
+    registerUser,
     updateProfile,
-    refreshUserData,
-    isAuthenticated: !!user,
+    getCurrentUser,
+  } = useAppContext();
+
+  return {
+    user,
+    loading,
+    isAuthenticated,
     isDoctor: user?.role === 'doctor',
     isTechnician: user?.role === 'technician',
     isPatient: user?.role === 'patient',
     isAdmin: user?.role === 'admin',
+    login: loginUser,
+    logout: logoutUser,
+    register: registerUser,
+    updateProfile,
+    refreshUserData: getCurrentUser,
   };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
 };
