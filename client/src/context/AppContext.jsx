@@ -32,40 +32,26 @@ const createApiClient = (backendUrl) =>
     }
   });
 
-const getStoredToken = () => localStorage.getItem('accessToken');
+// Token stored only in memory — no localStorage dependency
+let _memToken = null;
+let _memRefreshToken = null;
 
-const getStoredUser = () => {
-  try {
-    const rawUser = localStorage.getItem('user');
-    return rawUser ? JSON.parse(rawUser) : null;
-  } catch {
-    return null;
-  }
-};
+const getStoredToken = () => _memToken;
 
-const storeUser = (user) => {
-  if (user) {
-    localStorage.setItem('user', JSON.stringify(user));
-  }
-};
+const getStoredUser = () => null; // user comes from backend via getCurrentUser
 
-const clearStoredUser = () => {
-  localStorage.removeItem('user');
-};
+const storeUser = () => {}; // no-op: user lives in React state only
+
+const clearStoredUser = () => {}; // no-op
 
 const storeTokens = (accessToken, refreshToken) => {
-  if (accessToken) {
-    localStorage.setItem('accessToken', accessToken);
-  }
-
-  if (refreshToken) {
-    localStorage.setItem('refreshToken', refreshToken);
-  }
+  if (accessToken) _memToken = accessToken;
+  if (refreshToken) _memRefreshToken = refreshToken;
 };
 
 const clearStoredTokens = () => {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
+  _memToken = null;
+  _memRefreshToken = null;
 };
 
 const getErrorStatus = (error) => error?.response?.status;
@@ -81,13 +67,11 @@ const isAuthError = (error) => {
 export const AppContextProvider = ({ children }) => {
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
-  const storedUser = getStoredUser();
-
   const [showLogin, setShowLogin] = useState(false);
-  const [token, setToken] = useState(getStoredToken());
-  const [user, setUser] = useState(storedUser);
+  const [token, setToken] = useState(null);
+  const [user, setUser] = useState(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [userRole, setUserRole] = useState(storedUser?.role?.toLowerCase() || 'patient');
+  const [userRole, setUserRole] = useState('patient');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -126,10 +110,12 @@ export const AppContextProvider = ({ children }) => {
       return refreshPromiseRef.current;
     }
 
+    const storedRefreshToken = _memRefreshToken;
+
     refreshPromiseRef.current = axios
       .post(
         `${backendUrl}/api/v1/auth/refresh-token`,
-        {},
+        { refreshToken: storedRefreshToken },
         {
           withCredentials: true,
           headers: { 'Content-Type': 'application/json' }
@@ -506,17 +492,18 @@ export const AppContextProvider = ({ children }) => {
 
     const verifyAuth = async () => {
       const storedToken = getStoredToken();
-      const storedUser = getStoredUser();
 
       if (!storedToken) {
-        if (isMounted) {
-          setInitialLoading(false);
+        // Try refreshing via cookie-based refresh token
+        try {
+          await refreshAuthToken();
+          await getCurrentUser();
+        } catch {
+          // Not logged in — that's fine
+        } finally {
+          if (isMounted) setInitialLoading(false);
         }
         return;
-      }
-
-      if (storedUser && !user) {
-        updateUserState(storedUser);
       }
 
       try {
@@ -526,17 +513,14 @@ export const AppContextProvider = ({ children }) => {
           try {
             await refreshAuthToken();
             await getCurrentUser();
-          } catch (refreshError) {
+          } catch {
             clearAuthState(false);
           }
         } else {
           console.error('User fetch failed due to server error:', error);
-          // keep stored user and token, do not logout on 500
         }
       } finally {
-        if (isMounted) {
-          setInitialLoading(false);
-        }
+        if (isMounted) setInitialLoading(false);
       }
     };
 
