@@ -32,6 +32,7 @@ import userRoutes from "./routes/user.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import razorpayRoutes from "./routes/razorpay.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
+import monitoringRoutes from "./routes/monitoring.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import doctorRoutes from "./routes/doctor.routes.js";
 import v1Routes from "./routes/api.routes.js";
@@ -252,6 +253,14 @@ app.get("/", (req, res) => {
     });
 });
 
+// Main API routes
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/patients", patientRoutes);
+app.use("/api/v1/admin", adminRoutes);
+app.use("/api/v1/payments", paymentRoutes);
+app.use("/api/v1/monitoring", monitoringRoutes);
+app.use("/api", razorpayRoutes); // Simple Razorpay endpoints for backward compatibility
 // ==========================================
 // MAIN API ROUTES
 // ==========================================
