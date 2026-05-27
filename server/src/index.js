@@ -32,6 +32,7 @@ import userRoutes from "./routes/user.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import razorpayRoutes from "./routes/razorpay.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
+import monitoringRoutes from "./routes/monitoring.routes.js";
 
 // Import middleware
 import { errorHandler } from "./middlewares/error.middleware.js";
@@ -237,6 +238,7 @@ app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/patients", patientRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/payments", paymentRoutes);
+app.use("/api/v1/monitoring", monitoringRoutes);
 app.use("/api", razorpayRoutes); // Simple Razorpay endpoints for backward compatibility
 
 // 404 handler for undefined routes
