@@ -59,7 +59,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
 export const optionalVerifyJWT = asyncHandler(async (req, res, next) => {
     try {
         const token =
-            res.cookie('refreshToken', refreshToken) ||
+            req.cookies?.refreshToken ||
             req.header("Authorization")?.replace("Bearer ", "").trim();
 
         if (token) {

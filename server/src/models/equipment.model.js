@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const equipmentSchema = new mongoose.Schema({
   name: {
@@ -138,4 +138,4 @@ equipmentSchema.index({ status: 1 });
 equipmentSchema.index({ type: 1 });
 equipmentSchema.index({ 'specifications.temperature.current': 1 });
 
-module.exports = mongoose.model('Equipment', equipmentSchema);
+export const Equipment = mongoose.model('Equipment', equipmentSchema);

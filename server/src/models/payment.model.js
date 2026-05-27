@@ -247,7 +247,7 @@ const paymentSchema = new Schema(
             userAgent: String,
             deviceId: String,
             location: {
-                type: { type: String, default: 'Point' },
+                type: { type: String },
                 coordinates: [Number] // [longitude, latitude]
             }
         },
@@ -352,9 +352,18 @@ paymentSchema.virtual('formattedAmount').get(function() {
 /**
  * Pre-save middleware: Calculate total amount and generate invoice number
  */
-paymentSchema.pre('save', function(next) {
+paymentSchema.pre('validate', function(next) {
     // Calculate total amount
     this.totalAmount = this.amount + this.taxAmount - this.discountAmount;
+    
+    // Set GeoJSON type if coordinates are provided, otherwise remove location to prevent 2dsphere index errors
+    if (this.metadata && this.metadata.location) {
+        if (this.metadata.location.coordinates && this.metadata.location.coordinates.length > 0) {
+            this.metadata.location.type = 'Point';
+        } else {
+            this.metadata.location = undefined;
+        }
+    }
     
     // Generate invoice number if not present
     if (!this.invoice.invoiceNumber && this.isNew) {

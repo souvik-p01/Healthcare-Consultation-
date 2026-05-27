@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Loader
 } from 'lucide-react'
+import { emergencyAPI } from './services/api'
 
 const EmergencyPage = () => {
   const [emergencyActive, setEmergencyActive] = useState(false)
@@ -36,58 +37,11 @@ const EmergencyPage = () => {
   const mapContainerRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
+  const polylineRef = useRef(null)
 
-  // Hospital data
-  const hospitals = [
-    { 
-      name: 'Apollo Hospital', 
-      distance: '2.3 km', 
-      eta: '8 mins', 
-      available: true,
-      coordinates: { lat: 19.0760, lng: 72.8777 },
-      address: '21, Greams Lane, Off Greams Road, Chennai',
-      phone: '+912266666666',
-      beds: 24,
-      ambulances: 3,
-      rating: 4.5
-    },
-    { 
-      name: 'Fortis Hospital', 
-      distance: '3.1 km', 
-      eta: '10 mins', 
-      available: true,
-      coordinates: { lat: 19.0860, lng: 72.8877 },
-      address: '154/9, Bannerghatta Road, Bangalore',
-      phone: '+912277777777',
-      beds: 18,
-      ambulances: 2,
-      rating: 4.3
-    },
-    { 
-      name: 'Kokilaben Hospital', 
-      distance: '4.5 km', 
-      eta: '12 mins', 
-      available: true,
-      coordinates: { lat: 19.0960, lng: 72.8977 },
-      address: 'Rao Saheb Achutrao Patwardhan Marg, Mumbai',
-      phone: '+912288888888',
-      beds: 12,
-      ambulances: 1,
-      rating: 4.4
-    },
-    { 
-      name: 'Lilavati Hospital', 
-      distance: '5.2 km', 
-      eta: '15 mins', 
-      available: false,
-      coordinates: { lat: 19.1060, lng: 72.9077 },
-      address: 'A-791, Bandra Reclamation, Bandra West, Mumbai',
-      phone: '+912299999999',
-      beds: 0,
-      ambulances: 0,
-      rating: 4.2
-    }
-  ]
+  const [hospitals, setHospitals] = useState([])
+  const [requestId, setRequestId] = useState(null)
+  const [currentStatus, setCurrentStatus] = useState(null)
 
   const emergencyNumbers = [
     { name: 'National Emergency', number: '112' },
@@ -114,7 +68,7 @@ const EmergencyPage = () => {
       }
 
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`
       script.async = true
       script.defer = true
       script.onload = () => setMapLoaded(true)
@@ -130,6 +84,10 @@ const EmergencyPage = () => {
         markersRef.current.forEach(marker => marker.setMap(null))
         markersRef.current = []
       }
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null)
+        polylineRef.current = null
+      }
     }
   }, [])
 
@@ -140,42 +98,141 @@ const EmergencyPage = () => {
     }
   }, [showMap, mapLoaded])
 
+  // Reset map reference when closing modal
+  useEffect(() => {
+    if (!showMap) {
+      mapInstanceRef.current = null
+    }
+  }, [showMap])
+
+  // Load hospitals from backend and calculate nearest
+  const loadHospitals = async (coords) => {
+    try {
+      const response = await emergencyAPI.getHospitals({
+        lat: coords?.lat,
+        lng: coords?.lng
+      })
+      if (response?.data?.success) {
+        const fetchedHospitals = response.data.data
+        
+        // Calculate distances if coordinates are available
+        const userLat = coords?.lat || 19.0760
+        const userLng = coords?.lng || 72.8777
+        
+        let nearest = null
+        let minDistance = Infinity
+        
+        const updatedHospitals = fetchedHospitals.map(h => {
+          const distanceVal = calculateDistance(userLat, userLng, h.coordinates.lat, h.coordinates.lng)
+          const etaVal = Math.min(Math.ceil(distanceVal * 4), 30)
+          
+          const updated = {
+            ...h,
+            distance: `${distanceVal.toFixed(1)} km`,
+            eta: `${etaVal} mins`,
+            etaMinutes: etaVal
+          }
+          
+          if (h.available && distanceVal < minDistance) {
+            minDistance = distanceVal
+            nearest = updated
+          }
+          
+          return updated
+        })
+        
+        setHospitals(updatedHospitals)
+        
+        if (nearest) {
+          setSelectedHospital(nearest)
+          setEta(nearest.etaMinutes)
+          setCountdown(nearest.etaMinutes * 60)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load hospitals from backend:", error)
+    }
+  }
+
   // Get user location
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords
-          setUserCoordinates({ lat: latitude, lng: longitude })
+          const coords = { lat: latitude, lng: longitude }
+          setUserCoordinates(coords)
           setLocation(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`)
-          calculateNearestHospital(latitude, longitude)
+          loadHospitals(coords)
         },
         (error) => {
           console.error('Error getting location:', error)
-          setLocation('Location access denied')
-          setUserCoordinates({ lat: 19.0760, lng: 72.8777 })
-          setSelectedHospital(hospitals[0])
-        }
+          setLocation('Mumbai (Default)')
+          const coords = { lat: 19.0760, lng: 72.8777 }
+          setUserCoordinates(coords)
+          loadHospitals(coords)
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
       )
     } else {
-      setUserCoordinates({ lat: 19.0760, lng: 72.8777 })
-      setSelectedHospital(hospitals[0])
+      const coords = { lat: 19.0760, lng: 72.8777 }
+      setUserCoordinates(coords)
+      loadHospitals(coords)
     }
+  }, [])
 
-    if (emergencyActive) {
+  // Emergency countdown timer
+  useEffect(() => {
+    if (emergencyActive && countdown > 0) {
       const timer = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 0) {
-            clearInterval(timer)
-            return 0
-          }
-          return prev - 1
-        })
+        setCountdown(prev => Math.max(0, prev - 1))
       }, 1000)
-
       return () => clearInterval(timer)
     }
-  }, [emergencyActive])
+  }, [emergencyActive, countdown])
+
+  // Polling loop for active request
+  useEffect(() => {
+    if (!emergencyActive || !requestId) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await emergencyAPI.getAmbulanceRequest(requestId)
+        if (response?.data?.success) {
+          const requestData = response.data.data
+          setCurrentStatus(requestData.status)
+          setCountdown(requestData.eta * 60)
+          
+          if (requestData.driverName) {
+            setAmbulances([
+              {
+                id: requestData._id,
+                number: requestData.ambulanceNumber || 'AMB-XXXX',
+                hospital: requestData.hospitalId?.name || selectedHospital?.name || 'Assigned Hospital',
+                distance: selectedHospital?.distance || 'N/A',
+                eta: `${requestData.eta} mins`,
+                phone: requestData.driverPhone || '+91 98765 43210',
+                coordinates: requestData.currentLocation || requestData.hospitalId?.coordinates,
+                driverName: requestData.driverName
+              }
+            ])
+          }
+          
+          if (requestData.status === 'arrived') {
+            clearInterval(pollInterval)
+          }
+          if (requestData.status === 'cancelled') {
+            setEmergencyActive(false)
+            clearInterval(pollInterval)
+          }
+        }
+      } catch (error) {
+        console.error("Error polling ambulance status:", error)
+      }
+    }, 3000)
+
+    return () => clearInterval(pollInterval)
+  }, [emergencyActive, requestId, selectedHospital])
 
   const initMap = () => {
     if (!mapContainerRef.current || !window.google) return
@@ -200,50 +257,163 @@ const EmergencyPage = () => {
       }
 
       mapInstanceRef.current = new window.google.maps.Map(mapContainerRef.current, mapOptions)
+      updateMarkers()
+      setMapError(null)
+    } catch (error) {
+      console.error('Error initializing map:', error)
+      setMapError('Failed to initialize map')
+    }
+  }
 
-      // Add user marker
-      if (userCoordinates) {
-        const userMarker = new window.google.maps.Marker({
-          position: userCoordinates,
-          map: mapInstanceRef.current,
-          icon: {
-            url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-            scaledSize: new window.google.maps.Size(40, 40)
-          },
-          title: "Your Location"
-        })
-        markersRef.current.push(userMarker)
+  // Update markers when data changes
+  const updateMarkers = () => {
+    if (!mapInstanceRef.current || !window.google) return
 
-        // Add user info window
-        const userInfoWindow = new window.google.maps.InfoWindow({
-          content: `
-            <div style="padding: 8px;">
-              <h4 style="margin: 0 0 5px; font-weight: bold;">Your Location</h4>
-              <p style="margin: 0;">${location}</p>
-            </div>
-          `
-        })
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.setMap(null))
+    markersRef.current = []
 
-        userMarker.addListener('click', () => {
-          userInfoWindow.open(mapInstanceRef.current, userMarker)
-        })
+    // Clear existing polyline
+    if (polylineRef.current) {
+      polylineRef.current.setMap(null)
+      polylineRef.current = null
+    }
+
+    // Add user marker
+    if (userCoordinates) {
+      const userMarker = new window.google.maps.Marker({
+        position: userCoordinates,
+        map: mapInstanceRef.current,
+        icon: {
+          url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+          scaledSize: new window.google.maps.Size(40, 40)
+        },
+        title: "Your Location"
+      })
+      markersRef.current.push(userMarker)
+
+      const userInfoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 8px;">
+            <h4 style="margin: 0 0 5px; font-weight: bold;">Your Location</h4>
+            <p style="margin: 0;">${location}</p>
+          </div>
+        `
+      })
+
+      userMarker.addListener('click', () => {
+        userInfoWindow.open(mapInstanceRef.current, userMarker)
+      })
+    }
+
+    if (emergencyActive) {
+      // 1. Draw hospital location
+      if (selectedHospital) {
+        const hospPos = selectedHospital.coordinates || (selectedHospital.lat && selectedHospital.lng ? { lat: selectedHospital.lat, lng: selectedHospital.lng } : null)
+        if (hospPos) {
+          const hospitalMarker = new window.google.maps.Marker({
+            position: hospPos,
+            map: mapInstanceRef.current,
+            label: {
+              text: 'H',
+              color: 'white',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            },
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 12,
+              fillColor: '#ef4444', // Red for hospital
+              fillOpacity: 1,
+              strokeWeight: 2,
+              strokeColor: '#ffffff'
+            },
+            title: selectedHospital.name
+          })
+          markersRef.current.push(hospitalMarker)
+
+          const hospInfoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="padding: 8px;">
+                <h4 style="margin: 0 0 5px; font-weight: bold;">${selectedHospital.name}</h4>
+                <p style="margin: 0; font-size: 12px;">Origin Hospital</p>
+                <p style="margin: 0; font-size: 12px;">📞 ${selectedHospital.phone}</p>
+              </div>
+            `
+          })
+          hospitalMarker.addListener('click', () => {
+            hospInfoWindow.open(mapInstanceRef.current, hospitalMarker)
+          })
+
+          // 2. Draw Polyline from Hospital to User coordinates
+          if (userCoordinates) {
+            const pathCoordinates = [hospPos, userCoordinates]
+            const routePath = new window.google.maps.Polyline({
+              path: pathCoordinates,
+              geodesic: true,
+              strokeColor: '#3b82f6', // Nice blue for route path
+              strokeOpacity: 0.8,
+              strokeWeight: 4,
+              map: mapInstanceRef.current
+            })
+            polylineRef.current = routePath
+          }
+        }
       }
 
-      // Add hospital/ambulance markers
-      const items = emergencyActive ? ambulances : hospitals.filter(h => h.available)
-      
-      items.forEach(item => {
-        const position = item.coordinates || (item.lat && item.lng ? { lat: item.lat, lng: item.lng } : null)
+      // 3. Draw Ambulance Live Location (comes from backend by polling)
+      if (ambulances.length > 0) {
+        const amb = ambulances[0]
+        const ambPos = amb.coordinates
+        if (ambPos) {
+          const ambulanceMarker = new window.google.maps.Marker({
+            position: ambPos,
+            map: mapInstanceRef.current,
+            label: {
+              text: 'A',
+              color: 'white',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            },
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 12,
+              fillColor: '#10b981', // Green for active ambulance
+              fillOpacity: 1,
+              strokeWeight: 2,
+              strokeColor: '#ffffff'
+            },
+            title: `Ambulance: ${amb.number}`
+          })
+          markersRef.current.push(ambulanceMarker)
+
+          const ambInfoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="padding: 8px;">
+                <h4 style="margin: 0 0 5px; font-weight: bold;">Ambulance ${amb.number}</h4>
+                <p style="margin: 0; font-size: 12px;"><b>Driver:</b> ${amb.driverName}</p>
+                <p style="margin: 0; font-size: 12px;"><b>Phone:</b> ${amb.phone}</p>
+                <p style="margin: 0; font-size: 12px;"><b>ETA:</b> ${amb.eta}</p>
+                <p style="margin: 0; font-size: 12px;"><b>Coordinates:</b> ${ambPos.lat.toFixed(4)}, ${ambPos.lng.toFixed(4)}</p>
+              </div>
+            `
+          })
+          ambulanceMarker.addListener('click', () => {
+            ambInfoWindow.open(mapInstanceRef.current, ambulanceMarker)
+          })
+        }
+      }
+    } else {
+      // Draw all available hospitals when not in active emergency
+      hospitals.filter(h => h.available).forEach(hospital => {
+        const position = hospital.coordinates || (hospital.lat && hospital.lng ? { lat: hospital.lat, lng: hospital.lng } : null)
         if (!position) return
 
-        const markerColor = emergencyActive ? 'green' : 'red'
-        const markerLabel = emergencyActive ? 'A' : 'H'
-        
         const marker = new window.google.maps.Marker({
           position: position,
           map: mapInstanceRef.current,
           label: {
-            text: markerLabel,
+            text: 'H',
             color: 'white',
             fontSize: '14px',
             fontWeight: 'bold'
@@ -251,25 +421,24 @@ const EmergencyPage = () => {
           icon: {
             path: window.google.maps.SymbolPath.CIRCLE,
             scale: 10,
-            fillColor: emergencyActive ? '#10b981' : '#ef4444',
+            fillColor: '#ef4444',
             fillOpacity: 1,
             strokeWeight: 2,
             strokeColor: '#ffffff'
           },
-          title: item.name || item.hospital || 'Location'
+          title: hospital.name
         })
 
-        // Create info window content
         const content = `
           <div style="padding: 12px; max-width: 250px;">
             <h4 style="margin: 0 0 8px; font-weight: bold; font-size: 16px;">
-              ${item.name || item.hospital || 'Medical Facility'}
+              ${hospital.name}
             </h4>
-            ${item.address ? `<p style="margin: 5px 0; font-size: 13px;">📍 ${item.address}</p>` : ''}
-            <p style="margin: 5px 0; font-size: 13px;">📏 Distance: ${item.distance || 'N/A'}</p>
-            ${item.eta ? `<p style="margin: 5px 0; font-size: 13px;">⏱️ ETA: ${item.eta}</p>` : ''}
-            ${item.phone ? `
-              <a href="tel:${item.phone}" style="display: inline-block; margin-top: 8px; padding: 6px 12px; background-color: #ef4444; color: white; text-decoration: none; border-radius: 4px; font-size: 13px;">
+            ${hospital.address ? `<p style="margin: 5px 0; font-size: 13px;">📍 ${hospital.address}</p>` : ''}
+            <p style="margin: 5px 0; font-size: 13px;">📏 Distance: ${hospital.distance || 'N/A'}</p>
+            ${hospital.eta ? `<p style="margin: 5px 0; font-size: 13px;">⏱️ ETA: ${hospital.eta}</p>` : ''}
+            ${hospital.phone ? `
+              <a href="tel:${hospital.phone}" style="display: inline-block; margin-top: 8px; padding: 6px 12px; background-color: #ef4444; color: white; text-decoration: none; border-radius: 4px; font-size: 13px;">
                 📞 Call Now
               </a>
             ` : ''}
@@ -286,47 +455,21 @@ const EmergencyPage = () => {
 
         markersRef.current.push(marker)
       })
+    }
 
-      // Fit bounds to show all markers
-      if (markersRef.current.length > 0) {
-        const bounds = new window.google.maps.LatLngBounds()
-        markersRef.current.forEach(marker => bounds.extend(marker.getPosition()))
-        mapInstanceRef.current.fitBounds(bounds)
-      }
-
-      setMapError(null)
-    } catch (error) {
-      console.error('Error initializing map:', error)
-      setMapError('Failed to initialize map')
+    if (markersRef.current.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds()
+      markersRef.current.forEach(marker => bounds.extend(marker.getPosition()))
+      mapInstanceRef.current.fitBounds(bounds)
     }
   }
 
-  const calculateNearestHospital = (userLat, userLng) => {
-    let nearest = null
-    let minDistance = Infinity
-
-    hospitals.forEach(hospital => {
-      if (hospital.available) {
-        const distance = calculateDistance(
-          userLat,
-          userLng,
-          hospital.coordinates.lat,
-          hospital.coordinates.lng
-        )
-        if (distance < minDistance) {
-          minDistance = distance
-          nearest = hospital
-        }
-      }
-    })
-
-    if (nearest) {
-      const calculatedEta = Math.min(Math.ceil(minDistance * 4), 30)
-      setEta(calculatedEta)
-      setCountdown(calculatedEta * 60)
-      setSelectedHospital(nearest)
+  // Hook to update markers when dependency arrays change
+  useEffect(() => {
+    if (mapLoaded && mapInstanceRef.current) {
+      updateMarkers()
     }
-  }
+  }, [ambulances, hospitals, emergencyActive, showMap, mapLoaded])
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371
@@ -340,52 +483,91 @@ const EmergencyPage = () => {
     return R * c
   }
 
-  const handleEmergencyRequest = () => {
+  const handleEmergencyRequest = async () => {
+    if (!selectedHospital) {
+      alert("No available nearby hospital found")
+      return
+    }
+
     setIsLoading(true)
-    
-    const availableAmbulances = hospitals
-      .filter(h => h.available && h.ambulances > 0)
-      .flatMap(hospital => {
-        const ambulanceList = []
-        for (let i = 0; i < hospital.ambulances; i++) {
-          ambulanceList.push({
-            id: `${hospital.name}-ambulance-${i+1}`,
-            number: `AMB-${Math.floor(1000 + Math.random() * 9000)}`,
-            hospital: hospital.name,
-            distance: hospital.distance,
-            eta: hospital.eta,
-            phone: hospital.phone,
-            coordinates: hospital.coordinates,
-            address: hospital.address,
-            type: i === 0 ? 'Advanced Life Support' : 'Basic Life Support'
-          })
-        }
-        return ambulanceList
-      })
-      .sort((a, b) => {
-        const distA = parseFloat(a.distance)
-        const distB = parseFloat(b.distance)
-        return distA - distB
+    try {
+      const response = await emergencyAPI.requestAmbulance({
+        hospitalId: selectedHospital._id,
+        pickupLocation: {
+          lat: userCoordinates?.lat || 19.0760,
+          lng: userCoordinates?.lng || 72.8777,
+          address: location
+        },
+        eta: eta
       })
 
-    setAmbulances(availableAmbulances)
+      if (response?.data?.success) {
+        const requestData = response.data.data
+        setRequestId(requestData._id)
+        setEmergencyActive(true)
+        setCurrentStatus(requestData.status)
 
-    setTimeout(() => {
-      setEmergencyActive(true)
-      setIsLoading(false)
-      
-      if (availableAmbulances.length > 0) {
-        setMapHospitals(hospitals.filter(h => h.available))
+        // Show map tracking
+        setMapHospitals([selectedHospital])
         setShowMap(true)
       }
-      
-      setCountdown(15 * 60)
-      setEta(15)
-    }, 1500)
+    } catch (error) {
+      console.error("Failed to request ambulance:", error)
+      alert("Emergency request failed. Please call 108 directly.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleEmergencyCall = (number) => {
     window.location.href = `tel:${number}`
+  }
+
+  const handleCancelRequest = async () => {
+    if (!requestId) {
+      setEmergencyActive(false)
+      return
+    }
+    
+    try {
+      await emergencyAPI.cancelAmbulanceRequest(requestId)
+      setEmergencyActive(false)
+      setRequestId(null)
+      setCurrentStatus(null)
+      alert("Emergency request has been cancelled.")
+    } catch (error) {
+      console.error("Failed to cancel emergency request:", error)
+      setEmergencyActive(false)
+    }
+  }
+
+  const getStatusDisplay = () => {
+    switch (currentStatus) {
+      case 'waiting_hospital_response':
+        return {
+          title: "Waiting for Hospital Response...",
+          desc: "Hospital is confirming ambulance availability and dispatching the crew",
+          colorClass: "bg-yellow-50 border-yellow-200 text-yellow-800"
+        }
+      case 'dispatched':
+        return {
+          title: "Emergency Ambulance Dispatched!",
+          desc: "Emergency unit is on the way to your location",
+          colorClass: "bg-red-50 border-red-200 text-red-800"
+        }
+      case 'arrived':
+        return {
+          title: "Ambulance Arrived!",
+          desc: "The ambulance has reached your pickup location",
+          colorClass: "bg-green-50 border-green-200 text-green-800"
+        }
+      default:
+        return {
+          title: "Emergency Ambulance Dispatched!",
+          desc: "Emergency unit is on the way to your location",
+          colorClass: "bg-red-50 border-red-200 text-red-800"
+        }
+    }
   }
 
   const handleDownloadPDF = () => {
@@ -659,33 +841,42 @@ const EmergencyPage = () => {
             ) : (
               /* Active Emergency View */
               <div className="text-center">
-                <div className="bg-red-50 border-4 border-red-200 rounded-xl md:rounded-2xl p-4 md:p-8 mb-6 md:mb-8 animate-pulse">
+                <div className={`border-4 rounded-xl md:rounded-2xl p-4 md:p-8 mb-6 md:mb-8 animate-pulse ${getStatusDisplay().colorClass}`}>
                   <Ambulance className="w-16 h-16 md:w-20 md:h-20 text-red-600 mx-auto mb-3 md:mb-4" />
                   <h2 className="text-xl md:text-3xl font-bold text-gray-800 mb-2">
-                    Emergency Ambulance Dispatched!
+                    {getStatusDisplay().title}
                   </h2>
                   <p className="text-gray-600 mb-4 md:mb-6 text-sm md:text-base">
-                    Emergency unit is on the way to your location
+                    {getStatusDisplay().desc}
                   </p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
                     <div className="bg-white p-3 md:p-4 rounded-xl">
                       <div className="text-xs md:text-sm text-gray-500 mb-1">Estimated Arrival</div>
-                      <div className="text-2xl md:text-4xl font-bold text-red-600">{formatTime(countdown)}</div>
+                      <div className="text-2xl md:text-4xl font-bold text-red-600">
+                        {currentStatus === 'waiting_hospital_response' ? '--:--' : formatTime(countdown)}
+                      </div>
                       <div className="text-xs md:text-sm text-gray-500">Minutes:Seconds</div>
                     </div>
                     <div className="bg-white p-3 md:p-4 rounded-xl">
                       <div className="text-xs md:text-sm text-gray-500 mb-1">Ambulance Number</div>
                       <div className="text-lg md:text-2xl font-bold text-gray-800">
-                        {ambulances.length > 0 ? ambulances[0].number : 'AMB-XXXX'}
+                        {ambulances.length > 0 && currentStatus !== 'waiting_hospital_response' ? ambulances[0].number : 'Assigning...'}
                       </div>
-                      <div className="text-xs md:text-sm text-gray-500">Live Tracking Active</div>
+                      <div className="text-xs md:text-sm text-gray-500">
+                        {currentStatus === 'waiting_hospital_response' ? 'Pending confirmation' : 'Live Tracking Active'}
+                      </div>
                     </div>
                     <div className="bg-white p-3 md:p-4 rounded-xl">
                       <div className="text-xs md:text-sm text-gray-500 mb-1">Assigned Hospital</div>
                       <div className="text-lg md:text-xl font-bold text-gray-800">
                         {selectedHospital?.name || 'Apollo Hospital'}
                       </div>
+                      {selectedHospital?.phone && (
+                        <div className="text-sm font-semibold text-red-600 my-0.5">
+                          📞 {selectedHospital.phone}
+                        </div>
+                      )}
                       <div className="text-xs md:text-sm text-gray-500">
                         {selectedHospital?.distance || '2.3 km'} away
                       </div>
@@ -695,11 +886,11 @@ const EmergencyPage = () => {
                   <div className="space-y-3 md:space-y-4">
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4">
                       <button 
-                        onClick={() => handleEmergencyCall('108')}
-                        className="flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-3 md:px-6 md:py-3 rounded-lg hover:bg-red-700 w-full sm:w-auto"
+                        onClick={() => handleEmergencyCall(selectedHospital?.phone || '108')}
+                        className="flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-3 md:px-6 md:py-3 rounded-lg hover:bg-red-700 w-full sm:w-auto font-medium"
                       >
                         <PhoneCall className="w-4 h-4 md:w-5 md:h-5" />
-                        Call Ambulance
+                        Call Hospital
                       </button>
                       <button 
                         onClick={() => setShowMap(true)}
@@ -715,10 +906,7 @@ const EmergencyPage = () => {
                     </div>
                     
                     <button
-                      onClick={() => {
-                        setEmergencyActive(false)
-                        setCountdown(15 * 60)
-                      }}
+                      onClick={handleCancelRequest}
                       className="text-gray-600 hover:text-gray-800 underline text-sm md:text-base"
                     >
                       Cancel Emergency Request
@@ -727,7 +915,7 @@ const EmergencyPage = () => {
                 </div>
 
                 {/* Instructions */}
-                <div className="text-left bg-yellow-50 border border-yellow-200 rounded-xl md:rounded-2xl p-4 md:p-6">
+                <div className="text-left bg-yellow-50 border border-yellow-200 rounded-xl md:rounded-2xl p-4 md:p-6 mb-6">
                   <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-3 md:mb-4 flex items-center">
                     <AlertCircle className="w-5 h-5 md:w-6 md:h-6 mr-2 md:mr-3 text-yellow-600" />
                     While Waiting for Ambulance:
@@ -750,6 +938,35 @@ const EmergencyPage = () => {
                       <span className="text-sm md:text-base">Prepare medical documents and insurance information</span>
                     </li>
                   </ul>
+                </div>
+
+                {/* Nearby Hospitals Contact Directory */}
+                <div className="mt-6 text-left bg-white border border-gray-200 rounded-xl md:rounded-2xl p-4 md:p-6 shadow-sm">
+                  <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-3 md:mb-4 flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-red-600 animate-bounce" />
+                    Call Nearby Hospitals directly for Ambulance:
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {hospitals.map((h, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
+                        <div>
+                          <div className="font-bold text-gray-800 text-sm">{h.name}</div>
+                          <div className="text-xs text-gray-500 my-0.5">{h.address}</div>
+                          <div className="text-xs font-semibold text-red-600 flex items-center gap-1">
+                            <Phone className="w-3.5 h-3.5" />
+                            {h.phone}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleEmergencyCall(h.phone)}
+                          className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-xs font-bold flex items-center gap-1 active:scale-95 transition-transform"
+                        >
+                          <PhoneCall className="w-3 h-3" />
+                          Call
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

@@ -1,5 +1,6 @@
 // server/src/controllers/auth.controller.js
 import { User } from "../models/User.model.js";
+import { Patient } from "../models/Patient.model.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { OAuth2Client } from "google-auth-library";
@@ -182,6 +183,7 @@ export const login = async (req, res) => {
  * GOOGLE AUTHENTICATION
  */
 export const googleAuth = async (req, res) => {
+    console.log("👉 [DEBUG] googleAuth controller hit!");
     try {
         const { credential } = req.body;
 
@@ -226,13 +228,37 @@ export const googleAuth = async (req, res) => {
                 isEmailVerified: true, // Google emails are pre-verified
                 authProvider: "google"
             });
+
+            // ✅ Create patient profile for new Google user
+            const patient = await Patient.create({
+                user: user._id,
+            });
+            user.patientId = patient._id;
+            await user.save();
+            console.log("✅ Created new Google user and Patient profile:", email);
+            
         } else {
             // Update existing user with Google info if needed
+            let needsSave = false;
             if (!user.googleId) {
                 user.googleId = googleId;
                 user.authProvider = "google";
                 user.avatar = picture || user.avatar;
                 user.isEmailVerified = true;
+                needsSave = true;
+            }
+
+            // ✅ Safety check: If role is patient but profile is missing, create it
+            if (user.role === "patient" && !user.patientId) {
+                const patient = await Patient.create({
+                    user: user._id,
+                });
+                user.patientId = patient._id;
+                needsSave = true;
+                console.log("✅ Fixed missing Patient profile for existing user:", email);
+            }
+
+            if (needsSave) {
                 await user.save();
             }
         }

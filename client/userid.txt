@@ -9,3 +9,9 @@
 3. Technician
     userthree3@gmail.com 
     password - User@three3
+
+4.   //Admin Email: admin@example.com
+    //Password: AdminPassword123!
+
+5.  //Email: patrasouvik313@gmail.com
+   //Password: souvik@123456

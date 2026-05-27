@@ -18,7 +18,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { LabResult } from "../models/labResult.model.js";
 import { User } from "../models/User.model.js";
 import { Patient } from "../models/Patient.model.js";
-import { Doctor } from "../models/doctor.model.js";
+import { Doctor } from "../models/Doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { MedicalRecord } from "../models/medicalRecord.model.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";

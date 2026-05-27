@@ -29,6 +29,14 @@ import {
   reminderService, 
   healthAlertService, 
   healthGoalService 
+import {
+  healthMetricsService,
+  deviceService,
+  medicationService,
+  reminderService,
+  healthAlertService,
+  healthGoalService,
+  healthSettingsService
 } from '../context/healthMonitoringService'
 
 const MonitoringPage = () => {
@@ -155,6 +163,151 @@ const MonitoringPage = () => {
       bp: metricsData.blood_pressure || getDefaultVitals().bp,
       temp: metricsData.temperature || getDefaultVitals().temp,
       oxygen: metricsData.blood_oxygen || getDefaultVitals().oxygen
+
+  // Modal states
+  const [showAddDevice, setShowAddDevice] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showWeeklyReport, setShowWeeklyReport] = useState(false)
+  const [showAlerts, setShowAlerts] = useState(false)
+  const [showGoals, setShowGoals] = useState(false)
+  const [showAddReminder, setShowAddReminder] = useState(false)
+
+  // Form states
+  const [deviceForm, setDeviceForm] = useState({ name: '', type: 'wearable', manufacturer: '' })
+  const [reminderForm, setReminderForm] = useState({ time: '', action: '', reminderType: 'custom', priority: 'medium' })
+  const [goalForm, setGoalForm] = useState({ title: '', targetValue: '', currentValue: '0', unit: '' })
+  const [settingsForm, setSettingsForm] = useState({ language: 'en', preferredContactMethod: 'email', notifications: { email: true, sms: true, push: true } })
+  
+  const [alerts, setAlerts] = useState([])
+  const [goals, setGoals] = useState([])
+
+  // Fetch data on mount
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Fetch all data in parallel
+      const [metricsRes, devicesRes, medicationsRes, remindersRes, alertsRes, goalsRes, settingsRes] = await Promise.allSettled([
+        healthMetricsService.getLatestMetrics(),
+        deviceService.getDevices(),
+        medicationService.getMedications(),
+        reminderService.getReminders(),
+        healthAlertService.getAlerts(),
+        healthGoalService.getGoals(),
+        healthSettingsService.getSettings()
+      ])
+
+      // Handle metrics
+      if (metricsRes.status === 'fulfilled' && metricsRes.value.data.success) {
+        const metricsData = metricsRes.value.data.data
+        setVitals(formatVitals(metricsData))
+      } else {
+        setVitals(getDefaultVitals())
+      }
+
+      // Handle devices
+      if (devicesRes.status === 'fulfilled' && devicesRes.value.data.success) {
+        setDevices(devicesRes.value.data.data)
+      } else {
+        setDevices([])
+      }
+
+      // Handle medications
+      if (medicationsRes.status === 'fulfilled' && medicationsRes.value.data.success) {
+        setMedications(medicationsRes.value.data.data)
+      } else {
+        setMedications([])
+      }
+
+      // Handle reminders
+      if (remindersRes.status === 'fulfilled' && remindersRes.value.data.success) {
+        setReminders(remindersRes.value.data.data)
+      } else {
+        setReminders([])
+      }
+
+      // Handle alerts
+      if (alertsRes.status === 'fulfilled' && alertsRes.value.data.success) {
+        setAlerts(alertsRes.value.data.data)
+      } else {
+        setAlerts([])
+      }
+
+      // Handle goals
+      if (goalsRes.status === 'fulfilled' && goalsRes.value.data.success) {
+        setGoals(goalsRes.value.data.data)
+      } else {
+        setGoals([])
+      }
+
+      // Handle settings
+      if (settingsRes.status === 'fulfilled' && settingsRes.value.data.success) {
+        setSettingsForm(settingsRes.value.data.data)
+      }
+
+      // Fetch trends
+      await fetchTrends()
+    } catch (err) {
+      console.error('Error fetching data:', err)
+      setError('Failed to load health data')
+      setVitals(getDefaultVitals())
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchTrends = async () => {
+    try {
+      const heartRes = await healthMetricsService.getMetricsTrend('heart_rate', 7)
+      const bpRes = await healthMetricsService.getMetricsTrend('blood_pressure', 7)
+      
+      if (heartRes.data.success && bpRes.data.success) {
+        const heartTrend = heartRes.data.data.map(m => m.value || 0)
+        const bpTrend = bpRes.data.data.map(m => m.systolic || 0)
+        setTrends({
+          labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          heartRate: heartTrend.length > 0 ? heartTrend : [72, 75, 70, 68, 74, 72, 71],
+          bloodPressure: bpTrend.length > 0 ? bpTrend : [120, 118, 122, 119, 121, 120, 118]
+        })
+      }
+    } catch (err) {
+      console.error('Error fetching trends:', err)
+    }
+  }
+
+  const formatVitals = (metricsData) => {
+    const defaults = getDefaultVitals()
+    return {
+      heart: metricsData.heart_rate ? {
+        ...defaults.heart,
+        value: metricsData.heart_rate.value,
+        status: metricsData.heart_rate.status,
+        trend: metricsData.heart_rate.trend
+      } : defaults.heart,
+      bp: metricsData.blood_pressure ? {
+        ...defaults.bp,
+        systolic: metricsData.blood_pressure.systolic,
+        diastolic: metricsData.blood_pressure.diastolic,
+        status: metricsData.blood_pressure.status,
+        trend: metricsData.blood_pressure.trend
+      } : defaults.bp,
+      temp: metricsData.temperature ? {
+        ...defaults.temp,
+        value: metricsData.temperature.value,
+        status: metricsData.temperature.status,
+        trend: metricsData.temperature.trend
+      } : defaults.temp,
+      oxygen: metricsData.blood_oxygen ? {
+        ...defaults.oxygen,
+        value: metricsData.blood_oxygen.value,
+        status: metricsData.blood_oxygen.status,
+        trend: metricsData.blood_oxygen.trend
+      } : defaults.oxygen
     }
   }
 
@@ -246,6 +399,36 @@ const MonitoringPage = () => {
     }
   }
 
+  }
+
+  const handleAddDevice = async (e) => {
+    e.preventDefault()
+    try {
+      const res = await deviceService.addDevice(deviceForm)
+      if (res.data.success) {
+        setDevices([res.data.data, ...devices])
+        setDeviceForm({ name: '', type: 'wearable', manufacturer: '' })
+        setShowAddDevice(false)
+      }
+    } catch (err) {
+      console.error('Error adding device:', err)
+    }
+  }
+
+  const handleAddReminder = async (e) => {
+    e.preventDefault()
+    try {
+      const res = await reminderService.addReminder(reminderForm)
+      if (res.data.success) {
+        setReminders([...reminders, res.data.data])
+        setReminderForm({ time: '', action: '', reminderType: 'custom', priority: 'medium' })
+        setShowAddReminder(false)
+      }
+    } catch (err) {
+      console.error('Error adding reminder:', err)
+    }
+  }
+
   const handleDeleteDevice = async (deviceId) => {
     try {
       const res = await deviceService.deleteDevice(deviceId)
@@ -257,10 +440,83 @@ const MonitoringPage = () => {
     }
   }
 
+  const toggleAlertEnabled = async (alertId, currentEnabled) => {
+    try {
+      const res = await healthAlertService.updateAlert(alertId, { enabled: !currentEnabled })
+      if (res.data.success) {
+        setAlerts(prev => prev.map(a => a._id === alertId ? { ...a, enabled: !currentEnabled } : a))
+      }
+    } catch (err) {
+      console.error('Error toggling alert:', err)
+    }
+  }
+
+  const handleAddGoal = async (e) => {
+    e.preventDefault()
+    try {
+      const res = await healthGoalService.addGoal(goalForm)
+      if (res.data.success) {
+        setGoals([res.data.data, ...goals])
+        setGoalForm({ title: '', targetValue: '', currentValue: '0', unit: '' })
+      }
+    } catch (err) {
+      console.error('Error creating goal:', err)
+    }
+  }
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault()
+    try {
+      const res = await healthSettingsService.updateSettings(settingsForm)
+      if (res.data.success) {
+        setSettingsForm(res.data.data)
+        setShowSettings(false)
+      }
+    } catch (err) {
+      console.error('Error saving settings:', err)
+    }
+  }
+
+  // Calculate dynamic data for Weekly Report
+  const getWeeklyReportStats = () => {
+    const heartSum = trends.heartRate.reduce((a, b) => a + b, 0)
+    const avgHeart = trends.heartRate.length > 0 ? Math.round(heartSum / trends.heartRate.length) : 72
+
+    const bpSum = trends.bloodPressure.reduce((a, b) => a + b, 0)
+    const avgSystolic = trends.bloodPressure.length > 0 ? Math.round(bpSum / trends.bloodPressure.length) : 120
+    const avgDiastolic = 80 // Base estimate
+
+    const totalMeds = medications.length
+    const takenMeds = medications.filter(m => m.taken).length
+    const medsPercent = totalMeds > 0 ? Math.round((takenMeds / totalMeds) * 100) : 0
+
+    const totalReminders = reminders.length
+    const activeReminders = reminders.filter(r => r.active).length
+    const remindersPercent = totalReminders > 0 ? Math.round((activeReminders / totalReminders) * 100) : 0
+
+    return {
+      avgHeartRate: avgHeart,
+      avgBP: { systolic: avgSystolic, diastolic: avgDiastolic },
+      medsCount: { taken: takenMeds, total: totalMeds, percent: medsPercent },
+      remindersCount: { active: activeReminders, total: totalReminders, percent: remindersPercent }
+    }
+  }
+
+  const stats = getWeeklyReportStats()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 to-yellow-50">
+        <Loader className="w-12 h-12 text-orange-600 animate-spin mb-4" />
+        <p className="text-gray-600 font-medium">Syncing your health vitals...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 py-8">
       <div className="container mx-auto px-4 max-w-7xl">
-        <Link 
+        <Link
           to="/services"
           className="inline-flex items-center text-orange-600 hover:text-orange-700 mb-6 bg-white px-4 py-2 rounded-full shadow"
         >
@@ -280,15 +536,17 @@ const MonitoringPage = () => {
                 <p className="text-gray-600">Track your vitals and health progress</p>
               </div>
             </div>
-            
+           
             <div className="flex items-center gap-4">
               <button 
+              <button
                 onClick={() => setShowAddDevice(true)}
                 className="flex items-center gap-2 bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700">
                 <Plus className="w-5 h-5" />
                 Add Device
               </button>
               <button 
+              <button
                 onClick={() => setShowSettings(true)}
                 className="flex items-center gap-2 border border-orange-600 text-orange-600 px-6 py-3 rounded-lg hover:bg-orange-50">
                 <Settings className="w-5 h-5" />
@@ -319,11 +577,11 @@ const MonitoringPage = () => {
                     {metric.status}
                   </span>
                 </div>
-                <div className="text-2xl font-bold text-gray-800">
+                <div className="text-2xl font-bold text-gray-800 text-left">
                   {key === 'bp' ? `${metric.systolic}/${metric.diastolic}` : metric.value}
                   <span className="text-sm text-gray-600 ml-1">{metric.unit}</span>
                 </div>
-                <div className="text-sm text-gray-600 mt-1">{metric.label}</div>
+                <div className="text-sm text-gray-600 mt-1 text-left">{metric.label}</div>
               </button>
             ))}
           </div>
@@ -352,7 +610,7 @@ const MonitoringPage = () => {
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
                     <div className="text-6xl font-bold text-gray-800 mb-4">
-                      {selectedMetric === 'bp' 
+                      {selectedMetric === 'bp'
                         ? `${vitals[selectedMetric].systolic}/${vitals[selectedMetric].diastolic}`
                         : vitals[selectedMetric].value}
                       <span className="text-2xl text-gray-600 ml-2">{vitals[selectedMetric].unit}</span>
@@ -369,7 +627,7 @@ const MonitoringPage = () => {
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Trend:</span>
                         <span className="font-medium flex items-center">
-                          <TrendingUp className="w-4 h-4 mr-1" />
+                          <TrendingUp className="w-4 h-4 mr-1 text-green-500" />
                           {vitals[selectedMetric].trend}
                         </span>
                       </div>
@@ -407,7 +665,7 @@ const MonitoringPage = () => {
                   Connected Devices
                 </h3>
                 <div className="space-y-4">
-                  {devices.map((device) => (
+                  {devices.length > 0 ? devices.map((device) => (
                     <div
                       key={device._id}
                       className="flex items-center justify-between p-4 border rounded-lg hover:bg-orange-50"
@@ -425,7 +683,7 @@ const MonitoringPage = () => {
                           <div className="flex items-center gap-3 text-sm text-gray-600">
                             <span className="capitalize">{device.type}</span>
                             <span className="flex items-center">
-                              <Battery className="w-4 h-4 mr-1" />
+                              <Battery className="w-4 h-4 mr-1 text-green-500" />
                               {device.battery}%
                             </span>
                           </div>
@@ -440,13 +698,16 @@ const MonitoringPage = () => {
                           {device.connected ? 'Connected' : 'Disconnected'}
                         </span>
                         <button 
+                        <button
                           onClick={() => handleDeleteDevice(device._id)}
                           className="text-gray-400 hover:text-red-600">
                           <X className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-gray-500 text-sm py-2">No connected devices found.</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -464,6 +725,7 @@ const MonitoringPage = () => {
                 </div>
                 <div className="space-y-4">
                   {medications.map((med) => (
+                  {medications.length > 0 ? medications.map((med) => (
                     <div
                       key={med._id}
                       className="flex items-center justify-between p-4 border rounded-lg"
@@ -481,17 +743,20 @@ const MonitoringPage = () => {
                       <button
                         onClick={() => toggleMedication(med._id)}
                         className={`w-12 h-6 rounded-full transition-colors ${
+                        className={`w-12 h-6 rounded-full transition-colors relative flex items-center ${
                           med.taken
                             ? 'bg-green-500'
                             : 'bg-gray-300'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white transform transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-white absolute transition-transform ${
                           med.taken ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-gray-500 text-sm py-2">No medications logged for today.</p>
+                  )}
                 </div>
               </div>
 
@@ -502,7 +767,7 @@ const MonitoringPage = () => {
                   Health Reminders
                 </h3>
                 <div className="space-y-4">
-                  {reminders.map((reminder) => (
+                  {reminders.length > 0 ? reminders.map((reminder) => (
                     <div
                       key={reminder._id}
                       className="flex items-center justify-between p-4 border rounded-lg"
@@ -523,20 +788,24 @@ const MonitoringPage = () => {
                       <button
                         onClick={() => toggleReminder(reminder._id)}
                         className={`w-12 h-6 rounded-full transition-colors ${
+                        className={`w-12 h-6 rounded-full transition-colors relative flex items-center ${
                           reminder.active
                             ? 'bg-orange-500'
                             : 'bg-gray-300'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded-full bg-white transform transition-transform ${
+                        <div className={`w-4 h-4 rounded-full bg-white absolute transition-transform ${
                           reminder.active ? 'translate-x-7' : 'translate-x-1'
                         }`}></div>
                       </button>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-gray-500 text-sm py-2">No active health reminders.</p>
+                  )}
                 </div>
 
                 <button 
+                <button
                   onClick={() => setShowAddReminder(true)}
                   className="w-full mt-6 flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 text-gray-600 py-3 rounded-lg hover:bg-gray-50">
                   <Plus className="w-5 h-5" />
@@ -576,6 +845,7 @@ const MonitoringPage = () => {
               <h3 className="font-bold text-gray-800 mb-2">{feature.title}</h3>
               <p className="text-sm text-gray-600 mb-4">{feature.desc}</p>
               <button 
+              <button
                 onClick={() => {
                   if (idx === 0) setShowWeeklyReport(true);
                   else if (idx === 1) setShowAlerts(true);
@@ -735,11 +1005,13 @@ const MonitoringPage = () => {
                 <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
                   <h4 className="font-medium text-gray-800 mb-2">Average Heart Rate</h4>
                   <p className="text-2xl font-bold text-blue-600">72 bpm</p>
+                  <p className="text-2xl font-bold text-blue-600">{stats.avgHeartRate} bpm</p>
                   <p className="text-sm text-gray-600">Normal range: 60-100 bpm</p>
                 </div>
                 <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
                   <h4 className="font-medium text-gray-800 mb-2">Average Blood Pressure</h4>
                   <p className="text-2xl font-bold text-green-600">120/80 mmHg</p>
+                  <p className="text-2xl font-bold text-green-600">{stats.avgBP.systolic}/{stats.avgBP.diastolic} mmHg</p>
                   <p className="text-sm text-gray-600">Healthy range</p>
                 </div>
               </div>
@@ -753,6 +1025,12 @@ const MonitoringPage = () => {
                 </ul>
               </div>
               <button onClick={() => setShowWeeklyReport(false)} className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">
+                  <li>✓ Medications taken: {stats.medsCount.taken}/{stats.medsCount.total} ({stats.medsCount.percent}%)</li>
+                  <li>✓ Health reminders: {stats.remindersCount.active}/{stats.remindersCount.total} active ({stats.remindersCount.percent}% active)</li>
+                  <li>✓ Connected devices: {devices.filter(d => d.connected).length} active</li>
+                </ul>
+              </div>
+              <button onClick={() => setShowWeeklyReport(false)} className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-semibold">
                 Close
               </button>
             </div>
@@ -778,6 +1056,8 @@ const MonitoringPage = () => {
                 { type: 'Low Oxygen', threshold: '< 95%', enabled: true }
               ].map((alert, idx) => (
                 <div key={idx} className="p-4 border rounded-lg flex items-center justify-between">
+              {alerts.length > 0 ? alerts.map((alert) => (
+                <div key={alert._id} className="p-4 border rounded-lg flex items-center justify-between">
                   <div>
                     <h4 className="font-medium text-gray-800">{alert.type}</h4>
                     <p className="text-sm text-gray-600">Threshold: {alert.threshold}</p>
@@ -788,6 +1068,17 @@ const MonitoringPage = () => {
                 </div>
               ))}
               <button onClick={() => setShowAlerts(false)} className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">
+                  <button
+                    onClick={() => toggleAlertEnabled(alert._id, alert.enabled)}
+                    className={`w-12 h-6 rounded-full transition-colors relative flex items-center ${alert.enabled ? 'bg-orange-500' : 'bg-gray-300'}`}
+                  >
+                    <div className={`w-4 h-4 rounded-full bg-white absolute transition-transform ${alert.enabled ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                  </button>
+                </div>
+              )) : (
+                <p className="text-gray-500 text-sm py-2">No alerts configured yet.</p>
+              )}
+              <button onClick={() => setShowAlerts(false)} className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-semibold">
                 Close
               </button>
             </div>
@@ -825,9 +1116,169 @@ const MonitoringPage = () => {
                 <p className="text-gray-600">No goals set yet. Create one to get started!</p>
               )}
               <button onClick={() => setShowGoals(false)} className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">
+            <div className="space-y-6">
+              <div className="space-y-4">
+                {goals.length > 0 ? goals.map((goal) => (
+                  <div key={goal._id} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium text-gray-800">{goal.title}</h4>
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        goal.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                      }`}>
+                        {goal.status}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div className="bg-orange-600 h-2 rounded-full" style={{width: `${goal.progress}%`}}></div>
+                    </div>
+                    <p className="text-sm text-gray-600">{goal.progress}% complete ({goal.currentValue || 0} / {goal.targetValue})</p>
+                  </div>
+                )) : (
+                  <p className="text-gray-600 text-sm">No goals set yet. Create one to get started!</p>
+                )}
+              </div>
+
+              {/* Goal creation Form */}
+              <form onSubmit={handleAddGoal} className="border-t pt-4 space-y-3">
+                <h4 className="font-semibold text-gray-800 text-left">Add New Goal</h4>
+                <div className="grid grid-cols-2 gap-2 text-left">
+                  <div className="col-span-2">
+                    <input
+                      type="text"
+                      placeholder="Goal Title (e.g. Daily Steps)"
+                      value={goalForm.title}
+                      onChange={(e) => setGoalForm({...goalForm, title: e.target.value})}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Target (e.g. 10000)"
+                      value={goalForm.targetValue}
+                      onChange={(e) => setGoalForm({...goalForm, targetValue: e.target.value})}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Unit (e.g. steps)"
+                      value={goalForm.unit}
+                      onChange={(e) => setGoalForm({...goalForm, unit: e.target.value})}
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+                      required
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="w-full py-2 bg-orange-600 text-white rounded hover:bg-orange-700 font-semibold text-sm">
+                  Create Goal
+                </button>
+              </form>
+
+              <button onClick={() => setShowGoals(false)} className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold text-sm">
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-left">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Monitoring Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveSettings} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Language</label>
+                <select
+                  value={settingsForm.language || 'en'}
+                  onChange={(e) => setSettingsForm({...settingsForm, language: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="en">English</option>
+                  <option value="es">Español</option>
+                  <option value="fr">Français</option>
+                  <option value="hi">Hindi</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Contact Method</label>
+                <select
+                  value={settingsForm.preferredContactMethod || 'email'}
+                  onChange={(e) => setSettingsForm({...settingsForm, preferredContactMethod: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="email">Email</option>
+                  <option value="sms">SMS</option>
+                  <option value="push">Push Notification</option>
+                </select>
+              </div>
+              
+              <div className="space-y-2 pt-2">
+                <h4 className="font-medium text-gray-700">Notification Alerts</h4>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Email Alerts</span>
+                  <input 
+                    type="checkbox" 
+                    checked={settingsForm.notifications?.email !== false} 
+                    onChange={(e) => setSettingsForm({
+                      ...settingsForm, 
+                      notifications: { ...settingsForm.notifications, email: e.target.checked }
+                    })}
+                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">SMS Alerts</span>
+                  <input 
+                    type="checkbox" 
+                    checked={settingsForm.notifications?.sms !== false} 
+                    onChange={(e) => setSettingsForm({
+                      ...settingsForm, 
+                      notifications: { ...settingsForm.notifications, sms: e.target.checked }
+                    })}
+                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Push Alerts</span>
+                  <input 
+                    type="checkbox" 
+                    checked={settingsForm.notifications?.push !== false} 
+                    onChange={(e) => setSettingsForm({
+                      ...settingsForm, 
+                      notifications: { ...settingsForm.notifications, push: e.target.checked }
+                    })}
+                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-semibold"
+                >
+                  Save Settings
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

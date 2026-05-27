@@ -9,7 +9,8 @@ import "./index.css";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Navigation from "./components/Navigation";
-import ProtectedRoute from "./components/ProtectedRoute"; // Fixed duplicate import
+import ProtectedRoute from "./components/ProtectedRoute";
+import ScrollToTop from "./components/ScrollToTop";
 
 /* -------- Pages -------- */
 import Home from "./Pages/Home";
@@ -90,6 +91,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen flex flex-col w-full">
+      <ScrollToTop />
       {/* Show header only on non-admin and non-auth routes */}
       {!isPublicRoute && (
         <Header isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />

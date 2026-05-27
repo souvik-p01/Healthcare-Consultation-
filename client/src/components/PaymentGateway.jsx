@@ -9,7 +9,7 @@ const PaymentGateway = ({
   orderDetails = {},
   paymentMethods = ['razorpay', 'cod'],
   businessName = 'MedCare',
-  businessLogo = 'https://your-logo-url.com/logo.png'
+  businessLogo = 'https://cdn-icons-png.flaticon.com/512/2966/2966327.png'
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState(paymentMethods[0]);
@@ -96,10 +96,30 @@ const PaymentGateway = ({
     }
   };
 
-  const handleCOD = () => {
-    setTimeout(() => {
-      onSuccess({ paymentId: 'COD', method: 'cod' });
-    }, 1500);
+  const handleCOD = async () => {
+    try {
+      // Create pending order on backend for COD
+      const { data: orderData } = await paymentAPI.createOrder({
+        amount,
+        currency: 'INR',
+        serviceType: orderDetails.serviceType || 'pharmacy',
+        description: orderDetails.description || 'Medicine Purchase (COD)',
+        appointmentId: orderDetails.appointmentId,
+        paymentMethod: 'cod',
+        metadata: orderDetails.metadata || {},
+      });
+
+      onSuccess({
+        paymentId: orderData.data.paymentId,
+        orderId: orderData.data.orderId,
+        method: 'cod',
+        data: orderData.data
+      });
+    } catch (error) {
+      console.error('COD placement error:', error);
+      alert(error.response?.data?.message || error.message || 'Failed to place COD order.');
+      setIsProcessing(false);
+    }
   };
 
   const handlePayment = async () => {

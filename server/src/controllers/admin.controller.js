@@ -424,7 +424,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
   const users = await User.find(query)
     .select('-password -refreshToken')
     .populate('patientId')
-    .populate('providerId')
+    .populate('doctorId')
     .sort(sort)
     .skip(skip)
     .limit(parseInt(limit))
@@ -493,7 +493,7 @@ const getUserById = asyncHandler(async (req, res) => {
         { path: 'medications' }
       ]
     })
-    .populate('providerId')
+    .populate('doctorId')
     .lean();
 
   if (!user) {

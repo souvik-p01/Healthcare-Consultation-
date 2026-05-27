@@ -119,8 +119,8 @@ const Telemedicine = () => {
   const startZegoCall = async (doctor) => {
     try {
       // Get credentials from environment variables
-      const appID = Number(process.env.REACT_APP_ZEGO_APP_ID);
-      const serverSecret = process.env.REACT_APP_ZEGO_SERVER_SECRET;
+      const appID = Number(import.meta.env.VITE_ZEGO_APP_ID);
+      const serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
 
       if (!appID || !serverSecret) {
         alert('ZEGOCLOUD credentials not configured. Please check your .env file.');
@@ -209,8 +209,8 @@ const Telemedicine = () => {
   // Audio-only call using ZEGOCLOUD (phone consultation)
   const startZegoAudioCall = async (doctor) => {
     try {
-      const appID = Number(process.env.REACT_APP_ZEGO_APP_ID);
-      const serverSecret = process.env.REACT_APP_ZEGO_SERVER_SECRET;
+      const appID = Number(import.meta.env.VITE_ZEGO_APP_ID);
+      const serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
 
       if (!appID || !serverSecret) {
         alert('ZEGOCLOUD credentials not configured. Please check your .env file.');

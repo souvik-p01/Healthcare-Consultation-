@@ -21,6 +21,27 @@ import {
   addHealthGoal,
   getHealthGoals,
   updateHealthGoal
+    addMetric,
+    getLatestMetrics,
+    getMetricsTrend,
+    getDevices,
+    addDevice,
+    updateDevice,
+    deleteDevice,
+    getMedications,
+    addMedication,
+    toggleMedicationTaken,
+    getReminders,
+    addReminder,
+    toggleReminder,
+    getAlerts,
+    addAlert,
+    updateAlert,
+    getGoals,
+    addGoal,
+    updateGoal,
+    getSettings,
+    updateSettings
 } from "../controllers/monitoring.controller.js";
 
 const router = Router();
@@ -59,5 +80,54 @@ router.put("/alerts/:alertId", updateHealthAlert);
 router.post("/goals", addHealthGoal);
 router.get("/goals", getHealthGoals);
 router.put("/goals/:goalId", updateHealthGoal);
+// Apply authentication to all monitoring routes
+router.use(verifyJWT);
+
+// ==================== HEALTH METRICS ROUTES ====================
+router.post("/metrics", addMetric);
+router.get("/metrics/latest", getLatestMetrics);
+router.get("/metrics/trend", getMetricsTrend);
+
+// ==================== DEVICES ROUTES ====================
+router.route("/devices")
+    .get(getDevices)
+    .post(addDevice);
+
+router.route("/devices/:deviceId")
+    .put(updateDevice)
+    .delete(deleteDevice);
+
+// ==================== MEDICATIONS ROUTES ====================
+router.route("/medications")
+    .get(getMedications)
+    .post(addMedication);
+
+router.put("/medications/:medicationId/toggle", toggleMedicationTaken);
+
+// ==================== REMINDERS ROUTES ====================
+router.route("/reminders")
+    .get(getReminders)
+    .post(addReminder);
+
+router.put("/reminders/:reminderId/toggle", toggleReminder);
+
+// ==================== HEALTH ALERTS ROUTES ====================
+router.route("/alerts")
+    .get(getAlerts)
+    .post(addAlert);
+
+router.put("/alerts/:alertId", updateAlert);
+
+// ==================== HEALTH GOALS ROUTES ====================
+router.route("/goals")
+    .get(getGoals)
+    .post(addGoal);
+
+router.put("/goals/:goalId", updateGoal);
+
+// ==================== SETTINGS ROUTES ====================
+router.route("/settings")
+    .get(getSettings)
+    .patch(updateSettings);
 
 export default router;

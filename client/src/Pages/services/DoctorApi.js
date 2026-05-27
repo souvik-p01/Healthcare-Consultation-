@@ -72,7 +72,8 @@ const doctorApi = axios.create({
 doctorApi.interceptors.request.use(
     (config) => {
         // Get token from localStorage
-        const token = localStorage.getItem('access_token') || 
+        const token = localStorage.getItem('accessToken') ||
+                      localStorage.getItem('access_token') || 
                       localStorage.getItem('doctor_token') || 
                       localStorage.getItem('token');
         
@@ -186,6 +187,7 @@ doctorApi.interceptors.response.use(
  */
 const handleUnauthorized = () => {
     // Clear auth data
+    localStorage.removeItem('accessToken');
     localStorage.removeItem('access_token');
     localStorage.removeItem('doctor_token');
     localStorage.removeItem('token');
@@ -241,7 +243,8 @@ const showToast = (message, type = 'info') => {
  * Get auth token
  */
 export const getAuthToken = () => {
-    return localStorage.getItem('access_token') || 
+    return localStorage.getItem('accessToken') || 
+           localStorage.getItem('access_token') || 
            localStorage.getItem('doctor_token') || 
            localStorage.getItem('token');
 };
@@ -250,6 +253,7 @@ export const getAuthToken = () => {
  * Set auth token
  */
 export const setAuthToken = (token) => {
+    localStorage.setItem('accessToken', token);
     localStorage.setItem('access_token', token);
     localStorage.setItem('doctor_token', token);
 };
@@ -258,6 +262,7 @@ export const setAuthToken = (token) => {
  * Clear auth data
  */
 export const clearAuthData = () => {
+    localStorage.removeItem('accessToken');
     localStorage.removeItem('access_token');
     localStorage.removeItem('doctor_token');
     localStorage.removeItem('token');

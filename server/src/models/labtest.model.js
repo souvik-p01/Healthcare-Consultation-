@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const labTestSchema = new mongoose.Schema({
   labCode: {
@@ -140,4 +140,4 @@ labTestSchema.pre('save', function(next) {
   next();
 });
 
-module.exports = mongoose.model('LabTest', labTestSchema);
+export const LabTest = mongoose.model('LabTest', labTestSchema);

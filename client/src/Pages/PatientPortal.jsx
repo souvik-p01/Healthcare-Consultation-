@@ -79,13 +79,15 @@ const PatientPortal = () => {
           apiCall('/patients/appointments')
         ]);
         if (notifRes.status === 'fulfilled' && notifRes.value?.data) {
-          setNotifications((notifRes.value.data || []).map(n => ({
+          const notifData = notifRes.value.data.notifications || notifRes.value.data || [];
+          setNotifications(Array.isArray(notifData) ? notifData.map(n => ({
             id: n._id, title: n.title, desc: n.message,
             time: new Date(n.createdAt).toLocaleTimeString(), read: n.read
-          })));
+          })) : []);
         }
         if (apptRes.status === 'fulfilled' && apptRes.value?.data) {
-          setAppointments(apptRes.value.data || []);
+          const apptData = apptRes.value.data.appointments || apptRes.value.data || [];
+          setAppointments(Array.isArray(apptData) ? apptData : []);
         }
       } catch (e) {
         console.error('Patient dashboard fetch error:', e);
@@ -402,7 +404,7 @@ const PatientPortal = () => {
               ))}
             </div>
             <button 
-              onClick={() => setActiveTab('appointments')}
+              onClick={() => navigate('/services/consultations')}
               className="w-full mt-4 py-2 md:py-3 border border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-2 text-sm md:text-base font-medium"
             >
               <Plus className="w-4 h-4 md:w-5 md:h-5" />
@@ -540,13 +542,50 @@ const PatientPortal = () => {
   //   </div>
   // );
   const AIAssistantContent = () => (
-  <div className="space-y-6">
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-bold mb-2">AI Health Assistant</h2>
-      <p className="text-gray-600">Describe your symptoms and get AI insights.</p>
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+        <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-600 p-8 text-white relative">
+          <div className="absolute top-0 right-0 p-4 opacity-10">
+            <Brain size={120} />
+          </div>
+          <div className="relative z-10">
+            <div className="bg-white/20 backdrop-blur-md w-12 h-12 rounded-xl flex items-center justify-center mb-6">
+              <Sparkles className="text-yellow-300" size={24} />
+            </div>
+            <h2 className="text-3xl font-extrabold mb-3 font-syne">Meet Your Health Assistant</h2>
+            <p className="text-indigo-100 text-lg max-w-xl mb-8 leading-relaxed">
+              Experience the future of healthcare. Our AI can analyze your symptoms, 
+              explain complex lab reports, and provide 24/7 medical guidance with human-like empathy.
+            </p>
+            <button 
+              onClick={() => navigate('/services/assistant')}
+              className="bg-white text-indigo-600 px-8 py-4 rounded-xl font-bold hover:bg-indigo-50 transition-all shadow-xl hover:scale-105 flex items-center gap-3 group"
+            >
+              Launch AI Assistant
+              <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+        </div>
+        <div className="p-8 grid md:grid-cols-3 gap-6">
+          {[
+            { icon: Activity, title: "Symptom Checker", desc: "Get instant insights into how you feel." },
+            { icon: FileText, title: "Report Analyzer", desc: "Upload and understand your lab results." },
+            { icon: Mic, title: "Voice Interaction", desc: "Talk to your assistant naturally." }
+          ].map((item, i) => (
+            <div key={i} className="flex gap-4 p-4 rounded-xl hover:bg-gray-50 transition-colors">
+              <div className="bg-indigo-50 p-3 rounded-lg h-fit text-indigo-600">
+                <item.icon size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800 mb-1">{item.title}</h3>
+                <p className="text-gray-500 text-sm leading-relaxed">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
 
 
   const AppointmentsContent = () => (
@@ -557,7 +596,10 @@ const PatientPortal = () => {
             <h2 className="text-xl md:text-2xl font-bold text-gray-800">Appointments</h2>
             <p className="text-gray-600 text-sm md:text-base">Manage your medical appointments</p>
           </div>
-          <button className="w-full md:w-auto bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow hover:shadow-md font-medium flex items-center justify-center gap-2">
+          <button 
+            onClick={() => navigate('/services/consultations')}
+            className="w-full md:w-auto bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow hover:shadow-md font-medium flex items-center justify-center gap-2"
+          >
             <Plus className="w-4 h-4 md:w-5 md:h-5" />
             New Appointment
           </button>

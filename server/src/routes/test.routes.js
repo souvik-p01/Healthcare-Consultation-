@@ -1,5 +1,5 @@
-const express = require('express');
-const {
+import { Router } from 'express';
+import {
   getTests,
   getTest,
   createTest,
@@ -7,25 +7,25 @@ const {
   deleteTest,
   assignTest,
   getTestStatistics
-} = require('../controllers/testController');
-const { protect, authorize } = require('../middleware/auth');
+} from '../controllers/test.controller.js';
+import { verifyJWT, restrictTo } from '../middlewares/auth.middleware.js';
 
-const router = express.Router();
+const router = Router();
 
-router.use(protect);
+router.use(verifyJWT);
 
 router.route('/')
-  .get(authorize('technician', 'admin', 'supervisor'), getTests)
-  .post(authorize('technician', 'admin', 'supervisor'), createTest);
+  .get(restrictTo('technician', 'admin', 'supervisor'), getTests)
+  .post(restrictTo('technician', 'admin', 'supervisor'), createTest);
 
 router.route('/stats')
-  .get(authorize('technician', 'admin', 'supervisor'), getTestStatistics);
+  .get(restrictTo('technician', 'admin', 'supervisor'), getTestStatistics);
 
 router.route('/:id')
-  .get(authorize('technician', 'admin', 'supervisor'), getTest)
-  .put(authorize('technician', 'admin', 'supervisor'), updateTest)
-  .delete(authorize('admin'), deleteTest);
+  .get(restrictTo('technician', 'admin', 'supervisor'), getTest)
+  .put(restrictTo('technician', 'admin', 'supervisor'), updateTest)
+  .delete(restrictTo('admin'), deleteTest);
 
-router.post('/:id/assign', authorize('admin', 'supervisor'), assignTest);
+router.post('/:id/assign', restrictTo('admin', 'supervisor'), assignTest);
 
-module.exports = router;
+export default router;

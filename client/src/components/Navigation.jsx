@@ -6,12 +6,12 @@ const Navigation = () => {
   const navItems = [
     { path: '/', label: 'Home', icon: <Home className="w-4 h-4" /> },
     { path: '/services', label: 'Services', icon: <Brain className="w-4 h-4" /> },
-    { path: '/ai-assistant', label: 'AI Assistant' },
-    { path: '/consultations', label: 'Consultations' },
-    { path: '/emergency', label: 'Emergency' },
-    { path: '/pharmacy', label: 'Pharmacy' },
-    { path: '/monitoring', label: 'Monitoring' },
-    { path: '/records', label: 'Records' }
+    { path: '/services/assistant', label: 'AI Assistant' },
+    { path: '/services/consultations', label: 'Consultations' },
+    { path: '/services/emergency', label: 'Emergency' },
+    { path: '/services/pharmacy', label: 'Pharmacy' },
+    { path: '/services/monitoring', label: 'Monitoring' },
+    { path: '/services/records', label: 'Records' }
   ]
 
   return (

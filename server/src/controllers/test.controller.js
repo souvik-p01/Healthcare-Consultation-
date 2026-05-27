@@ -1,12 +1,12 @@
-const LabTest = require('../models/LabTest');
-const Technician = require('../models/Technician');
-const Equipment = require('../models/Equipment');
-const Notification = require('../models/Notification');
+import { LabTest } from '../models/labtest.model.js';
+import { Technician } from '../models/technician.model.js';
+import { Equipment } from '../models/equipment.model.js';
+import { Notification } from '../models/notification.model.js';
 
 // @desc    Get all lab tests
 // @route   GET /api/tests
 // @access  Private (Technician/Admin)
-exports.getTests = async (req, res, next) => {
+export const getTests = async (req, res, next) => {
   try {
     const {
       status,
@@ -59,12 +59,6 @@ exports.getTests = async (req, res, next) => {
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
     
-    // If sorting by priority, add custom sort
-    if (sortBy === 'priority') {
-      const priorityOrder = { 'Emergency': 0, 'High': 1, 'Normal': 2, 'Low': 3 };
-      // This would require aggregation pipeline for proper sorting
-    }
-    
     const tests = await LabTest.find(filter)
       .populate('patient', 'name age gender')
       .populate('doctor', 'name department')
@@ -91,7 +85,7 @@ exports.getTests = async (req, res, next) => {
 // @desc    Get single test
 // @route   GET /api/tests/:id
 // @access  Private (Technician/Admin)
-exports.getTest = async (req, res, next) => {
+export const getTest = async (req, res, next) => {
   try {
     const test = await LabTest.findById(req.params.id)
       .populate('patient', 'name age gender contact')
@@ -130,7 +124,7 @@ exports.getTest = async (req, res, next) => {
 // @desc    Create new lab test
 // @route   POST /api/tests
 // @access  Private (Technician/Admin)
-exports.createTest = async (req, res, next) => {
+export const createTest = async (req, res, next) => {
   try {
     // Generate lab code
     const date = new Date();
@@ -199,7 +193,7 @@ exports.createTest = async (req, res, next) => {
 // @desc    Update test
 // @route   PUT /api/tests/:id
 // @access  Private (Technician/Admin)
-exports.updateTest = async (req, res, next) => {
+export const updateTest = async (req, res, next) => {
   try {
     let test = await LabTest.findById(req.params.id);
     
@@ -251,7 +245,7 @@ exports.updateTest = async (req, res, next) => {
 // @desc    Delete test
 // @route   DELETE /api/tests/:id
 // @access  Private (Admin only)
-exports.deleteTest = async (req, res, next) => {
+export const deleteTest = async (req, res, next) => {
   try {
     const test = await LabTest.findById(req.params.id);
     
@@ -291,7 +285,7 @@ exports.deleteTest = async (req, res, next) => {
 // @desc    Assign test to technician
 // @route   POST /api/tests/:id/assign
 // @access  Private (Admin/Supervisor)
-exports.assignTest = async (req, res, next) => {
+export const assignTest = async (req, res, next) => {
   try {
     const { technicianId, equipmentId } = req.body;
     
@@ -375,7 +369,7 @@ exports.assignTest = async (req, res, next) => {
 // @desc    Get test statistics
 // @route   GET /api/tests/stats
 // @access  Private (Technician/Admin)
-exports.getTestStatistics = async (req, res, next) => {
+export const getTestStatistics = async (req, res, next) => {
   try {
     const { period = 'day' } = req.query;
     const now = new Date();
