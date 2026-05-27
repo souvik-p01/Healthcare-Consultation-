@@ -1,16 +1,17 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Heart, 
-  Phone, 
-  Mail, 
-  MapPin, 
-  Star, 
-  Users, 
-  Calendar, 
-  Shield, 
-  Stethoscope, 
-  Activity, 
+import healthcareLogoFont from '../assets/healthcare-logofont.png';
+import {
+  Heart,
+  Phone,
+  Mail,
+  MapPin,
+  Star,
+  Users,
+  Calendar,
+  Shield,
+  Stethoscope,
+  Activity,
   Ambulance,
   Pill,
   Brain,
@@ -68,31 +69,28 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand Section */}
           <div>
-            <div className="flex items-center space-x-2 mb-6">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Heart className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-2xl font-bold">HealthCare<span className="text-blue-400">Plus</span></span>
+            <div className="flex items-center mb-6 cursor-pointer" onClick={() => handleNavigation('/')}>
+              <img src={healthcareLogoFont} alt="HealthCarePlus Logo" className="h-15 w-auto object-contain" />
             </div>
             <p className="text-gray-400 mb-4 text-sm md:text-base">
               Revolutionizing healthcare with AI-powered solutions and comprehensive medical services.
             </p>
             <div className="flex space-x-4">
-              <button 
+              <button
                 onClick={() => handleNavigation('/')}
                 className="w-8 h-8 bg-blue-600 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
                 aria-label="Facebook"
               >
                 <span className="text-xs font-bold">F</span>
               </button>
-              <button 
+              <button
                 onClick={() => handleNavigation('/')}
                 className="w-8 h-8 bg-blue-500 rounded hover:bg-blue-600 transition-colors flex items-center justify-center"
                 aria-label="Twitter"
               >
                 <span className="text-xs font-bold">T</span>
               </button>
-              <button 
+              <button
                 onClick={() => handleNavigation('/')}
                 className="w-8 h-8 bg-blue-700 rounded hover:bg-blue-800 transition-colors flex items-center justify-center"
                 aria-label="LinkedIn"
@@ -107,7 +105,7 @@ const Footer = () => {
             <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
             <ul className="space-y-2 text-gray-400">
               <li>
-                <button 
+                <button
                   onClick={() => handleQuickLink('home')}
                   className="hover:text-white transition-colors text-left"
                 >
@@ -115,7 +113,7 @@ const Footer = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   onClick={() => handleQuickLink('about')}
                   className="hover:text-white transition-colors text-left"
                 >
@@ -123,7 +121,7 @@ const Footer = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   onClick={() => handleQuickLink('services')}
                   className="hover:text-white transition-colors text-left"
                 >
@@ -131,7 +129,7 @@ const Footer = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   onClick={() => handleQuickLink('contact')}
                   className="hover:text-white transition-colors text-left"
                 >
@@ -146,7 +144,7 @@ const Footer = () => {
             <h3 className="text-lg font-semibold mb-4">Services</h3>
             <ul className="space-y-2 text-gray-400">
               <li>
-                <button 
+                <button
                   onClick={() => handleServiceNavigation(1)}
                   className="hover:text-white transition-colors text-left flex items-center"
                 >
@@ -155,7 +153,7 @@ const Footer = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   onClick={() => handleServiceNavigation(2)}
                   className="hover:text-white transition-colors text-left flex items-center"
                 >
@@ -164,7 +162,7 @@ const Footer = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   onClick={() => handleServiceNavigation(3)}
                   className="hover:text-white transition-colors text-left flex items-center"
                 >
@@ -173,7 +171,7 @@ const Footer = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   onClick={() => handleServiceNavigation(4)}
                   className="hover:text-white transition-colors text-left flex items-center"
                 >
@@ -182,7 +180,7 @@ const Footer = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   onClick={() => handleServiceNavigation(5)}
                   className="hover:text-white transition-colors text-left flex items-center"
                 >
@@ -191,7 +189,7 @@ const Footer = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   onClick={() => handleServiceNavigation(6)}
                   className="hover:text-white transition-colors text-left flex items-center"
                 >
@@ -208,7 +206,7 @@ const Footer = () => {
             <div className="space-y-3 text-gray-400">
               <div className="flex items-center">
                 <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
-                <button 
+                <button
                   onClick={() => window.open('tel:+919876543210')}
                   className="hover:text-white transition-colors text-left"
                 >
@@ -217,7 +215,7 @@ const Footer = () => {
               </div>
               <div className="flex items-center">
                 <Mail className="w-4 h-4 mr-2 flex-shrink-0" />
-                <button 
+                <button
                   onClick={() => window.open('mailto:support@healthcareplus.com')}
                   className="hover:text-white transition-colors text-left"
                 >
@@ -229,17 +227,17 @@ const Footer = () => {
                 <span>Bishnupur, West Bengal, India</span>
               </div>
             </div>
-            
+
             {/* Newsletter Signup */}
             <div className="mt-6">
               <h4 className="text-sm font-semibold mb-2">Stay Updated</h4>
               <div className="flex">
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   placeholder="Your email"
                   className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
-                <button 
+                <button
                   onClick={() => handleNavigation('/subscribe')}
                   className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-r-lg transition-colors text-sm"
                 >
@@ -255,19 +253,19 @@ const Footer = () => {
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p>&copy; 2024 HealthCarePlus. All rights reserved.</p>
             <div className="flex space-x-6">
-              <button 
+              <button
                 onClick={() => handleNavigation('/privacy')}
                 className="hover:text-white transition-colors"
               >
                 Privacy Policy
               </button>
-              <button 
+              <button
                 onClick={() => handleNavigation('/terms')}
                 className="hover:text-white transition-colors"
               >
                 Terms of Service
               </button>
-              <button 
+              <button
                 onClick={() => handleNavigation('/sitemap')}
                 className="hover:text-white transition-colors"
               >
@@ -275,7 +273,7 @@ const Footer = () => {
               </button>
             </div>
           </div>
-          
+
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
             <div className="text-center">

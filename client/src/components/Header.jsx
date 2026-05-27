@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { 
-  Heart, 
+import {
+  Heart,
   ChevronDown,
   Menu,
   X,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import healthcareLogoFont from '../assets/healthcare-logofont.png';
 
 const Header = ({ isMenuOpen, setIsMenuOpen }) => {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const location = useLocation();
   const [showNotification, setShowNotification] = useState(false);
-  
+
   // Check if user is logged in
   const isLoggedIn = !!user;
   const isAdminRoute = location.pathname.startsWith('/admin');
@@ -32,7 +33,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
   const handleUserRole = () => {
     setUserIconClick(false);
     setDropdownOpen(false);
-    
+
     if (userRole === 'patient') {
       navigate('/patient-portal');
       setShowNotification(true);
@@ -49,12 +50,12 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
       navigate('/dashboard');
       setShowNotification(true);
     }
-    
+
     if (isMenuOpen) {
       setIsMenuOpen(false);
     }
   };
-  
+
   const handleLogout = async () => {
     try {
       await logoutUser();
@@ -88,7 +89,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
     setUserIconClick(false);
     setDropdownOpen(false);
   }, [location]);
-  
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -99,7 +100,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
         setUserIconClick(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [dropdownOpen, userIconClick]);
@@ -111,52 +112,47 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
 
   return (
     <header className="w-full flex justify-between bg-white shadow-lg sticky top-0 z-50">
-      <nav className="py-4 w-full px-6 flex justify-between">
-        <div className="flex items-center space-x-2">
-          <div className="bg-blue-600 p-2 rounded-lg">
-            <Heart className="w-6 h-6 text-white" />
-          </div>
-          <NavLink 
-            to="/" 
-            onClick={() => setShowNotification(false)} 
-            className="text-2xl font-bold text-gray-800"
-          >
-            HealthCare<span className="text-blue-600">Plus</span>
-          </NavLink>
-        </div>
+      <nav className="py-4 w-full px-6 flex justify-between items-center">
+        <NavLink
+          to="/"
+          onClick={() => setShowNotification(false)}
+          className="flex items-center"
+        >
+          <img src={healthcareLogoFont} alt="HealthCarePlus Logo" className="h-14 w-auto object-contain" />
+        </NavLink>
 
         <div>
           <div className="hidden md:flex items-center space-x-8">
-            <NavLink 
-              to="/" 
-              className={({ isActive }) => 
+            <NavLink
+              to="/"
+              className={({ isActive }) =>
                 `font-medium flex items-center gap-2 ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
               }
             >
               <Home className="w-4 h-4" />
               Home
             </NavLink>
-            <NavLink 
-              to="/about" 
-              className={({ isActive }) => 
+            <NavLink
+              to="/about"
+              className={({ isActive }) =>
                 `font-medium flex items-center gap-2 ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
               }
             >
               <UserCheck className="w-4 h-4" />
               About
             </NavLink>
-            <NavLink 
-              to="/services" 
-              className={({ isActive }) => 
+            <NavLink
+              to="/services"
+              className={({ isActive }) =>
                 `font-medium flex items-center gap-2 ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
               }
             >
               <Stethoscope className="w-4 h-4" />
               Services
             </NavLink>
-            <NavLink 
-              to="/contact" 
-              className={({ isActive }) => 
+            <NavLink
+              to="/contact"
+              className={({ isActive }) =>
                 `font-medium flex items-center gap-2 ${isActive ? 'text-blue-600' : 'text-gray-700 hover:text-blue-600'}`
               }
             >
@@ -166,7 +162,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
 
             {isLoggedIn && (
               <div className='relative'>
-                <button 
+                <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
                   className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                 >
@@ -184,13 +180,12 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
                     <div className="px-4 py-3 border-b border-gray-100">
                       <p className="font-semibold text-gray-900">{user?.firstName} {user?.lastName}</p>
                       <p className="text-sm text-gray-500 truncate">{user?.email}</p>
-                      <span className={`inline-block px-2 py-1 mt-1 text-xs font-semibold rounded-full ${
-                        userRole === 'admin' ? 'bg-purple-100 text-purple-800' :
+                      <span className={`inline-block px-2 py-1 mt-1 text-xs font-semibold rounded-full ${userRole === 'admin' ? 'bg-purple-100 text-purple-800' :
                         userRole === 'doctor' || userRole === 'provider' ? 'bg-blue-100 text-blue-800' :
-                        userRole === 'patient' ? 'bg-green-100 text-green-800' :
-                        userRole === 'technician' || userRole === 'staff' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                          userRole === 'patient' ? 'bg-green-100 text-green-800' :
+                            userRole === 'technician' || userRole === 'staff' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
+                        }`}>
                         {userRole?.charAt(0).toUpperCase() + userRole?.slice(1)}
                       </span>
                     </div>
@@ -238,7 +233,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
             )}
 
             {!isLoggedIn && (
-              <button 
+              <button
                 onClick={() => {
                   navigate('/login', { state: { mode: 'login' } });
                   setIsMenuOpen(false);
@@ -250,7 +245,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
             )}
           </div>
 
-          <button 
+          <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="md:hidden text-gray-700 hover:text-blue-600"
           >
@@ -262,9 +257,9 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
         {isMenuOpen && (
           <div className="md:hidden min-h-screen w-full absolute top-full left-0 right-0 bg-white border-t z-50 p-6">
             <div className="flex flex-col space-y-4">
-              <NavLink 
-                to="/" 
-                className={({ isActive }) => 
+              <NavLink
+                to="/"
+                className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-3 rounded-lg ${isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'}`
                 }
                 onClick={() => setIsMenuOpen(false)}
@@ -272,9 +267,9 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
                 <Home className="w-5 h-5" />
                 Home
               </NavLink>
-              <NavLink 
-                to="/about" 
-                className={({ isActive }) => 
+              <NavLink
+                to="/about"
+                className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-3 rounded-lg ${isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'}`
                 }
                 onClick={() => setIsMenuOpen(false)}
@@ -282,9 +277,9 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
                 <UserCheck className="w-5 h-5" />
                 About Us
               </NavLink>
-              <NavLink 
-                to="/services" 
-                className={({ isActive }) => 
+              <NavLink
+                to="/services"
+                className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-3 rounded-lg ${isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'}`
                 }
                 onClick={() => setIsMenuOpen(false)}
@@ -292,9 +287,9 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
                 <Stethoscope className="w-5 h-5" />
                 Services
               </NavLink>
-              <NavLink 
-                to="/contact" 
-                className={({ isActive }) => 
+              <NavLink
+                to="/contact"
+                className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-3 rounded-lg ${isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'}`
                 }
                 onClick={() => setIsMenuOpen(false)}
@@ -308,17 +303,16 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
                   <div className="px-4 py-3 bg-gray-50 rounded-lg">
                     <p className="text-sm font-semibold text-gray-900">{user?.firstName} {user?.lastName}</p>
                     <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-                    <span className={`inline-block px-2 py-1 mt-1 text-xs font-semibold rounded-full ${
-                      userRole === 'admin' ? 'bg-purple-100 text-purple-800' :
+                    <span className={`inline-block px-2 py-1 mt-1 text-xs font-semibold rounded-full ${userRole === 'admin' ? 'bg-purple-100 text-purple-800' :
                       userRole === 'doctor' || userRole === 'provider' ? 'bg-blue-100 text-blue-800' :
-                      userRole === 'patient' ? 'bg-green-100 text-green-800' :
-                      userRole === 'technician' || userRole === 'staff' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
+                        userRole === 'patient' ? 'bg-green-100 text-green-800' :
+                          userRole === 'technician' || userRole === 'staff' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                      }`}>
                       {userRole?.charAt(0).toUpperCase() + userRole?.slice(1)}
                     </span>
                   </div>
-                  
+
                   <button
                     onClick={handleUserRole}
                     className="px-4 py-3 bg-blue-600 text-white w-full rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-3"
@@ -351,12 +345,12 @@ const Header = ({ isMenuOpen, setIsMenuOpen }) => {
                     disabled={loading}
                     className="px-4 py-3 bg-red-600 text-white w-full rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-3 disabled:opacity-50"
                   >
-                    <LogOut className="w-4 h-4" /> 
+                    <LogOut className="w-4 h-4" />
                     {loading ? 'Logging out...' : 'Logout'}
                   </button>
                 </div>
               ) : (
-                <button 
+                <button
                   onClick={() => {
                     navigate('/login', { state: { mode: 'login' } });
                     setIsMenuOpen(false);

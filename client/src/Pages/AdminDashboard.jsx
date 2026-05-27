@@ -15,6 +15,8 @@ import {
   Database, HardDrive, Network, ShieldCheck, Zap,
   UserPlus, UserMinus, Lock, Unlock, Mail, Stethoscope
 } from 'lucide-react';
+import healthcareLogo from '../assets/healthcare-logo.png';
+import healthcareLogoFont from '../assets/healthcare-logofont.png';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL
   ? `${import.meta.env.VITE_BACKEND_URL}/api/v1`
@@ -525,8 +527,8 @@ const AdminDashboard = () => {
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 flex items-center justify-center p-4">
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 w-full max-w-md border border-white/20">
           <div className="text-center mb-8">
-            <div className="bg-white/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Shield className="w-10 h-10 text-white" />
+            <div className="flex justify-center mb-6">
+              <img src={healthcareLogo} alt="HealthCare Logo" className="w-20 h-20 object-contain" />
             </div>
             <h1 className="text-3xl font-bold text-white">Admin Portal</h1>
             <p className="text-white/80 mt-2">Healthcare Management System</p>
@@ -613,7 +615,7 @@ const AdminDashboard = () => {
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-gray-900 to-gray-800 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out`}>
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-700">
           <div className="flex items-center">
-            <Shield className="h-8 w-8 text-blue-400" />
+            <img src={healthcareLogo} alt="HealthCare Logo" className="h-8 w-8 object-contain" />
             <span className="ml-3 text-xl font-bold text-white">HealthCare Admin</span>
           </div>
           <button

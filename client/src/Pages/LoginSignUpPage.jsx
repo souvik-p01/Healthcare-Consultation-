@@ -16,6 +16,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppContext } from '../context/AppContext';
 import GoogleLoginButton from '../components/GoogleLoginButton'; // ✅ Add this import
+import healthcareLogoFont from '../assets/healthcare-logofont.png';
 
 const LoginSignUpPage = () => {
   const {
@@ -105,10 +106,10 @@ const LoginSignUpPage = () => {
   /* ---------------- Submit Handler ---------------- */
   const onSubmitHandler = async (e) => {
     e.preventDefault();
-    
+
     // ✅ Prevent double submission
     if (isSubmitting) return;
-    
+
     if (userCaptchaInput !== captchaText) {
       toast.error('Captcha does not match');
       triggerShake();
@@ -118,7 +119,7 @@ const LoginSignUpPage = () => {
 
     try {
       setIsSubmitting(true); // ✅ Disable further submissions
-      
+
       if (isSignUp) {
         if (formData.password !== formData.confirmPassword) {
           toast.error('Passwords do not match');
@@ -142,10 +143,10 @@ const LoginSignUpPage = () => {
         // ✅ Switch to login mode after successful signup
         setIsSignUp(false);
         clearForm();
-        
+
         // ✅ DON'T redirect to dashboard here
         // User must login explicitly
-        
+
       } else {
         // ✅ Login - sets user state
         await loginUser({
@@ -215,11 +216,8 @@ const LoginSignUpPage = () => {
           exit={{ opacity: 0 }}
           className={`bg-white p-8 rounded-xl shadow-xl w-full max-w-md ${shaking ? 'animate-shake' : ''}`}
         >
-          <div className="text-center mb-6">
-            <Heart className="mx-auto text-blue-600 w-10 h-10" />
-            <h1 className="text-2xl font-bold mt-2">
-              HealthCare<span className="text-blue-600">Plus</span>
-            </h1>
+          <div className="text-center mb-6 flex justify-center">
+            <img src={healthcareLogoFont} alt="HealthCarePlus Logo" className="h-14 w-auto object-contain" />
           </div>
 
           <form onSubmit={onSubmitHandler} className="space-y-4">
@@ -243,7 +241,7 @@ const LoginSignUpPage = () => {
                     required
                   />
                 </div>
-                
+
                 {/* ✅ Role Selector */}
                 <select
                   name="role"
@@ -311,8 +309,8 @@ const LoginSignUpPage = () => {
                 className="border p-2 rounded flex-1"
                 required
               />
-              <RefreshCcw 
-                onClick={generateCaptcha} 
+              <RefreshCcw
+                onClick={generateCaptcha}
                 className="cursor-pointer hover:text-blue-600 transition-colors"
               />
             </div>
@@ -348,8 +346,8 @@ const LoginSignUpPage = () => {
             </div>
 
             <div className="mt-6">
-              <GoogleLoginButton 
-                buttonText={isSignUp ? "Sign up with Google" : "Sign in with Google"} 
+              <GoogleLoginButton
+                buttonText={isSignUp ? "Sign up with Google" : "Sign in with Google"}
                 isSignUp={isSignUp}
               />
             </div>

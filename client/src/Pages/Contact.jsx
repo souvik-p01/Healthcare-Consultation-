@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { 
-  Phone, 
-  Mail, 
-  MapPin, 
-  Clock, 
-  Send, 
-  MessageCircle, 
+import {
+  Phone,
+  Mail,
+  MapPin,
+  Clock,
+  Send,
+  MessageCircle,
   Calendar,
   Heart,
   Home,
@@ -27,21 +27,9 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import emailjs from '@emailjs/browser';
 import { LoadScript, GoogleMap, Marker, InfoWindow } from '@react-google-maps/api';
 
-// Healthcare Logo Component
-const HealthcarePlusLogo = () => (
-  <div className="flex items-center">
-    <div className="relative w-10 h-10 mr-3">
-      <div className="absolute inset-0 bg-blue-600 rounded-full"></div>
-      <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center">
-        <Heart className="w-5 h-5 text-blue-600" />
-      </div>
-    </div>
-    <div className="text-left">
-      <h1 className="text-xl font-bold text-white">Healthcare<span className="text-blue-200">Plus</span></h1>
-      <p className="text-xs text-blue-100">Your Health, Our Priority</p>
-    </div>
-  </div>
-);
+
+
+
 
 // IMPORTANT: Replace these with your actual API keys
 const GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY";
@@ -401,7 +389,7 @@ const ContactPage = () => {
 
   const getAdminResponse = (userMessage) => {
     const message = userMessage.toLowerCase();
-    
+
     if (message.includes('appointment') || message.includes('book')) {
       return "I can help you book an appointment. Please visit our Consultations page or call us at +91 98765 43210.";
     } else if (message.includes('emergency') || message.includes('urgent')) {
@@ -485,19 +473,19 @@ const ContactPage = () => {
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white pt-8 pb-16 md:py-24 relative overflow-hidden">
         <div className="absolute -top-20 -right-20 w-40 h-40 bg-white bg-opacity-10 rounded-full animate-pulse"></div>
         <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-white bg-opacity-10 rounded-full"></div>
-        
+
         <div className="container mx-auto px-4 relative z-10">
           <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-            <HealthcarePlusLogo />
-            <NavLink 
+
+            <NavLink
               to="/"
-              className="flex items-center text-white hover:text-blue-200 transition-colors bg-white bg-opacity-20 px-4 py-2 rounded-full hover:bg-opacity-30 backdrop-blur-sm"
+              className="absolute top-4 right-4 flex items-center text-white hover:text-blue-200 transition-colors bg-white bg-opacity-20 px-3 py-1 rounded-full hover:bg-opacity-30 backdrop-blur-sm"
             >
-              <Home className="w-4 h-4 mr-2" />
+              <Home className="w-4 h-4 mr-1" />
               <span className="text-sm font-medium">Back to Home</span>
             </NavLink>
           </div>
-          
+
           <div className="text-center">
             <div className="relative inline-block">
               <Sparkles className="absolute -top-6 -left-6 w-8 h-8 text-yellow-300 animate-pulse" />
@@ -505,7 +493,7 @@ const ContactPage = () => {
                 Get in <span className="text-blue-200">Touch</span>
               </h1>
             </div>
-            
+
             <p className="text-lg md:text-xl text-blue-100 max-w-3xl mx-auto leading-relaxed px-4">
               We're here to help with all your healthcare needs. Reach out to our expert team anytime.
             </p>
@@ -543,7 +531,7 @@ const ContactPage = () => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl md:rounded-2xl shadow-lg p-6 md:p-8">
               <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-6">Send us a Message</h2>
-              
+
               {submitStatus === 'success' && (
                 <div className="mb-4 p-4 rounded-lg bg-green-100 text-green-700 text-sm">
                   Message sent successfully! We'll get back to you within 24 hours.
@@ -554,7 +542,7 @@ const ContactPage = () => {
                   Error sending message. Please try again or contact us directly.
                 </div>
               )}
-              
+
               <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                   <div>
@@ -663,9 +651,8 @@ const ContactPage = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 md:py-4 rounded-lg font-semibold transition-all duration-300 hover:shadow-lg ${
-                    isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'
-                  } text-sm md:text-base`}
+                  className={`w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 md:py-4 rounded-lg font-semibold transition-all duration-300 hover:shadow-lg ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'
+                    } text-sm md:text-base`}
                 >
                   {isSubmitting ? (
                     <div className="flex items-center justify-center">
@@ -721,7 +708,7 @@ const ContactPage = () => {
 
                   {/* Google Map - Only load if API key is set */}
                   {GOOGLE_MAPS_API_KEY !== "YOUR_GOOGLE_MAPS_API_KEY" ? (
-                    <LoadScript 
+                    <LoadScript
                       googleMapsApiKey={GOOGLE_MAPS_API_KEY}
                       onLoad={() => setMapLoaded(true)}
                     >
@@ -742,7 +729,7 @@ const ContactPage = () => {
                             position={{ lat: location.lat, lng: location.lng }}
                             onClick={() => setSelectedMarker(location)}
                             icon={{
-                              url: location.type === 'hospital' 
+                              url: location.type === 'hospital'
                                 ? 'https://maps.google.com/mapfiles/ms/icons/hospital.png'
                                 : 'https://maps.google.com/mapfiles/ms/icons/pharmacy.png',
                               scaledSize: new window.google.maps.Size(32, 32)
@@ -794,8 +781,8 @@ const ContactPage = () => {
                             onClick={() => handleLocationSelect(result)}
                           >
                             <div className="flex items-center">
-                              {result.type === 'hospital' ? 
-                                <Hospital className="w-4 h-4 text-red-500 mr-2 flex-shrink-0" /> : 
+                              {result.type === 'hospital' ?
+                                <Hospital className="w-4 h-4 text-red-500 mr-2 flex-shrink-0" /> :
                                 <Building className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
                               }
                               <div className="flex-1 min-w-0">
@@ -816,11 +803,10 @@ const ContactPage = () => {
                 {offices.map((office, index) => (
                   <div
                     key={index}
-                    className={`p-3 rounded-lg cursor-pointer transition-all duration-300 ${
-                      selectedOffice === index 
-                        ? 'bg-blue-50 border border-blue-200' 
-                        : 'bg-gray-50 hover:bg-blue-50'
-                    }`}
+                    className={`p-3 rounded-lg cursor-pointer transition-all duration-300 ${selectedOffice === index
+                      ? 'bg-blue-50 border border-blue-200'
+                      : 'bg-gray-50 hover:bg-blue-50'
+                      }`}
                     onClick={() => {
                       setSelectedOffice(index);
                       setMapCenter(office.coordinates);
@@ -850,7 +836,7 @@ const ContactPage = () => {
                         <p className="text-xs font-medium text-gray-700 mb-1">Services Available:</p>
                         <div className="flex flex-wrap gap-1">
                           {office.services.map((service, sIndex) => (
-                            <span 
+                            <span
                               key={sIndex}
                               className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
                             >
@@ -905,7 +891,7 @@ const ContactPage = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 max-w-4xl mx-auto">
             {faqs.map((faq, index) => (
-              <div 
+              <div
                 key={index}
                 className="bg-white rounded-lg md:rounded-xl p-4 md:p-6 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer"
                 onClick={() => toggleFAQ(index)}
@@ -915,8 +901,8 @@ const ContactPage = () => {
                     <CheckCircle className="w-4 h-4 md:w-5 md:h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0 inline" />
                     {faq.question}
                   </h4>
-                  {activeFAQ === index ? 
-                    <ChevronUp className="w-4 h-4 text-gray-500 flex-shrink-0 ml-2" /> : 
+                  {activeFAQ === index ?
+                    <ChevronUp className="w-4 h-4 text-gray-500 flex-shrink-0 ml-2" /> :
                     <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0 ml-2" />
                   }
                 </div>
@@ -934,8 +920,8 @@ const ContactPage = () => {
         <div className="mt-12 md:mt-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl md:rounded-2xl p-6 md:p-12 text-center text-white relative overflow-hidden">
           <div className="absolute -top-20 -right-20 w-40 h-40 bg-white bg-opacity-10 rounded-full animate-pulse"></div>
           <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-white bg-opacity-10 rounded-full"></div>
+
           
-          <Heart className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-4 text-white relative z-10" />
           <h3 className="text-xl md:text-3xl font-bold mb-3 md:mb-4 relative z-10">Still Have Questions?</h3>
           <p className="text-sm md:text-lg mb-4 md:mb-6 text-white text-opacity-90 max-w-2xl mx-auto relative z-10 px-4">
             Our healthcare experts are available 24/7 to assist you with any concerns
@@ -974,7 +960,7 @@ const ContactPage = () => {
               <X className="w-5 h-5" />
             </button>
           </div>
-          
+
           <div className="h-64 md:h-80 overflow-y-auto p-4 space-y-3">
             {chatMessages.map((msg) => (
               <div
@@ -982,18 +968,17 @@ const ContactPage = () => {
                 className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[70%] rounded-lg p-3 ${
-                    msg.sender === 'user'
-                      ? 'bg-blue-600 text-white rounded-br-none'
-                      : 'bg-gray-100 text-gray-800 rounded-bl-none'
-                  }`}
+                  className={`max-w-[70%] rounded-lg p-3 ${msg.sender === 'user'
+                    ? 'bg-blue-600 text-white rounded-br-none'
+                    : 'bg-gray-100 text-gray-800 rounded-bl-none'
+                    }`}
                 >
                   <p className="text-sm">{msg.text}</p>
                   <p className="text-xs opacity-70 mt-1">{msg.time}</p>
                 </div>
               </div>
             ))}
-            
+
             {isTyping && (
               <div className="flex justify-start">
                 <div className="bg-gray-100 text-gray-800 rounded-lg rounded-bl-none p-3">
@@ -1008,7 +993,7 @@ const ContactPage = () => {
             )}
             <div ref={chatEndRef} />
           </div>
-          
+
           <div className="border-t p-4">
             <div className="flex gap-2">
               <input
@@ -1063,21 +1048,21 @@ const ContactPage = () => {
       )}
 
       {/* Add custom animation */}
-      <style jsx>{`
-        @keyframes slide-up {
-          from {
-            transform: translateY(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
-        }
-        .animate-slide-up {
-          animation: slide-up 0.3s ease-out;
-        }
-      `}</style>
+      <style>{`
+  @keyframes slide-up {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  .animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+  }
+`}</style>
     </div>
   );
 };
