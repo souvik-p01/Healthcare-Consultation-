@@ -214,14 +214,113 @@ export const getMedicalHistory = asyncHandler(async (req, res) => {
 /* ============================================================
    📅 GET PATIENT APPOINTMENTS
 ============================================================ */
+const formatAppointmentForPatient = (apt) => {
+  if (!apt) return null;
+  const docInfo = apt.doctorId || {};
+  const docName = docInfo.firstName && docInfo.lastName 
+    ? `Dr. ${docInfo.firstName} ${docInfo.lastName}` 
+    : "Unknown Doctor";
+  
+  // Format date
+  let dateStr = "TBD";
+  if (apt.appointmentDate) {
+    const dateObj = new Date(apt.appointmentDate);
+    dateStr = dateObj.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  }
+  
+  // Format time
+  let timeStr = "TBD";
+  if (apt.appointmentTime) {
+    try {
+      const [hours, minutes] = apt.appointmentTime.split(':').map(Number);
+      const startHour = hours % 12 || 12;
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const minStr = minutes < 10 ? `0${minutes}` : minutes;
+      const timeStartStr = `${startHour}:${minStr} ${ampm}`;
+
+      const endMinutes = minutes + (apt.duration || 30);
+      const endHours = hours + Math.floor(endMinutes / 60);
+      const endMin = endMinutes % 60;
+      const endHour12 = endHours % 12 || 12;
+      const endAmpm = endHours >= 12 ? 'PM' : 'AM';
+      const endMinStr = endMin < 10 ? `0${endMin}` : endMin;
+      const timeEndStr = `${endHour12}:${endMinStr} ${endAmpm}`;
+      timeStr = `${timeStartStr} - ${timeEndStr}`;
+    } catch (e) {
+      timeStr = apt.appointmentTime;
+    }
+  }
+
+  // Mapped type
+  let typeStr = 'In-Person';
+  if (apt.appointmentType === 'video') typeStr = 'Video Call';
+  else if (apt.appointmentType === 'phone') typeStr = 'Phone Call';
+  else if (apt.appointmentType === 'chat') typeStr = 'Online Chat';
+
+  // Initials for avatar
+  let initials = "DR";
+  if (docInfo.firstName && docInfo.lastName) {
+    initials = `${docInfo.firstName[0]}${docInfo.lastName[0]}`.toUpperCase();
+  }
+
+  return {
+    id: apt._id || apt.id,
+    _id: apt._id || apt.id,
+    doctor: docName,
+    specialty: docInfo.specialization || "General Physician",
+    date: dateStr,
+    time: timeStr,
+    type: typeStr,
+    status: apt.status ? apt.status.toLowerCase() : 'pending',
+    avatar: docInfo.avatar || initials,
+    location: apt.location || (apt.appointmentType === 'video' ? 'Virtual Consultation' : 'Main Clinic'),
+    consultationFee: apt.consultationFee || 500,
+    symptoms: apt.symptoms || '',
+    chiefComplaint: apt.chiefComplaint || ''
+  };
+};
+
 export const getPatientAppointments = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { status, type, dateFrom, dateTo, page = 1, limit = 10 } = req.query;
 
   const user = await User.findById(userId);
-  if (!user || !user.patientId) throw new ApiError(404, "Patient not found");
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
 
-  const query = { patientId: user.patientId };
+  let patientId = user.patientId;
+  if (!patientId) {
+    let patientDoc = await Patient.findOne({ user: userId });
+    if (patientDoc) {
+      patientId = patientDoc._id;
+      await User.findByIdAndUpdate(userId, { patientId });
+    } else if (user.role === "patient") {
+      patientDoc = new Patient({
+        user: userId,
+        bloodGroup: "--",
+        height: 0,
+        weight: 0,
+        medicalHistory: [],
+        allergies: [],
+        currentMedications: []
+      });
+      await patientDoc.save();
+      patientId = patientDoc._id;
+      await User.findByIdAndUpdate(userId, { patientId });
+    } else {
+      return res.status(200).json(
+        new ApiResponse(200, { appointments: [], pagination: { currentPage: 1, totalPages: 0, totalAppointments: 0 } }, "No patient profile found")
+      );
+    }
+  }
+
+  const query = { patientId };
   if (status) {
     if (Array.isArray(status)) {
       query.status = { $in: status };
@@ -250,13 +349,15 @@ export const getPatientAppointments = asyncHandler(async (req, res) => {
 
   const total = await Appointment.countDocuments(query);
 
+  const formattedAppointments = appointments.map(formatAppointmentForPatient);
+
   return res
     .status(200)
     .json(
       new ApiResponse(
         200,
         {
-          appointments,
+          appointments: formattedAppointments,
           pagination: {
             currentPage: parseInt(page),
             totalPages: Math.ceil(total / limit),
@@ -275,16 +376,51 @@ export const getPatientDashboard = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
   const user = await User.findById(userId);
-  if (!user || !user.patientId) throw new ApiError(404, "Patient not found");
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
 
-  const recentAppointments = await Appointment.find({ patientId: user.patientId })
+  let patientId = user.patientId;
+  if (!patientId) {
+    let patientDoc = await Patient.findOne({ user: userId });
+    if (patientDoc) {
+      patientId = patientDoc._id;
+      await User.findByIdAndUpdate(userId, { patientId });
+    } else if (user.role === "patient") {
+      patientDoc = new Patient({
+        user: userId,
+        bloodGroup: "--",
+        height: 0,
+        weight: 0,
+        medicalHistory: [],
+        allergies: [],
+        currentMedications: []
+      });
+      await patientDoc.save();
+      patientId = patientDoc._id;
+      await User.findByIdAndUpdate(userId, { patientId });
+    } else {
+      return res.status(200).json(
+        new ApiResponse(200, {
+          patientSummary: {},
+          appointments: { recent: [], upcoming: [], statistics: { total: 0, completed: 0, upcoming: 0 } },
+          prescriptions: { recent: [], active: 0 },
+          healthMetrics: [],
+          notifications: { unread: 0, total: 0 },
+          quickStats: { healthScore: 0, daysSinceLastCheckup: 0, upcomingAppointments: 0, activePrescriptions: 0 }
+        }, "No patient profile found")
+      );
+    }
+  }
+
+  const recentAppointments = await Appointment.find({ patientId })
     .populate({ path: "doctorId", select: "firstName lastName specialization avatar" })
     .sort({ appointmentDate: -1 })
     .limit(5)
     .lean();
 
   const upcomingAppointments = await Appointment.find({
-    patientId: user.patientId,
+    patientId,
     status: { $in: ["scheduled", "confirmed"] },
     appointmentDate: { $gte: new Date() },
   })
@@ -293,23 +429,23 @@ export const getPatientDashboard = asyncHandler(async (req, res) => {
     .limit(5)
     .lean();
 
-  const recentPrescriptions = await Prescription.find({ patientId: user.patientId })
+  const recentPrescriptions = await Prescription.find({ patientId })
     .populate({ path: "doctorId", select: "firstName lastName specialization" })
     .sort({ prescribedDate: -1 })
     .limit(5)
     .lean();
 
-  const patient = await Patient.findById(user.patientId)
+  const patient = await Patient.findById(patientId)
     .select("healthMetrics bloodGroup height weight bmi lastHealthCheck emergencyContacts")
     .lean();
 
-  const totalAppointments = await Appointment.countDocuments({ patientId: user.patientId });
+  const totalAppointments = await Appointment.countDocuments({ patientId });
   const completedAppointments = await Appointment.countDocuments({
-    patientId: user.patientId,
+    patientId,
     status: "completed",
   });
   const activePrescriptions = await Prescription.countDocuments({
-    patientId: user.patientId,
+    patientId,
     status: "active",
   });
 
@@ -328,8 +464,8 @@ export const getPatientDashboard = asyncHandler(async (req, res) => {
       memberSince: user.createdAt?.getFullYear() || new Date().getFullYear(),
     },
     appointments: {
-      recent: recentAppointments,
-      upcoming: upcomingAppointments,
+      recent: recentAppointments.map(formatAppointmentForPatient),
+      upcoming: upcomingAppointments.map(formatAppointmentForPatient),
       statistics: {
         total: totalAppointments,
         completed: completedAppointments,
@@ -405,7 +541,33 @@ export const scheduleAppointment = asyncHandler(async (req, res) => {
   const { doctorId, date, time, type, reason, notes } = req.body;
 
   const user = await User.findById(userId);
-  if (!user || !user.patientId) throw new ApiError(404, "Patient not found");
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  let patientId = user.patientId;
+  if (!patientId) {
+    let patientDoc = await Patient.findOne({ user: userId });
+    if (patientDoc) {
+      patientId = patientDoc._id;
+      await User.findByIdAndUpdate(userId, { patientId });
+    } else if (user.role === "patient") {
+      patientDoc = new Patient({
+        user: userId,
+        bloodGroup: "--",
+        height: 0,
+        weight: 0,
+        medicalHistory: [],
+        allergies: [],
+        currentMedications: []
+      });
+      await patientDoc.save();
+      patientId = patientDoc._id;
+      await User.findByIdAndUpdate(userId, { patientId });
+    } else {
+      throw new ApiError(404, "Patient profile not found");
+    }
+  }
 
   // Combine date and time
   const appointmentDateTime = new Date(`${date}T${time}:00`);
@@ -422,13 +584,15 @@ export const scheduleAppointment = asyncHandler(async (req, res) => {
   }
 
   const appointment = new Appointment({
-    patientId: user.patientId,
+    patientId,
     doctorId,
     appointmentDate: appointmentDateTime,
-    type: type || "in-person",
-    reason,
-    notes,
-    status: "pending",
+    appointmentTime: time,
+    appointmentType: type || "in-person",
+    consultationFee: 500,
+    symptoms: reason || "",
+    patientNotes: notes || "",
+    status: "scheduled",
   });
 
   await appointment.save();
@@ -545,7 +709,11 @@ export const getPatientNotifications = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, unreadOnly } = req.query;
 
   const user = await User.findById(userId);
-  if (!user || !user.patientId) throw new ApiError(404, "Patient not found");
+  if (!user || !user.patientId) {
+    return res.status(200).json(
+      new ApiResponse(200, { notifications: [], pagination: { currentPage: 1, totalPages: 0, totalNotifications: 0, unreadCount: 0 } }, "No patient profile found")
+    );
+  }
 
   // In a real system, you would have a Notification model
   // This is a placeholder implementation

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   Pill,
   ChevronLeft,
+  ChevronRight,
   Search,
   Filter,
   ShoppingCart,
@@ -25,6 +26,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import PaymentGateway from '../components/PaymentGateway';
+import { medicineAPI, paymentAPI, pharmacyOrderAPI } from './services/api';
 
 // Google Maps Component for Pharmacy Map
 const PharmacyMap = ({ pharmacies, userLocation, onPharmacySelect }) => {
@@ -156,7 +158,21 @@ const PharmacyMap = ({ pharmacies, userLocation, onPharmacySelect }) => {
 // Store Detail View Component with Map
 const StoreDetailView = ({ pharmacy, medicines, onClose, onAddToCart, userLocation }) => {
   const mapRef = useRef(null)
-  const availableMeds = medicines.filter(med => pharmacy.availableMedicines.includes(med.id))
+  const availableMeds = (pharmacy.availableMedicines || []).map(med => ({
+    id: med._id || med.id,
+    name: med.name,
+    brand: med.brand || 'Generic',
+    category: med.category || 'General',
+    price: med.price || 0,
+    discountPrice: med.discountPrice || null,
+    stock: med.stock || 0,
+    requiresPrescription: med.requiresPrescription || false,
+    form: med.form || 'Tablet',
+    packaging: med.packaging || 'Standard packaging',
+    description: med.description || '',
+    image: med.image || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=60",
+    availableIn: med.availableIn || [pharmacy.name]
+  }))
 
   useEffect(() => {
     if (!window.google || !mapRef.current) return
@@ -215,6 +231,16 @@ const StoreDetailView = ({ pharmacy, medicines, onClose, onAddToCart, userLocati
         (result, status) => {
           if (status === 'OK') {
             directionsRenderer.setDirections(result)
+          } else {
+            // Fallback straight line polyline if Directions API fails (e.g. billing not enabled)
+            new window.google.maps.Polyline({
+              path: [userLocation, pharmacy.coordinates],
+              geodesic: true,
+              strokeColor: '#10b981',
+              strokeOpacity: 0.8,
+              strokeWeight: 4,
+              map: map
+            })
           }
         }
       )
@@ -331,24 +357,130 @@ const StoreDetailView = ({ pharmacy, medicines, onClose, onAddToCart, userLocati
 
 // Delivery Tracking Component with Real Map
 const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) => {
-  const [deliveryStage, setDeliveryStage] = useState(2)
+  const [paymentDetails, setPaymentDetails] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  
+  const [deliveryStage, setDeliveryStage] = useState(0) // Start at 0: Waiting for Confirmation
+  const [isConfirmed, setIsConfirmed] = useState(false)
   const [riderLocation, setRiderLocation] = useState(pharmacyLocation)
   const [distance, setDistance] = useState(1.2)
   const [estimatedTime, setEstimatedTime] = useState(25)
+  
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markerRef = useRef(null)
-  
-  const stages = [
-    { title: 'Order Confirmed', time: new Date(Date.now() - 15*60000).toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'}), icon: CheckCircle },
-    { title: 'Preparing Order', time: new Date(Date.now() - 10*60000).toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'}), icon: Package },
-    { title: 'Order Picked Up', time: new Date(Date.now() - 5*60000).toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'}), icon: Truck },
-    { title: 'On the Way', time: 'Now', icon: Navigation },
-    { title: 'Delivered', time: `Expected ${new Date(Date.now() + estimatedTime*60000).toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'})}`, icon: Home }
-  ]
-  
+  const polylineRef = useRef(null)
+
+  // Fetch order/payment details from backend
   useEffect(() => {
-    if (!window.google || !mapRef.current || !userLocation || !pharmacyLocation) return
+    let active = true;
+    
+    const fetchOrderDetails = async () => {
+      try {
+        const { data } = await pharmacyOrderAPI.getOrder(orderId);
+        if (active) {
+          setPaymentDetails(data.data.order);
+          setError(null);
+          
+          const status = data.data.order.status;
+          if (status === 'completed') {
+            setIsConfirmed(true);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch payment details:", err);
+        if (active) {
+          setError("Failed to fetch order details. Retrying...");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchOrderDetails();
+    const interval = setInterval(fetchOrderDetails, 5000); // Poll every 5s
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [orderId]);
+
+  // Demo auto-confirmation for COD/Pending orders (after 8 seconds)
+  useEffect(() => {
+    if (paymentDetails && !isConfirmed) {
+      const timer = setTimeout(() => {
+        setIsConfirmed(true);
+        console.log("DEMO: Auto-confirming order after 8 seconds of polling");
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [paymentDetails, isConfirmed]);
+
+  // Sync stage based on confirmation status
+  useEffect(() => {
+    if (isConfirmed && deliveryStage === 0) {
+      setDeliveryStage(1); // Advance to "Order Confirmed" stage
+    }
+  }, [isConfirmed, deliveryStage]);
+
+  // Dynamic timeline stages list
+  const getStages = () => {
+    const baseTime = paymentDetails ? new Date(paymentDetails.createdAt) : new Date();
+    const formatTime = (timeObj) => {
+      return timeObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    return [
+      { 
+        title: 'Order Placed', 
+        time: formatTime(baseTime), 
+        icon: CheckCircle 
+      },
+      { 
+        title: isConfirmed ? 'Order Confirmed' : 'Waiting for Confirmation', 
+        time: isConfirmed 
+          ? formatTime(paymentDetails?.completedAt ? new Date(paymentDetails.completedAt) : new Date(baseTime.getTime() + 2 * 60000))
+          : 'Pending...', 
+        icon: isConfirmed ? CheckCircle : Loader2 
+      },
+      { 
+        title: 'Preparing Order', 
+        time: isConfirmed 
+          ? formatTime(new Date(baseTime.getTime() + 5 * 60000)) 
+          : '--:--', 
+        icon: Package 
+      },
+      { 
+        title: 'Order Picked Up', 
+        time: isConfirmed 
+          ? formatTime(new Date(baseTime.getTime() + 10 * 60000)) 
+          : '--:--', 
+        icon: Truck 
+      },
+      { 
+        title: 'On the Way', 
+        time: deliveryStage >= 4 ? 'Now' : '--:--', 
+        icon: Navigation 
+      },
+      { 
+        title: 'Delivered', 
+        time: isConfirmed 
+          ? `Expected ${formatTime(new Date(baseTime.getTime() + (estimatedTime + 10) * 60000))}` 
+          : '--:--', 
+        icon: Home 
+      }
+    ];
+  };
+
+  const stages = getStages();
+  
+  // Maps drawing effect (only active when confirmed)
+  useEffect(() => {
+    if (!window.google || !mapRef.current || !userLocation || !pharmacyLocation || !isConfirmed) return
 
     // Initialize map
     mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
@@ -422,6 +554,16 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
       (result, status) => {
         if (status === 'OK') {
           directionsRenderer.setDirections(result)
+        } else {
+          // Fallback straight line polyline if Directions API fails (e.g. billing not enabled)
+          polylineRef.current = new window.google.maps.Polyline({
+            path: [riderLocation, userLocation],
+            geodesic: true,
+            strokeColor: '#10b981',
+            strokeOpacity: 0.8,
+            strokeWeight: 4,
+            map: mapInstanceRef.current
+          })
         }
       }
     )
@@ -439,6 +581,14 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
           markerRef.current.setPosition({ lat: newLat, lng: newLng })
         }
         
+        // Redraw fallback polyline
+        if (polylineRef.current) {
+          polylineRef.current.setPath([
+            { lat: newLat, lng: newLng },
+            userLocation
+          ])
+        }
+
         return { lat: newLat, lng: newLng }
       })
       
@@ -451,14 +601,28 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
       if (markerRef.current) {
         markerRef.current.setMap(null)
       }
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null)
+      }
     }
-  }, [userLocation, pharmacyLocation])
+  }, [userLocation, pharmacyLocation, isConfirmed])
   
   const openLiveTracking = () => {
     const url = `https://www.google.com/maps/dir/${riderLocation.lat},${riderLocation.lng}/${userLocation.lat},${userLocation.lng}`
     window.open(url, '_blank')
   }
   
+  if (loading && !paymentDetails) {
+    return (
+      <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium">Connecting to order database...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 bg-white z-50 overflow-y-auto">
       <div className="sticky top-0 bg-white border-b shadow-sm z-10">
@@ -477,18 +641,30 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
       </div>
 
       <div className="container mx-auto px-4 py-4 md:py-6 max-w-4xl">
+        {/* Error notification banner if any */}
+        {error && (
+          <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2 mb-4 text-sm border border-red-200">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl md:rounded-2xl p-4 md:p-6 text-white mb-4 md:mb-6">
           <div className="text-center">
-            <div className="text-3xl md:text-5xl font-bold mb-2">{estimatedTime} min</div>
-            <div className="text-sm md:text-base opacity-90">Estimated delivery time</div>
+            <div className="text-3xl md:text-5xl font-bold mb-2">
+              {isConfirmed ? `${estimatedTime} min` : 'Pending'}
+            </div>
+            <div className="text-sm md:text-base opacity-90">
+              {isConfirmed ? 'Estimated delivery time' : 'Awaiting confirmation...'}
+            </div>
             <div className="mt-3 md:mt-4 flex items-center justify-center gap-4 md:gap-6 text-xs md:text-sm">
               <span className="flex items-center gap-1">
                 <MapPin className="w-3 h-3 md:w-4 md:h-4" />
-                {distance.toFixed(1)} km away
+                {isConfirmed ? `${distance.toFixed(1)} km away` : 'Locating pharmacy...'}
               </span>
               <span className="flex items-center gap-1">
-                <Package className="w-3 h-3 md:w-4 md:h-4" />
-                {stages[Math.floor(deliveryStage)].title}
+                {isConfirmed ? <Truck className="w-3 h-3 md:w-4 md:h-4" /> : <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin" />}
+                {isConfirmed ? stages[Math.floor(deliveryStage)].title : 'Confirming Order'}
               </span>
             </div>
           </div>
@@ -497,43 +673,63 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
         <div className="bg-white rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6 mb-4 md:mb-6">
           <div className="flex justify-between items-center mb-3 md:mb-4">
             <h4 className="text-base md:text-lg font-bold text-gray-800">Live Tracking</h4>
-            <button 
-              onClick={openLiveTracking}
-              className="flex items-center gap-1 md:gap-2 text-green-600 hover:text-green-700 text-xs md:text-sm"
-            >
-              <Navigation className="w-3 h-3 md:w-4 md:h-4" />
-              Open in Maps
-            </button>
+            {isConfirmed && (
+              <button 
+                onClick={openLiveTracking}
+                className="flex items-center gap-1 md:gap-2 text-green-600 hover:text-green-700 text-xs md:text-sm"
+              >
+                <Navigation className="w-3 h-3 md:w-4 md:h-4" />
+                Open in Maps
+              </button>
+            )}
           </div>
           
-          <div className="relative w-full h-64 md:h-96 bg-gray-100 rounded-lg overflow-hidden mb-3 md:mb-4">
+          <div className="relative w-full h-64 md:h-96 bg-gray-100 rounded-lg overflow-hidden mb-3 md:mb-4 border border-gray-200">
             <div ref={mapRef} className="w-full h-full" />
             
-            <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 md:p-3">
-              <div className="flex items-center gap-2">
-                <div className="bg-green-600 text-white p-1.5 md:p-2 rounded-full animate-pulse">
-                  <Truck className="w-3 h-3 md:w-4 md:h-4" />
+            {!isConfirmed ? (
+              <div className="absolute inset-0 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20">
+                <div className="bg-green-50 p-4 rounded-full mb-4 shadow-sm animate-pulse">
+                  <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
                 </div>
-                <div className="text-xs md:text-sm">
-                  <div className="font-medium">Delivery Partner</div>
-                  <div className="text-gray-600">On the way</div>
+                <h4 className="text-lg font-extrabold text-gray-800 mb-2">Awaiting Pharmacy Confirmation</h4>
+                <p className="text-sm text-gray-600 max-w-sm mb-5 leading-relaxed">
+                  MedCare Pharmacy is reviewing your cart items and assigning a delivery partner to your address.
+                </p>
+                <button 
+                  onClick={() => setIsConfirmed(true)}
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all text-sm"
+                >
+                  Quick Confirm (Demo)
+                </button>
+              </div>
+            ) : (
+              <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 md:p-3 border border-gray-100">
+                <div className="flex items-center gap-2">
+                  <div className="bg-green-600 text-white p-1.5 md:p-2 rounded-full animate-pulse">
+                    <Truck className="w-3 h-3 md:w-4 md:h-4" />
+                  </div>
+                  <div className="text-xs md:text-sm">
+                    <div className="font-medium text-gray-800">Delivery Partner</div>
+                    <div className="text-gray-500 text-xs">On the way</div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
           
           <div className="grid grid-cols-3 gap-2 md:gap-4 text-xs md:text-sm">
             <div className="text-center p-2 md:p-3 bg-gray-50 rounded-lg">
               <div className="font-medium text-gray-800">Distance</div>
-              <div className="text-green-600 font-bold">{distance.toFixed(1)} km</div>
+              <div className="text-green-600 font-bold mt-0.5">{isConfirmed ? `${distance.toFixed(1)} km` : '--'}</div>
             </div>
             <div className="text-center p-2 md:p-3 bg-gray-50 rounded-lg">
               <div className="font-medium text-gray-800">Time Left</div>
-              <div className="text-green-600 font-bold">{estimatedTime} min</div>
+              <div className="text-green-600 font-bold mt-0.5">{isConfirmed ? `${estimatedTime} min` : '--'}</div>
             </div>
             <div className="text-center p-2 md:p-3 bg-gray-50 rounded-lg">
               <div className="font-medium text-gray-800">Status</div>
-              <div className="text-green-600 font-bold">On Time</div>
+              <div className="text-green-600 font-bold mt-0.5">{isConfirmed ? 'On Time' : 'Awaiting'}</div>
             </div>
           </div>
         </div>
@@ -550,22 +746,27 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
             
             {stages.map((stage, index) => {
               const StageIcon = stage.icon
+              const isActiveStage = index <= deliveryStage
               return (
                 <div key={index} className="relative flex items-start gap-3 md:gap-4 mb-6 md:mb-8 last:mb-0">
-                  <div className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center z-10 ${
-                    index <= deliveryStage ? 'bg-green-500' : 'bg-gray-200'
+                  <div className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center z-10 transition-colors duration-300 ${
+                    isActiveStage ? 'bg-green-500' : 'bg-gray-200'
                   }`}>
-                    <StageIcon className={`w-3 h-3 md:w-4 md:h-4 ${
-                      index <= deliveryStage ? 'text-white' : 'text-gray-400'
-                    }`} />
+                    {(!isConfirmed && index === 1) ? (
+                      <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-white animate-spin" />
+                    ) : (
+                      <StageIcon className={`w-3.5 h-3.5 md:w-4 md:h-4 transition-colors duration-300 ${
+                        isActiveStage ? 'text-white' : 'text-gray-400'
+                      }`} />
+                    )}
                   </div>
                   <div className="flex-1 pt-0.5 md:pt-1">
-                    <div className={`font-medium text-sm md:text-base ${
-                      index <= deliveryStage ? 'text-gray-800' : 'text-gray-400'
+                    <div className={`font-semibold text-sm md:text-base transition-colors duration-300 ${
+                      isActiveStage ? 'text-gray-800' : 'text-gray-400'
                     }`}>
                       {stage.title}
                     </div>
-                    <div className="text-xs md:text-sm text-gray-500">{stage.time}</div>
+                    <div className="text-xs md:text-sm text-gray-500 mt-0.5">{stage.time}</div>
                   </div>
                 </div>
               )
@@ -580,18 +781,18 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
               <User className="w-6 h-6 md:w-8 md:h-8 text-green-600" />
             </div>
             <div className="flex-1">
-              <div className="font-medium text-sm md:text-base">Rahul Sharma</div>
+              <div className="font-semibold text-sm md:text-base text-gray-800">Rahul Sharma</div>
               <div className="text-xs md:text-sm text-gray-500 flex items-center gap-2 mt-1">
                 <Phone className="w-3 h-3 md:w-4 md:h-4" />
                 +91 98765 43210
               </div>
               <div className="flex items-center gap-1 mt-1">
                 <Star className="w-3 h-3 md:w-4 md:h-4 text-yellow-400 fill-current" />
-                <span className="text-xs md:text-sm text-gray-600">4.9 (1,234 deliveries)</span>
+                <span className="text-xs md:text-sm text-gray-600 font-medium">4.9 (1,234 deliveries)</span>
               </div>
             </div>
-            <button className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-2 md:py-3 rounded-lg hover:bg-green-700 text-xs md:text-sm">
-              <Phone className="w-3 h-3 md:w-4 md:h-4" />
+            <button className="flex items-center gap-1 md:gap-2 bg-green-600 text-white px-3 md:px-4 py-2 md:py-3 rounded-lg hover:bg-green-700 transition-colors text-xs md:text-sm font-semibold shadow-sm">
+              <Phone className="w-3.5 h-3.5 md:w-4 md:h-4" />
               Call
             </button>
           </div>
@@ -600,6 +801,61 @@ const DeliveryTracking = ({ orderId, onClose, userLocation, pharmacyLocation }) 
     </div>
   )
 }
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
+const guessCityFromCoords = (coords) => {
+  if (!coords) return "Your Location";
+  
+  const cities = [
+    { name: "Kolkata", lat: 22.5726, lng: 88.3639 },
+    { name: "Mumbai", lat: 19.0760, lng: 72.8777 },
+    { name: "Delhi", lat: 28.7041, lng: 77.1025 },
+    { name: "Bangalore", lat: 12.9716, lng: 77.5946 },
+    { name: "Chennai", lat: 13.0827, lng: 80.2707 },
+    { name: "Hyderabad", lat: 17.3850, lng: 78.4867 },
+    { name: "Pune", lat: 18.5204, lng: 73.8567 }
+  ];
+  
+  let closestCity = "Your Location";
+  let minDistance = Infinity;
+  
+  cities.forEach(city => {
+    const dist = calculateDistance(coords.lat, coords.lng, city.lat, city.lng);
+    if (dist < minDistance && dist < 100) { // within 100km radius
+      closestCity = city.name;
+      minDistance = dist;
+    }
+  });
+  
+  return closestCity;
+};
+
+const getAvailableMedicinesForPharmacy = (pharmacyName, medicinesList) => {
+  if (!medicinesList || medicinesList.length === 0) return [];
+  const matching = medicinesList.filter(med => 
+    med.availableIn && med.availableIn.some(name => 
+      pharmacyName.toLowerCase().includes(name.toLowerCase()) || 
+      name.toLowerCase().includes(pharmacyName.toLowerCase())
+    )
+  );
+  if (matching.length > 0) {
+    return matching.map(m => m.id);
+  }
+  const ids = medicinesList.map(m => m.id);
+  const shuffled = [...ids].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, 5);
+};
 
 const PharmacyPage = () => {
   const [cart, setCart] = useState([])
@@ -639,116 +895,147 @@ const PharmacyPage = () => {
     { id: 'Unani', name: 'Unani', count: 18 },
     { id: 'General', name: 'General', count: 45 }
   ]
+  const [currentCity, setCurrentCity] = useState("Your Location")
+  const [pharmacyList, setPharmacyList] = useState([])
 
-  const pharmacies = [
-    { 
-      name: 'Apollo Pharmacy', 
-      distance: '0.5 km', 
-      deliveryTime: '30 mins', 
-      rating: 4.8,
-      coordinates: { lat: 19.0760, lng: 72.8777 },
-      phone: '+912266666666',
-      address: '123, Pharmacy Street, Mumbai',
-      availableMedicines: [1, 2, 4, 6]
-    },
-    { 
-      name: 'MedPlus', 
-      distance: '1.2 km', 
-      deliveryTime: '45 mins', 
-      rating: 4.6,
-      coordinates: { lat: 19.0860, lng: 72.8877 },
-      phone: '+912277777777',
-      address: '456, Medical Road, Mumbai',
-      availableMedicines: [1, 2, 4, 5]
-    },
-    { 
-      name: 'Wellness Forever', 
-      distance: '0.8 km', 
-      deliveryTime: '40 mins', 
-      rating: 4.7,
-      coordinates: { lat: 19.0960, lng: 72.8977 },
-      phone: '+912288888888',
-      address: '789, Health Lane, Mumbai',
-      availableMedicines: [1, 3, 5]
-    },
-    { 
-      name: 'Guardian', 
-      distance: '1.5 km', 
-      deliveryTime: '50 mins', 
-      rating: 4.5,
-      coordinates: { lat: 19.1060, lng: 72.9077 },
-      phone: '+912299999999',
-      address: '101, Wellness Avenue, Mumbai',
-      availableMedicines: [3, 4, 6]
+  const fetchPharmaciesData = async (userCoords) => {
+    try {
+      const searchCoords = userCoords || { lat: 19.0760, lng: 72.8777 };
+      const response = await medicineAPI.getPharmacies({
+        lat: searchCoords.lat,
+        lng: searchCoords.lng
+      });
+      const backendPharmacies = response.data.pharmacies || [];
+      
+      let mapped = backendPharmacies.map(pharm => {
+        let lat = pharm.coordinates.lat;
+        let lng = pharm.coordinates.lng;
+        let address = pharm.address;
+        
+        // If it's a backend registered pharmacy, we offset it near user location
+        if (!pharm.isGooglePlace) {
+          lat = searchCoords.lat + (pharm.latOffset || 0);
+          lng = searchCoords.lng + (pharm.lngOffset || 0);
+          address = address.replace(/Mumbai/g, currentCity);
+        }
+        
+        const dist = calculateDistance(searchCoords.lat, searchCoords.lng, lat, lng);
+        
+        return {
+          id: pharm._id || pharm.id,
+          name: pharm.name,
+          phone: pharm.phone || '+91 22 6666 6666',
+          address: address,
+          rating: pharm.rating || 4.5,
+          coordinates: { lat, lng },
+          distance: `${dist.toFixed(1)} km`,
+          deliveryTime: dist < 0.5 ? '15-20 mins' : dist < 1.5 ? '25-30 mins' : '40-45 mins',
+          availableMedicines: pharm.availableMedicines || [],
+          isGooglePlace: pharm.isGooglePlace || false
+        };
+      });
+
+      mapped.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+      setPharmacyList(mapped);
+    } catch (err) {
+      console.error("Error fetching pharmacies from backend:", err);
     }
-  ]
+  };
 
-  // Fetch medicines from API
+  useEffect(() => {
+    fetchPharmaciesData(userLocation);
+  }, [userLocation, medicines, mapLoaded, currentCity]);
+
+  // Resolve city/neighborhood (using guess as immediate fallback, and Geocoder as precise refinement)
+  useEffect(() => {
+    if (userLocation) {
+      const guessed = guessCityFromCoords(userLocation);
+      setCurrentCity(guessed);
+
+      if (window.google && window.google.maps && mapLoaded) {
+        try {
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: userLocation }, (results, status) => {
+            if (status === "OK" && results && results[0]) {
+              const addressComponents = results[0].address_components;
+              
+              // Look for locality (city) or sublocality (neighborhood)
+              const locality = addressComponents.find(c => c.types.includes("locality"));
+              const sublocality = addressComponents.find(c => c.types.includes("sublocality") || c.types.includes("neighborhood"));
+              
+              let resolved = "";
+              if (sublocality) {
+                resolved += sublocality.long_name + ", ";
+              }
+              if (locality) {
+                resolved += locality.long_name;
+              } else {
+                // Fallback to administrative area level 2 (district)
+                const adminArea2 = addressComponents.find(c => c.types.includes("administrative_area_level_2"));
+                if (adminArea2) {
+                  resolved += adminArea2.long_name;
+                }
+              }
+              
+              if (resolved) {
+                setCurrentCity(resolved);
+              }
+            }
+          });
+        } catch (err) {
+          console.error("Error geocoding userLocation:", err);
+        }
+      }
+    }
+  }, [userLocation, mapLoaded]);
+
+  // Fetch medicines from backend API
   const fetchMedicines = async (page = 1) => {
     setLoading(true)
     setError(null)
     
     try {
-      // Build query parameters
-      const params = new URLSearchParams({
-        api_key: API_KEY,
-        page: page
-      })
+      const params = {
+        page: page,
+        limit: 6
+      }
 
-      // Add search term if present
       if (searchTerm.trim()) {
-        params.append('name', searchTerm.trim())
+        params.name = searchTerm.trim()
       }
 
-      // Add medicine type if selected (from categories)
       if (selectedCategory !== 'all') {
-        params.append('type', selectedCategory)
+        params.category = selectedCategory
       }
 
-      // Add manufacturer if present
-      if (manufacturer) {
-        params.append('manufacturer', manufacturer)
-      }
-
-      // Ensure at least one parameter is present
-      if (!searchTerm.trim() && selectedCategory === 'all' && !manufacturer) {
-        // If no parameters, don't make API call
-        setMedicines([])
-        setLoading(false)
-        return
-      }
-
-      const response = await fetch(`${BASE_URL}?${params}`)
+      const response = await medicineAPI.getMedicines(params)
+      const data = response.data
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch medicines')
-      }
-
-      const data = await response.json()
-      
-      // Transform API response to match your medicine structure
-      const apiMedicines = data.medicines || data.data || []
+      const apiMedicines = data.medicines || []
       const transformedMedicines = apiMedicines.map((med, index) => ({
-        id: med.id || index + 1,
+        id: med._id || med.id || index + 1,
         name: med.name,
-        brand: med.manufacturer || med.brand || 'Generic',
-        category: med.type || 'General',
-        price: med.mrp || med.price || 0,
-        discountPrice: med.selling_price || med.discountPrice || null,
-        stock: med.stock || Math.floor(Math.random() * 100) + 20, // Fallback stock
-        requiresPrescription: med.requires_prescription || false,
+        brand: med.brand || 'Generic',
+        category: med.category || 'General',
+        price: med.price || 0,
+        discountPrice: med.discountPrice || null,
+        stock: med.stock || 0,
+        requiresPrescription: med.requiresPrescription || false,
         form: med.form || 'Tablet',
-        packaging: med.packaging || med.package_details || 'Standard packaging',
-        description: med.short_description || med.description || '',
-        availableIn: med.available_in || ['Apollo Pharmacy', 'MedPlus']
+        packaging: med.packaging || 'Standard packaging',
+        description: med.description || '',
+        image: med.image || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=60",
+        availableIn: med.availableIn || ['Apollo Pharmacy', 'MedPlus', 'Wellness Forever']
       }))
 
+      // Replace the list for page-by-page numbered pagination
       setMedicines(transformedMedicines)
+      
       setCurrentPage(data.current_page || page)
-      setTotalPages(data.last_page || Math.ceil(data.total / 24))
+      setTotalPages(data.last_page || Math.ceil((data.total || 0) / 6))
       
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Failed to fetch medicines')
       console.error('Error fetching medicines:', err)
     } finally {
       setLoading(false)
@@ -780,7 +1067,7 @@ const PharmacyPage = () => {
       }
 
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`
       script.async = true
       script.defer = true
       script.onload = () => setMapLoaded(true)
@@ -812,7 +1099,10 @@ const PharmacyPage = () => {
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === medicine.id)
       const selectedPharmacy = pharmacyName || 
-        pharmacies.find(p => p.availableMedicines.includes(medicine.id))?.name || 
+        pharmacyList.find(p => p.availableMedicines.some(m => {
+          const id = typeof m === 'object' ? (m._id || m.id) : m;
+          return String(id) === String(medicine.id);
+        }))?.name || 
         'Apollo Pharmacy'
       
       if (existingItem) {
@@ -869,7 +1159,7 @@ const PharmacyPage = () => {
 
   const handlePaymentSuccess = (paymentData) => {
     setShowPayment(false)
-    const newOrderId = 'ORD' + Date.now().toString().slice(-8)
+    const newOrderId = paymentData.paymentId
     setOrderId(newOrderId)
     
     // Save payment details
@@ -890,8 +1180,8 @@ const PharmacyPage = () => {
     localStorage.setItem('lastOrder', JSON.stringify(orderDetails))
     
     const firstItem = cart[0]
-    const pharmacy = pharmacies.find(p => p.name === firstItem?.selectedPharmacy)
-    setSelectedPharmacyLocation(pharmacy?.coordinates || pharmacies[0].coordinates)
+    const pharmacy = pharmacyList.find(p => p.name === firstItem?.selectedPharmacy)
+    setSelectedPharmacyLocation(pharmacy?.coordinates || pharmacyList[0]?.coordinates || { lat: 19.0760, lng: 72.8777 })
     
     setCart([])
     setTimeout(() => {
@@ -900,10 +1190,9 @@ const PharmacyPage = () => {
   }
 
   const openGoogleMaps = (destination) => {
-    if (userLocation) {
-      const url = `https://www.google.com/maps/dir/${userLocation.lat},${userLocation.lng}/${destination.lat},${destination.lng}`
-      window.open(url, '_blank')
-    }
+    const origin = userLocation ? `${userLocation.lat},${userLocation.lng}` : '';
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination.lat},${destination.lng}&travelmode=driving`;
+    window.open(url, '_blank');
   }
 
   const filterOptions = [
@@ -959,11 +1248,63 @@ const PharmacyPage = () => {
 
   const filteredMedicines = applyFilters(medicines)
 
-  const handleLoadMore = () => {
-    if (currentPage < totalPages) {
-      fetchMedicines(currentPage + 1)
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(i);
     }
-  }
+
+    return (
+      <div className="flex items-center justify-center gap-2 mt-8 mb-4">
+        <button
+          onClick={() => {
+            if (currentPage > 1) {
+              setCurrentPage(currentPage - 1);
+              fetchMedicines(currentPage - 1);
+            }
+          }}
+          disabled={currentPage === 1}
+          className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 text-sm font-medium"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Previous
+        </button>
+        
+        {pages.map(page => (
+          <button
+            key={page}
+            onClick={() => {
+              setCurrentPage(page);
+              fetchMedicines(page);
+            }}
+            className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-semibold transition-all ${
+              currentPage === page
+                ? 'bg-green-600 text-white shadow-md'
+                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {page}
+          </button>
+        ))}
+
+        <button
+          onClick={() => {
+            if (currentPage < totalPages) {
+              setCurrentPage(currentPage + 1);
+              fetchMedicines(currentPage + 1);
+            }
+          }}
+          disabled={currentPage === totalPages}
+          className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 text-sm font-medium"
+        >
+          Next
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 py-4 md:py-8">
@@ -1219,67 +1560,88 @@ const PharmacyPage = () => {
                   {filteredMedicines.map((medicine) => (
                     <div
                       key={medicine.id}
-                      className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                      className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col justify-between"
                     >
-                      <div className="p-4 md:p-6">
-                        <div className="flex justify-between items-start mb-3 md:mb-4">
-                          <div>
-                            <div className="flex items-center gap-1 md:gap-2 mb-1">
-                              <h3 className="font-bold text-base md:text-lg text-gray-800">{medicine.name}</h3>
-                              {medicine.requiresPrescription && (
-                                <span className="text-xs bg-red-100 text-red-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded">
-                                  Rx
+                      <div>
+                        {/* Medicine Image */}
+                        <div className="h-48 w-full bg-gray-100 relative overflow-hidden">
+                          <img
+                            src={medicine.image || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=60"}
+                            alt={medicine.name}
+                            className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                          />
+                          <span className={`absolute top-3 right-3 text-xs font-semibold px-2.5 py-1 rounded-full text-white shadow-md ${
+                            medicine.category === 'Allopath' ? 'bg-blue-600' :
+                            medicine.category === 'Ayurveda' ? 'bg-emerald-600' :
+                            medicine.category === 'Homeopath' ? 'bg-purple-600' :
+                            medicine.category === 'Unani' ? 'bg-amber-600' : 'bg-gray-600'
+                          }`}>
+                            {medicine.category}
+                          </span>
+                        </div>
+
+                        <div className="p-4 md:p-6 pb-2">
+                          <div className="flex justify-between items-start mb-3 md:mb-4">
+                            <div>
+                              <div className="flex items-center gap-1 md:gap-2 mb-1">
+                                <h3 className="font-bold text-base md:text-lg text-gray-800">{medicine.name}</h3>
+                                {medicine.requiresPrescription && (
+                                  <span className="text-xs bg-red-100 text-red-700 px-1.5 md:px-2 py-0.5 md:py-1 rounded font-medium">
+                                    Rx
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs md:text-sm text-gray-500">{medicine.brand}</p>
+                              <p className="text-xs text-gray-400 mt-1">{medicine.packaging}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xl md:text-2xl font-bold text-gray-800">
+                                ₹{medicine.discountPrice || medicine.price}
+                              </div>
+                              {medicine.discountPrice && (
+                                <div className="text-xs md:text-sm text-gray-500 line-through">
+                                  ₹{medicine.price}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <p className="text-xs md:text-sm text-gray-600 mb-3 md:mb-4 line-clamp-2">{medicine.description}</p>
+
+                          <div className="flex items-center justify-between text-xs md:text-sm text-gray-500 mb-3 md:mb-4">
+                            <span className="flex items-center gap-1">
+                              <Pill className="w-3 h-3 md:w-4 md:h-4 text-green-600" />
+                              {medicine.form}
+                            </span>
+                            <span className={`flex items-center gap-1 font-medium ${
+                              medicine.stock > 50 ? 'text-green-600' : 'text-yellow-600'
+                            }`}>
+                              {medicine.stock > 50 ? 'In Stock' : 'Low Stock'}
+                            </span>
+                          </div>
+
+                          <div className="mb-3 md:mb-4">
+                            <div className="text-xs md:text-sm text-gray-600 mb-1">Available at:</div>
+                            <div className="flex flex-wrap gap-1">
+                              {medicine.availableIn.slice(0, 2).map((pharmacy, idx) => (
+                                <span key={idx} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">
+                                  {pharmacy}
+                                </span>
+                              ))}
+                              {medicine.availableIn.length > 2 && (
+                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                  +{medicine.availableIn.length - 2} more
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs md:text-sm text-gray-500">{medicine.brand}</p>
-                            <p className="text-xs text-gray-400 mt-1">{medicine.packaging}</p>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-xl md:text-2xl font-bold text-gray-800">
-                              ₹{medicine.discountPrice || medicine.price}
-                            </div>
-                            {medicine.discountPrice && (
-                              <div className="text-xs md:text-sm text-gray-500 line-through">
-                                ₹{medicine.price}
-                              </div>
-                            )}
                           </div>
                         </div>
+                      </div>
 
-                        <p className="text-xs md:text-sm text-gray-600 mb-3 md:mb-4">{medicine.description}</p>
-
-                        <div className="flex items-center justify-between text-xs md:text-sm text-gray-500 mb-3 md:mb-4">
-                          <span className="flex items-center gap-1">
-                            <Pill className="w-3 h-3 md:w-4 md:h-4" />
-                            {medicine.form}
-                          </span>
-                          <span className={`flex items-center gap-1 ${
-                            medicine.stock > 50 ? 'text-green-600' : 'text-yellow-600'
-                          }`}>
-                            {medicine.stock > 50 ? 'In Stock' : 'Low Stock'}
-                          </span>
-                        </div>
-
-                        <div className="mb-3 md:mb-4">
-                          <div className="text-xs md:text-sm text-gray-600 mb-1">Available at:</div>
-                          <div className="flex flex-wrap gap-1">
-                            {medicine.availableIn.slice(0, 2).map((pharmacy, idx) => (
-                              <span key={idx} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">
-                                {pharmacy}
-                              </span>
-                            ))}
-                            {medicine.availableIn.length > 2 && (
-                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                                +{medicine.availableIn.length - 2} more
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
+                      <div className="p-4 md:p-6 pt-0">
                         <button
                           onClick={() => addToCart(medicine)}
-                          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 md:py-3 rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-1 md:gap-2 text-sm md:text-base"
+                          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 md:py-3 rounded-lg hover:shadow-lg transition-all flex items-center justify-center gap-1 md:gap-2 text-sm md:text-base font-semibold"
                         >
                           <ShoppingCart className="w-4 h-4 md:w-5 md:h-5" />
                           Add to Cart
@@ -1289,17 +1651,7 @@ const PharmacyPage = () => {
                   ))}
                 </div>
 
-                {currentPage < totalPages && (
-                  <div className="text-center mb-8">
-                    <button
-                      onClick={handleLoadMore}
-                      disabled={loading}
-                      className="bg-white border border-green-600 text-green-600 px-6 py-3 rounded-lg hover:bg-green-50 disabled:opacity-50"
-                    >
-                      {loading ? 'Loading...' : 'Load More Medicines'}
-                    </button>
-                  </div>
-                )}
+                {renderPagination()}
               </>
             )}
 
@@ -1328,7 +1680,7 @@ const PharmacyPage = () => {
                     </div>
                   ) : userLocation ? (
                     <PharmacyMap 
-                      pharmacies={pharmacies}
+                      pharmacies={pharmacyList}
                       userLocation={userLocation}
                       onPharmacySelect={(pharmacy) => {
                         setSelectedStore(pharmacy)
@@ -1355,7 +1707,7 @@ const PharmacyPage = () => {
               </div>
               
               <div className="space-y-3 md:space-y-4">
-                {pharmacies.map((pharmacy, idx) => (
+                {pharmacyList.map((pharmacy, idx) => (
                   <div
                     key={idx}
                     className="flex flex-col sm:flex-row sm:items-center justify-between p-3 md:p-4 border rounded-lg hover:bg-green-50 transition-colors"
@@ -1599,7 +1951,7 @@ const PharmacyPage = () => {
             }
           }}
           businessName="MedCare Pharmacy"
-          businessLogo="https://your-logo-url.com/logo.png"
+          businessLogo="https://cdn-icons-png.flaticon.com/512/2966/2966327.png"
           paymentMethods={['razorpay', 'cod']} // Enable both payment methods
         />
       )}

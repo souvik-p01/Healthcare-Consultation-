@@ -1,23 +1,26 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, 
+import { useNavigate } from 'react-router-dom';
+import {
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
-import { 
-  Users, Activity, DollarSign, Calendar, AlertCircle, CheckCircle, 
-  XCircle, Clock, Menu, X, LogOut, Home, UserCheck, Settings, 
+import {
+  Users, Activity, DollarSign, Calendar, AlertCircle, CheckCircle,
+  XCircle, Clock, Menu, X, LogOut, Home, UserCheck, Settings,
   FileText, TrendingUp, Server, Shield, Bell, Download, Filter,
   BarChart3, PieChart as PieChartIcon, LineChart as LineChartIcon,
   Search, RefreshCw, Eye, Edit, Trash2, MoreVertical,
   MessageSquare, Send, Star, TrendingDown, Award, Cpu,
   Database, HardDrive, Network, ShieldCheck, Zap,
-  UserPlus, UserMinus, Lock, Unlock, Mail
+  UserPlus, UserMinus, Lock, Unlock, Mail, Stethoscope
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL
   ? `${import.meta.env.VITE_BACKEND_URL}/api/v1`
   : 'http://localhost:8000/api/v1';
+
+const COLORS = ['#2563eb', '#0891b2', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 // Custom Components
 const LoadingSpinner = () => (
@@ -32,7 +35,7 @@ const ErrorAlert = ({ message, onRetry }) => (
       <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
       <span className="text-red-800 font-medium">Error: {message}</span>
       {onRetry && (
-        <button 
+        <button
           onClick={onRetry}
           className="ml-auto text-sm text-red-600 hover:text-red-800 font-medium"
         >
@@ -81,22 +84,28 @@ const QuickAction = ({ icon: Icon, label, color, onClick }) => (
 );
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [token, setToken] = useState(localStorage.getItem('adminToken'));
   const [userInfo, setUserInfo] = useState(null);
-  
+
   // UI State
   const [currentView, setCurrentView] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState(null);
-  
+
+  // Scroll to top when view changes
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentView]);
+
   // Login State
   const [loginData, setLoginData] = useState({
-    email: 'patrasouvik313@gmail.com',
-    password: 'souvik@123456'
+    email: '',
+    password: ''
   });
 
   // Data State
@@ -116,7 +125,7 @@ const AdminDashboard = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const [usersPerPage] = useState(10);
-  
+
   const [userFilters, setUserFilters] = useState({
     role: '',
     isActive: '',
@@ -165,11 +174,11 @@ const AdminDashboard = () => {
       }
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || `API request failed: ${response.status}`);
       }
-      
+
       return data;
     } catch (err) {
       console.error('API Error:', err);
@@ -200,7 +209,7 @@ const AdminDashboard = () => {
       localStorage.setItem('adminUser', JSON.stringify(data.data.user));
       localStorage.setItem('accessToken', data.data.accessToken);
       localStorage.setItem('user', JSON.stringify(data.data.user));
-      
+
       showNotification('Login successful!', 'success');
     } catch (err) {
       setError(err.message);
@@ -237,7 +246,7 @@ const AdminDashboard = () => {
         apiCall('/admin/analytics/revenue?period=month'),
         apiCall('/admin/metrics')
       ]);
-      
+
       setDashboardStats(stats.data.stats);
       setAnalytics(prev => ({
         ...prev,
@@ -311,7 +320,7 @@ const AdminDashboard = () => {
         method: 'PATCH',
         body: { status, reason }
       });
-      
+
       showNotification(`User ${status} successfully`, 'success');
       fetchUsers();
     } catch (err) {
@@ -327,12 +336,12 @@ const AdminDashboard = () => {
     try {
       await apiCall(`/admin/users/${userId}`, {
         method: 'DELETE',
-        body: { 
+        body: {
           reason: 'Admin action',
-          permanent 
+          permanent
         }
       });
-      
+
       showNotification(`User ${permanent ? 'permanently deleted' : 'deactivated'}`, 'success');
       fetchUsers();
     } catch (err) {
@@ -360,7 +369,7 @@ const AdminDashboard = () => {
           data: bulkOperation === 'assign_role' ? { role: 'patient' } : {}
         }
       });
-      
+
       showNotification(`Bulk operation completed for ${selectedUsers.length} users`, 'success');
       setSelectedUsers([]);
       setBulkOperation('');
@@ -384,7 +393,7 @@ const AdminDashboard = () => {
           ...bulkNotificationData
         }
       });
-      
+
       showNotification(`Notification sent to ${selectedUsers.length} users`, 'success');
       setShowBulkNotificationModal(false);
       setBulkNotificationData({ title: '', message: '', type: 'admin' });
@@ -403,7 +412,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     const savedToken = localStorage.getItem('adminToken') || localStorage.getItem('accessToken');
     const savedUser = localStorage.getItem('adminUser') || localStorage.getItem('user');
-    
+
     if (savedToken && savedUser) {
       const parsedUser = JSON.parse(savedUser);
       if (parsedUser.role === 'admin') {
@@ -430,6 +439,9 @@ const AdminDashboard = () => {
         case 'health':
           fetchSystemHealth();
           break;
+        case 'doctors':
+          fetchDoctors();
+          break;
         case 'analytics':
           fetchProviderAnalytics();
           break;
@@ -441,20 +453,70 @@ const AdminDashboard = () => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, color: 'bg-blue-500' },
     { id: 'users', label: 'User Management', icon: Users, color: 'bg-green-500' },
+    { id: 'doctors', label: 'Manage Doctors', icon: Stethoscope, color: 'bg-cyan-500' },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, color: 'bg-purple-500' },
     { id: 'audit', label: 'Audit Logs', icon: FileText, color: 'bg-yellow-500' },
     { id: 'health', label: 'System Health', icon: Server, color: 'bg-red-500' },
     { id: 'notifications', label: 'Notifications', icon: Bell, color: 'bg-pink-500' },
   ];
 
+  const [doctors, setDoctors] = useState([]);
+  const [showDoctorModal, setShowDoctorModal] = useState(false);
+  const [newDoctor, setNewDoctor] = useState({
+    name: '', specialty: 'General Medicine', experience: '', price: '', languages: 'English, Hindi', availability: 'Mon, Tue, Wed, Thu, Fri'
+  });
+
+  const fetchDoctors = async () => {
+    setLoading(true);
+    try {
+      const data = await apiCall('/doctors');
+      setDoctors(data.data || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDoctor = async (e) => {
+    e.preventDefault();
+    try {
+      await apiCall('/doctors/add', {
+        method: 'POST',
+        body: {
+          ...newDoctor,
+          languages: newDoctor.languages.split(',').map(s => s.trim()),
+          availability: newDoctor.availability.split(',').map(s => s.trim())
+        }
+      });
+      showNotification('Doctor added successfully', 'success');
+      setShowDoctorModal(false);
+      setNewDoctor({ name: '', specialty: 'General Medicine', experience: '', price: '', languages: 'English, Hindi', availability: 'Mon, Tue, Wed, Thu, Fri' });
+      fetchDoctors();
+    } catch (err) {
+      showNotification(err.message, 'error');
+    }
+  };
+
+  const handleDeleteDoctor = async (id) => {
+    if (!window.confirm('Remove this doctor?')) return;
+    try {
+      await apiCall(`/doctors/${id}`, { method: 'DELETE' });
+      showNotification('Doctor removed', 'success');
+      fetchDoctors();
+    } catch (err) {
+      showNotification(err.message, 'error');
+    }
+  };
+
   // Quick Actions
   const quickActions = [
-    { icon: UserPlus, label: 'Add User', color: 'bg-blue-500', action: () => {} },
+    { icon: UserPlus, label: 'Add User', color: 'bg-blue-500', action: () => { } },
     { icon: Bell, label: 'Send Notification', color: 'bg-green-500', action: () => setShowBulkNotificationModal(true) },
-    { icon: Download, label: 'Export Data', color: 'bg-purple-500', action: () => {} },
+    { icon: Download, label: 'Export Data', color: 'bg-purple-500', action: () => { } },
     { icon: RefreshCw, label: 'Refresh Data', color: 'bg-yellow-500', action: fetchDashboardData },
     { icon: Shield, label: 'Security', color: 'bg-red-500', action: () => setCurrentView('audit') },
-    { icon: Settings, label: 'Settings', color: 'bg-gray-500', action: () => {} },
+    { icon: Settings, label: 'Settings', color: 'bg-gray-500', action: () => { } },
   ];
 
   // Login Screen
@@ -514,14 +576,6 @@ const AdminDashboard = () => {
               ) : 'Sign In'}
             </button>
           </form>
-
-          <div className="mt-8 text-center text-sm text-white/60">
-            <p className="mb-2">Demo Credentials (Auto-filled)</p>
-            <div className="bg-white/10 rounded-lg p-3 font-mono text-xs">
-              <p>Email: patrasouvik313@gmail.com</p>
-              <p>Password: souvik@123456</p>
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -532,11 +586,10 @@ const AdminDashboard = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Notification */}
       {notification && (
-        <div className={`fixed top-4 right-4 z-50 rounded-lg shadow-lg p-4 max-w-md transform transition-all duration-300 ${
-          notification.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
+        <div className={`fixed top-4 right-4 z-50 rounded-lg shadow-lg p-4 max-w-md transform transition-all duration-300 ${notification.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
           notification.type === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
-          'bg-blue-50 border border-blue-200 text-blue-800'
-        }`}>
+            'bg-blue-50 border border-blue-200 text-blue-800'
+          }`}>
           <div className="flex items-center">
             {notification.type === 'success' ? (
               <CheckCircle className="h-5 w-5 mr-2" />
@@ -570,7 +623,7 @@ const AdminDashboard = () => {
             <X className="h-6 w-6" />
           </button>
         </div>
-        
+
         <div className="px-4 py-6">
           <div className="mb-8">
             <div className="flex items-center space-x-3 mb-4 px-3 py-2 bg-white/5 rounded-lg">
@@ -594,11 +647,10 @@ const AdminDashboard = () => {
                   setCurrentView(item.id);
                   setSidebarOpen(false);
                 }}
-                className={`flex items-center w-full px-4 py-3 text-left rounded-lg transition-colors ${
-                  currentView === item.id
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
-                    : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                }`}
+                className={`flex items-center w-full px-4 py-3 text-left rounded-lg transition-colors ${currentView === item.id
+                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+                  : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                  }`}
               >
                 <item.icon className="h-5 w-5 mr-3" />
                 <span>{item.label}</span>
@@ -606,7 +658,14 @@ const AdminDashboard = () => {
             ))}
           </nav>
 
-          <div className="mt-8 pt-6 border-t border-gray-700">
+          <div className="mt-8 pt-6 border-t border-gray-700 space-y-1">
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center w-full px-4 py-3 text-gray-300 hover:bg-white/5 hover:text-white rounded-lg transition-colors"
+            >
+              <Home className="h-5 w-5 mr-3" />
+              <span>Main App Home</span>
+            </button>
             <button
               onClick={handleLogout}
               className="flex items-center w-full px-4 py-3 text-gray-300 hover:bg-white/5 hover:text-white rounded-lg transition-colors"
@@ -640,7 +699,7 @@ const AdminDashboard = () => {
                 <Bell className="h-5 w-5" />
                 <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
               </button>
-              
+
               <div className="flex items-center space-x-3">
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-medium text-gray-800">{userInfo?.name || 'Admin'}</p>
@@ -661,7 +720,7 @@ const AdminDashboard = () => {
           {error && <ErrorAlert message={error} onRetry={() => setError(null)} />}
 
           {currentView === 'dashboard' && (
-            <DashboardView 
+            <DashboardView
               dashboardStats={dashboardStats}
               analytics={analytics}
               systemMetrics={systemMetrics}
@@ -679,7 +738,7 @@ const AdminDashboard = () => {
               currentPage={currentPage}
               totalPages={totalPages}
               totalUsers={totalUsers}
-              usersPerPage={usersPerPage} 
+              usersPerPage={usersPerPage}
               selectedUsers={selectedUsers}
               setSelectedUsers={setSelectedUsers}
               bulkOperation={bulkOperation}
@@ -690,6 +749,15 @@ const AdminDashboard = () => {
               handleBulkOperation={handleBulkOperation}
               viewUserDetails={viewUserDetails}
               fetchUsers={fetchUsers}
+            />
+          )}
+
+          {currentView === 'doctors' && (
+            <DoctorsView
+              doctors={doctors}
+              loading={loading}
+              onAdd={() => setShowDoctorModal(true)}
+              onDelete={handleDeleteDoctor}
             />
           )}
 
@@ -742,9 +810,107 @@ const AdminDashboard = () => {
           onClose={() => setShowBulkNotificationModal(false)}
         />
       )}
+
+      {showDoctorModal && (
+        <DoctorModal
+          data={newDoctor}
+          setData={setNewDoctor}
+          onSubmit={handleAddDoctor}
+          onClose={() => setShowDoctorModal(false)}
+        />
+      )}
     </div>
   );
 };
+
+// New Doctors View Component
+const DoctorsView = ({ doctors, loading, onAdd, onDelete }) => (
+  <div className="space-y-6">
+    <div className="flex justify-between items-center">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Manage Doctors</h2>
+        <p className="text-gray-600">Add or remove medical professionals</p>
+      </div>
+      <button onClick={onAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+        <UserPlus size={18} /> Add New Doctor
+      </button>
+    </div>
+
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <table className="w-full">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Doctor</th>
+            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Specialty</th>
+            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Experience</th>
+            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Price</th>
+            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {loading ? (
+            <tr><td colSpan="5" className="py-10 text-center"><LoadingSpinner /></td></tr>
+          ) : doctors.length === 0 ? (
+            <tr><td colSpan="5" className="py-10 text-center text-gray-500">No doctors found. Add one to get started.</td></tr>
+          ) : (
+            doctors.map(doc => (
+              <tr key={doc._id} className="hover:bg-gray-50">
+                <td className="px-6 py-4 font-medium text-gray-900">{doc.name}</td>
+                <td className="px-6 py-4 text-gray-600">{doc.specialty}</td>
+                <td className="px-6 py-4 text-gray-600">{doc.experience}</td>
+                <td className="px-6 py-4 font-bold text-blue-600">{doc.price}</td>
+                <td className="px-6 py-4">
+                  <button onClick={() => onDelete(doc._id)} className="text-red-500 hover:text-red-700">
+                    <Trash2 size={18} />
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+// Doctor Modal
+const DoctorModal = ({ data, setData, onSubmit, onClose }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+      <h3 className="text-xl font-bold mb-6">Add New Medical Professional</h3>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="block text-sm font-medium mb-1">Full Name</label>
+            <input required className="w-full p-2 border rounded-lg" value={data.name} onChange={e => setData({ ...data, name: e.target.value })} placeholder="Dr. John Doe" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Specialty</label>
+            <select className="w-full p-2 border rounded-lg" value={data.specialty} onChange={e => setData({ ...data, specialty: e.target.value })}>
+              {['Cardiology', 'Neurology', 'Pediatrics', 'Orthopedics', 'Dermatology', 'Psychiatry', 'General Medicine'].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Price (e.g. ₹599)</label>
+            <input required className="w-full p-2 border rounded-lg" value={data.price} onChange={e => setData({ ...data, price: e.target.value })} placeholder="₹599" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Experience</label>
+            <input required className="w-full p-2 border rounded-lg" value={data.experience} onChange={e => setData({ ...data, experience: e.target.value })} placeholder="10 years" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Languages (comma separated)</label>
+            <input className="w-full p-2 border rounded-lg" value={data.languages} onChange={e => setData({ ...data, languages: e.target.value })} />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button type="button" onClick={onClose} className="flex-1 py-2 border rounded-lg">Cancel</button>
+          <button type="submit" className="flex-1 py-2 bg-blue-600 text-white rounded-lg">Add Doctor</button>
+        </div>
+      </form>
+    </div>
+  </div>
+);
 
 // Dashboard View Component
 const DashboardView = ({ dashboardStats, analytics, systemMetrics, loading, quickActions }) => {
@@ -817,21 +983,21 @@ const DashboardView = ({ dashboardStats, analytics, systemMetrics, loading, quic
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={analytics.users.slice(-30)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis 
-                dataKey="date" 
+              <XAxis
+                dataKey="date"
                 tick={{ fontSize: 12 }}
                 tickFormatter={(value) => new Date(value).getDate().toString()}
               />
               <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip 
+              <Tooltip
                 formatter={(value) => [value, 'Users']}
                 labelFormatter={(label) => `Date: ${label}`}
               />
-              <Area 
-                type="monotone" 
-                dataKey="total" 
-                stroke="#3b82f6" 
-                fill="#3b82f6" 
+              <Area
+                type="monotone"
+                dataKey="total"
+                stroke="#3b82f6"
+                fill="#3b82f6"
                 fillOpacity={0.2}
                 strokeWidth={2}
               />
@@ -851,17 +1017,17 @@ const DashboardView = ({ dashboardStats, analytics, systemMetrics, loading, quic
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={analytics.revenue.slice(-6)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis 
-                dataKey="_id" 
+              <XAxis
+                dataKey="_id"
                 tick={{ fontSize: 12 }}
                 tickFormatter={(value) => value.split('-')[1]}
               />
               <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip 
+              <Tooltip
                 formatter={(value) => [`$${(value / 100).toFixed(2)}`, 'Revenue']}
               />
-              <Bar 
-                dataKey="total" 
+              <Bar
+                dataKey="total"
                 fill="#10b981"
                 radius={[4, 4, 0, 0]}
               />
@@ -953,7 +1119,7 @@ const UsersView = ({
         <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
         <p className="text-gray-600">Manage users, roles, and permissions</p>
       </div>
-      
+
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => fetchUsers()}
@@ -1145,20 +1311,18 @@ const UsersView = ({
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                      user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                    <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                       user.role === 'provider' ? 'bg-blue-100 text-blue-800' :
-                      user.role === 'staff' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-green-100 text-green-800'
-                    }`}>
+                        user.role === 'staff' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                      }`}>
                       {user.role || 'patient'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center">
-                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                        user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}>
+                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
                         {user.isActive ? 'Active' : 'Inactive'}
                       </span>
                       {user.isEmailVerified && (
@@ -1229,16 +1393,15 @@ const UsersView = ({
               } else {
                 pageNum = currentPage - 2 + i;
               }
-              
+
               return (
                 <button
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
-                  className={`px-3 py-1 mx-1 rounded-lg ${
-                    currentPage === pageNum
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                  }`}
+                  className={`px-3 py-1 mx-1 rounded-lg ${currentPage === pageNum
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
                 >
                   {pageNum}
                 </button>
@@ -1266,7 +1429,7 @@ const AnalyticsView = ({ analytics, loading, chartPeriod, setChartPeriod }) => (
         <h2 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h2>
         <p className="text-gray-600">Deep insights into system performance</p>
       </div>
-      
+
       <div className="flex items-center space-x-2">
         <select
           value={chartPeriod}
@@ -1306,17 +1469,9 @@ const AnalyticsView = ({ analytics, loading, chartPeriod, setChartPeriod }) => (
               fill="#8884d8"
               dataKey="value"
             >
-              {/* {COLORS.map((color, index) => (
+              {COLORS.map((color, index) => (
                 <Cell key={`cell-${index}`} fill={color} />
-              ))} */}
-              const COLORS = [
-                  '#3b82f6',
-                  '#10b981',
-                  '#f59e0b',
-                  '#ef4444',
-                  '#8b5cf6',
-                  '#6366f1'
-                ];
+              ))}
             </Pie>
             <Tooltip formatter={(value) => [value, 'Users']} />
             <Legend />
@@ -1333,8 +1488,8 @@ const AnalyticsView = ({ analytics, loading, chartPeriod, setChartPeriod }) => (
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={analytics.revenue.slice(-12)}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis 
-              dataKey="_id" 
+            <XAxis
+              dataKey="_id"
               tick={{ fontSize: 12 }}
               tickFormatter={(value) => {
                 const [year, month] = value.split('-');
@@ -1342,13 +1497,13 @@ const AnalyticsView = ({ analytics, loading, chartPeriod, setChartPeriod }) => (
               }}
             />
             <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip 
+            <Tooltip
               formatter={(value) => [`$${(value / 100).toFixed(2)}`, 'Revenue']}
             />
-            <Line 
-              type="monotone" 
-              dataKey="total" 
-              stroke="#10b981" 
+            <Line
+              type="monotone"
+              dataKey="total"
+              stroke="#10b981"
               strokeWidth={2}
               dot={{ r: 4 }}
               activeDot={{ r: 6 }}
@@ -1400,22 +1555,20 @@ const AnalyticsView = ({ analytics, loading, chartPeriod, setChartPeriod }) => (
                     {[...Array(5)].map((_, i) => (
                       <Star
                         key={i}
-                        className={`h-4 w-4 ${
-                          i < Math.floor(provider.rating || 0) 
-                            ? 'text-yellow-400 fill-current' 
-                            : 'text-gray-300'
-                        }`}
+                        className={`h-4 w-4 ${i < Math.floor(provider.rating || 0)
+                          ? 'text-yellow-400 fill-current'
+                          : 'text-gray-300'
+                          }`}
                       />
                     ))}
                     <span className="ml-2 text-sm text-gray-600">({provider.rating || 0})</span>
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                    provider.isVerified 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
+                  <span className={`px-3 py-1 text-xs font-semibold rounded-full ${provider.isVerified
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-yellow-100 text-yellow-800'
+                    }`}>
                     {provider.isVerified ? 'Verified' : 'Pending'}
                   </span>
                 </td>
@@ -1466,12 +1619,11 @@ const AuditLogsView = ({ auditLogs, loading }) => (
               auditLogs.map((log, index) => (
                 <tr key={index} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                      log.action.includes('CREATE') ? 'bg-green-100 text-green-800' :
+                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${log.action.includes('CREATE') ? 'bg-green-100 text-green-800' :
                       log.action.includes('UPDATE') ? 'bg-blue-100 text-blue-800' :
-                      log.action.includes('DELETE') ? 'bg-red-100 text-red-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
+                        log.action.includes('DELETE') ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                      }`}>
                       {log.action}
                     </span>
                   </td>
@@ -1518,16 +1670,14 @@ const SystemHealthView = ({ systemHealth, systemMetrics, loading }) => (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-gray-900">Database</h3>
-          <Database className={`h-6 w-6 ${
-            systemMetrics?.database?.status === 'connected' ? 'text-green-500' : 'text-red-500'
-          }`} />
+          <Database className={`h-6 w-6 ${systemMetrics?.database?.status === 'connected' ? 'text-green-500' : 'text-red-500'
+            }`} />
         </div>
         <div className="space-y-2">
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Status</span>
-            <span className={`text-sm font-medium ${
-              systemMetrics?.database?.status === 'connected' ? 'text-green-600' : 'text-red-600'
-            }`}>
+            <span className={`text-sm font-medium ${systemMetrics?.database?.status === 'connected' ? 'text-green-600' : 'text-red-600'
+              }`}>
               {systemMetrics?.database?.status || 'Unknown'}
             </span>
           </div>
@@ -1583,8 +1733,8 @@ const SystemHealthView = ({ systemHealth, systemMetrics, loading }) => (
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Current</span>
             <span className="text-sm font-medium text-gray-900">
-              {systemHealth?.system?.uptime ? 
-                `${Math.floor(systemHealth.system.uptime / 3600)}h ${Math.floor((systemHealth.system.uptime % 3600) / 60)}m` 
+              {systemHealth?.system?.uptime ?
+                `${Math.floor(systemHealth.system.uptime / 3600)}h ${Math.floor((systemHealth.system.uptime % 3600) / 60)}m`
                 : '0h 0m'}
             </span>
           </div>
@@ -1633,11 +1783,10 @@ const SystemHealthView = ({ systemHealth, systemMetrics, loading }) => (
                 <item.icon className="h-5 w-5 text-gray-400 mr-3" />
                 <span className="text-gray-700">{item.service}</span>
               </div>
-              <span className={`px-2 py-1 text-xs rounded-full ${
-                item.status === 'operational' ? 'bg-green-100 text-green-800' :
+              <span className={`px-2 py-1 text-xs rounded-full ${item.status === 'operational' ? 'bg-green-100 text-green-800' :
                 item.status === 'degraded' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-red-100 text-red-800'
-              }`}>
+                  'bg-red-100 text-red-800'
+                }`}>
                 {item.status}
               </span>
             </div>
@@ -1836,3 +1985,10 @@ const BulkNotificationModal = ({ data, setData, onSubmit, onClose }) => (
 );
 
 export default AdminDashboard;
+
+
+//Admin Email: admin@example.com
+//Password: AdminPassword123!
+
+//Email: patrasouvik313@gmail.com
+//Password: souvik@123456

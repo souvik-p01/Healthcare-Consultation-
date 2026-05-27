@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useAppContext } from '../context/AppContext'
 import {
   Stethoscope,
   ChevronLeft,
@@ -30,102 +31,32 @@ const ConsultationsPage = () => {
     { id: 'psychiatry', name: 'Psychiatry', count: 2 }
   ]
 
-  const doctors = [
-    {
-      id: 1,
-      name: 'Dr. Sarah Johnson',
-      specialty: 'Cardiology',
-      rating: 4.9,
-      reviews: 245,
-      experience: '12 years',
-      price: '₹599',
-      availableToday: true,
-      languages: ['English', 'Hindi'],
-      image: '👩‍⚕️',
-      availability: ['Mon', 'Wed', 'Fri'],
-      videoConsultation: true
-    },
-    {
-      id: 2,
-      name: 'Dr. Michael Chen',
-      specialty: 'Neurology',
-      rating: 4.8,
-      reviews: 189,
-      experience: '15 years',
-      price: '₹699',
-      availableToday: false,
-      languages: ['English', 'Mandarin'],
-      image: '👨‍⚕️',
-      availability: ['Tue', 'Thu', 'Sat'],
-      videoConsultation: true
-    },
-    {
-      id: 3,
-      name: 'Dr. Priya Sharma',
-      specialty: 'Pediatrics',
-      rating: 5.0,
-      reviews: 312,
-      experience: '8 years',
-      price: '₹499',
-      availableToday: true,
-      languages: ['Hindi', 'English', 'Marathi'],
-      image: '👩‍⚕️',
-      availability: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-      videoConsultation: true
-    },
-    {
-      id: 4,
-      name: 'Dr. James Wilson',
-      specialty: 'Orthopedics',
-      rating: 4.7,
-      reviews: 178,
-      experience: '18 years',
-      price: '₹649',
-      availableToday: true,
-      languages: ['English'],
-      image: '👨‍⚕️',
-      availability: ['Wed', 'Thu', 'Sat'],
-      videoConsultation: false
-    },
-    {
-      id: 5,
-      name: 'Dr. Anjali Mehta',
-      specialty: 'Dermatology',
-      rating: 4.9,
-      reviews: 267,
-      experience: '10 years',
-      price: '₹549',
-      availableToday: false,
-      languages: ['Hindi', 'English', 'Gujarati'],
-      image: '👩‍⚕️',
-      availability: ['Mon', 'Tue', 'Fri'],
-      videoConsultation: true
-    },
-    {
-      id: 6,
-      name: 'Dr. Robert Kim',
-      specialty: 'Psychiatry',
-      rating: 4.6,
-      reviews: 156,
-      experience: '14 years',
-      price: '₹749',
-      availableToday: true,
-      languages: ['English', 'Korean'],
-      image: '👨‍⚕️',
-      availability: ['Tue', 'Thu'],
-      videoConsultation: true
-    }
-  ]
-
   const consultationTypes = [
     { type: 'video', icon: <Video className="w-5 h-5" />, label: 'Video Consultation' },
     { type: 'phone', icon: <Phone className="w-5 h-5" />, label: 'Phone Consultation' },
     { type: 'in-person', icon: <MapPin className="w-5 h-5" />, label: 'In-person Visit' }
   ]
 
-  const filteredDoctors = selectedSpecialty === 'all'
-    ? doctors
-    : doctors.filter(doctor => doctor.specialty.toLowerCase() === selectedSpecialty)
+  const { apiCall } = useAppContext()
+  const [doctors, setDoctors] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        setLoading(true)
+        const response = await apiCall(`/doctors?specialty=${selectedSpecialty === 'all' ? '' : selectedSpecialty}`)
+        setDoctors(response.data || [])
+      } catch (error) {
+        console.error("Failed to fetch doctors:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchDoctors()
+  }, [selectedSpecialty])
+
+  const filteredDoctors = doctors
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 py-8">
@@ -217,83 +148,89 @@ const ConsultationsPage = () => {
 
         {/* Doctors Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {filteredDoctors.map((doctor) => (
-            <div
-              key={doctor.id}
-              className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              <div className="p-6">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="text-5xl">{doctor.image}</div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold text-lg text-gray-800">{doctor.name}</h3>
-                        <p className="text-blue-600 text-sm font-medium">{doctor.specialty}</p>
-                      </div>
-                      {doctor.videoConsultation && (
-                        <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-xs px-2 py-1 rounded">
-                          <Video className="w-3 h-3" />
-                          Video
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex items-center">
-                        <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                        <span className="ml-1 font-medium">{doctor.rating}</span>
-                        <span className="ml-1 text-sm text-gray-500">({doctor.reviews} reviews)</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 mt-3 text-sm text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {doctor.experience}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Users className="w-4 h-4" />
-                        {doctor.languages.join(', ')}
-                      </span>
-                    </div>
-                    
-                    <div className="mt-4">
-                      <div className="text-xs text-gray-500 mb-1">Available on:</div>
-                      <div className="flex gap-1">
-                        {doctor.availability.map((day, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded"
-                          >
-                            {day}
+          {loading ? (
+            <div className="col-span-full text-center py-12">Loading doctors...</div>
+          ) : filteredDoctors.length === 0 ? (
+            <div className="col-span-full text-center py-12 text-gray-500">No doctors found for this specialty.</div>
+          ) : (
+            filteredDoctors.map((doctor) => (
+              <div
+                key={doctor._id}
+                className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                <div className="p-6">
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className="text-5xl">{doctor.image}</div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-lg text-gray-800">{doctor.name}</h3>
+                          <p className="text-blue-600 text-sm font-medium">{doctor.specialty}</p>
+                        </div>
+                        {doctor.videoConsultation && (
+                          <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-xs px-2 py-1 rounded">
+                            <Video className="w-3 h-3" />
+                            Video
                           </span>
-                        ))}
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="flex items-center">
+                          <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                          <span className="ml-1 font-medium">{doctor.rating}</span>
+                          <span className="ml-1 text-sm text-gray-500">({doctor.reviews} reviews)</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3 mt-3 text-sm text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          {doctor.experience}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Users className="w-4 h-4" />
+                          {doctor.languages?.join(', ')}
+                        </span>
+                      </div>
+                      
+                      <div className="mt-4">
+                        <div className="text-xs text-gray-500 mb-1">Available on:</div>
+                        <div className="flex gap-1">
+                          {doctor.availability?.map((day, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded"
+                            >
+                              {day}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div>
-                    <div className="text-sm text-gray-500">Starting from</div>
-                    <div className="text-2xl font-bold text-gray-800">{doctor.price}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setSelectedDoctor(doctor)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                    >
-                      Book Now
-                    </button>
-                    <button className="border border-blue-600 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50">
-                      <MessageSquare className="w-5 h-5" />
-                    </button>
+                  
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div>
+                      <div className="text-sm text-gray-500">Starting from</div>
+                      <div className="text-2xl font-bold text-gray-800">{doctor.price}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedDoctor(doctor)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                      >
+                        Book Now
+                      </button>
+                      <button className="border border-blue-600 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50">
+                        <MessageSquare className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Booking Modal */}

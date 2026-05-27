@@ -10,8 +10,10 @@
  * - API versioning for healthcare services
  * - Comprehensive error handling
  * - Request logging and monitoring
- * - File upload handling for medical documents
+ * This guide is for internal use.
  */
+
+// Trigger nodemon reload
 
 import express from "express";
 import cors from "cors";
@@ -225,7 +227,7 @@ app.get('/', (req, res) => {
  * Handles requests to undefined routes
  * This should be placed AFTER all route definitions
  */
-app.use('*', (req, res) => {
+app.use((req, res) => {
     res.status(404).json({
         success: false,
         message: "Route not found",
@@ -328,7 +330,7 @@ app.use((err, req, res, next) => {
 });
 
 // Export the configured Express app
-export { app };
+export { app }; // nodemon reload trigger
 
 /**
  * ==========================================

@@ -29,7 +29,7 @@ app.use('/api/v1/payments', paymentRoutes);
 app.use('/api', razorpayRoutes); // For backward compatibility endpoints
 
 // 404 handler for undefined routes
-app.use('*', (req, res) => {
+app.use((req, res) => {
     res.status(404).json({ 
         success: false, 
         message: 'Route not found' 

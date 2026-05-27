@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const technicianSchema = new mongoose.Schema({
   user: {
@@ -111,4 +111,4 @@ technicianSchema.pre('save', function(next) {
   next();
 });
 
-module.exports = mongoose.model('Technician', technicianSchema);
+export const Technician = mongoose.model('Technician', technicianSchema);

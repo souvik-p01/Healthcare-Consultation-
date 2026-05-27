@@ -18,7 +18,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/User.model.js";
 import { Patient } from "../models/Patient.model.js";
-import { Doctor } from "../models/doctor.model.js";
+import { Doctor } from "../models/Doctor.model.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import { 
     generateAccessToken, 
@@ -697,60 +697,20 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
  * Requires: verifyJWT middleware
  */
 const getCurrentUser = asyncHandler(async (req, res) => {
-    try {
-        // User is already available in req.user from verifyJWT middleware
-        const user = await User.findById(req.user._id)
-            .select("-password -refreshToken -emailVerificationToken -passwordResetToken")
-            .populate('patientId')
-            .populate('doctorId')
-            .populate('technicianId')
-            .populate('staffId')
-            .lean();
-
-        if (!user) {
-            throw new ApiError(404, "User not found");
-        }
-
-        return res.status(200).json(
-            new ApiResponse(200, user, "Current user fetched successfully")
-        );
-        
-    } catch (error) {
-        // Log the error for debugging
-        console.error("Error fetching current user:", {
-            message: error.message,
-            userId: req.user?._id,
-            timestamp: new Date().toISOString()
+    // User is already available in req.user from verifyJWT middleware
+    if (!req.user) {
+        return res.status(404).json({
+            success: false,
+            message: "User not found"
         });
-        
-        // Handle specific error types
-        if (error.name === 'CastError') {
-            throw new ApiError(400, "Invalid user ID format");
-        }
-        
-        if (error.name === 'JsonWebTokenError') {
-            throw new ApiError(401, "Invalid or expired token");
-        }
-        
-        if (error.name === 'TokenExpiredError') {
-            throw new ApiError(401, "Token has expired");
-        }
-        
-        // Re-throw ApiError instances
-        if (error instanceof ApiError) {
-            throw error;
-        }
-        
-        // Handle mongoose connection errors
-        if (error.name === 'MongooseError' || error.name === 'MongoNetworkError') {
-            throw new ApiError(503, "Database connection error. Please try again later.");
-        }
-        
-        // Default error
-        throw new ApiError(500, "An unexpected error occurred while fetching user data");
     }
-});
 
+    return res.status(200).json({
+        success: true,
+        message: "Current user fetched successfully [VER: 2.0]",
+        data: req.user
+    });
+});
 /**
  * UPDATE ACCOUNT DETAILS
  * Update user's basic information

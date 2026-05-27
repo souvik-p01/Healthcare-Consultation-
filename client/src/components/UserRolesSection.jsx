@@ -116,7 +116,7 @@ const UserRolesSection = () => {
       bgGradient: "from-red-50 to-red-100",
       iconBg: "bg-red-100",
       iconColor: "text-red-600",
-      path: "/admin-portal",
+      path: "/admin",
       delay: 300
     }
   ];

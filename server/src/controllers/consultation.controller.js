@@ -18,7 +18,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Consultation } from "../models/consultation.model.js";
 import { User } from "../models/User.model.js";
 import { Patient } from "../models/Patient.model.js";
-import { Doctor } from "../models/doctor.model.js";
+import { Doctor } from "../models/Doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import { Prescription } from "../models/prescription.model.js";
 import { MedicalRecord } from "../models/medicalRecord.model.js";

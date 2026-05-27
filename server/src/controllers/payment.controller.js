@@ -5,7 +5,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Payment } from "../models/payment.model.js";
 import { User } from "../models/User.model.js";
 import { Patient } from "../models/Patient.model.js";
-import { Doctor } from "../models/doctor.model.js";
+import { Doctor } from "../models/Doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import Invoice from "../models/invoice.model.js";
 import {
@@ -33,6 +33,7 @@ const createPaymentOrder = asyncHandler(async (req, res) => {
         appointmentId,
         serviceType,
         description,
+        paymentMethod = 'online',
         metadata = {}
     } = req.body;
 
@@ -52,7 +53,7 @@ const createPaymentOrder = asyncHandler(async (req, res) => {
         appointment = await Appointment.findById(appointmentId)
             .populate({
                 path: 'patientId',
-                populate: { path: 'userId', select: 'firstName lastName email' }
+                populate: { path: 'user', select: 'firstName lastName email' }
             })
             .populate({ path: 'doctorId', select: 'firstName lastName consultationFee' });
 
@@ -67,12 +68,33 @@ const createPaymentOrder = asyncHandler(async (req, res) => {
         }
     }
 
-    // Create Razorpay order
-    const razorpayOrder = await createRazorpayOrder({
-        amount,
-        currency,
-        receipt: `receipt_${userId}_${Date.now()}`,
-    });
+    let orderIdVal = "";
+    let finalAmountVal = amount;
+    let finalCurrencyVal = currency;
+    let methodVal = "online";
+    let gatewayVal = "razorpay";
+    let metadataObj = { ...metadata };
+
+    const isCod = paymentMethod === 'cod' || paymentMethod === 'cash';
+
+    if (isCod) {
+        orderIdVal = `cod_${Date.now()}`;
+        methodVal = "cash";
+        gatewayVal = "cod";
+        metadataObj.paymentMethodType = "cod";
+    } else {
+        // Create Razorpay order
+        const razorpayOrder = await createRazorpayOrder({
+            amount,
+            currency,
+            receipt: `rcp_${userId.toString().slice(-6)}_${Date.now()}`,
+        });
+        orderIdVal = razorpayOrder.id;
+        finalAmountVal = razorpayOrder.amount;
+        finalCurrencyVal = razorpayOrder.currency;
+        metadataObj.razorpayOrderId = razorpayOrder.id;
+        metadataObj.razorpayAmount = razorpayOrder.amount;
+    }
 
     // Create pending payment record in DB
     const payment = await Payment.create({
@@ -84,23 +106,19 @@ const createPaymentOrder = asyncHandler(async (req, res) => {
         currency,
         serviceType,
         serviceDescription: description || `Payment for ${serviceType}`,
-        paymentMethod: 'online',
-        paymentGateway: 'razorpay',
-        gatewayReference: razorpayOrder.id, // store order_id here
+        paymentMethod: methodVal,
+        paymentGateway: gatewayVal,
+        gatewayReference: orderIdVal, // store order_id or local reference here
         status: 'pending',
         initiatedAt: new Date(),
-        metadata: {
-            ...metadata,
-            razorpayOrderId: razorpayOrder.id,
-            razorpayAmount: razorpayOrder.amount,
-        },
+        metadata: metadataObj,
     });
 
     return res.status(201).json(
         new ApiResponse(201, {
-            orderId: razorpayOrder.id,
-            amount: razorpayOrder.amount,
-            currency: razorpayOrder.currency,
+            orderId: orderIdVal,
+            amount: finalAmountVal,
+            currency: finalCurrencyVal,
             paymentId: payment._id,
         }, "Order created successfully")
     );
@@ -141,7 +159,7 @@ const confirmPayment = asyncHandler(async (req, res) => {
     })
         .populate({
             path: 'patientId',
-            populate: { path: 'userId', select: 'firstName lastName email phoneNumber' }
+            populate: { path: 'user', select: 'firstName lastName email phoneNumber' }
         })
         .populate({ path: 'doctorId', select: 'firstName lastName email' })
         .populate('appointmentId');
@@ -213,8 +231,8 @@ const confirmPayment = asyncHandler(async (req, res) => {
 
     // Send emails (implement your email logic)
     try {
-        await sendPaymentConfirmation(payment.patientId.userId.email, {
-            patientName: `${payment.patientId.userId.firstName} ${payment.patientId.userId.lastName}`,
+        await sendPaymentConfirmation(payment.patientId.user.email, {
+            patientName: `${payment.patientId.user.firstName} ${payment.patientId.user.lastName}`,
             amount: payment.amount,
             currency: payment.currency,
             serviceType: payment.serviceType,
@@ -243,27 +261,35 @@ const getPaymentById = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const userRole = req.user.role;
 
-    const payment = await Payment.findById(paymentId)
-        .populate({
-            path: 'patientId',
-            populate: { path: 'userId', select: 'firstName lastName email phoneNumber' }
-        })
-        .populate({ path: 'doctorId', select: 'firstName lastName specialization' })
-        .populate('appointmentId')
-        .populate('invoiceId')
-        .lean();
+    // Determine if paymentId is a valid MongoDB ObjectId
+    const isObjectId = /^[a-f\d]{24}$/i.test(paymentId);
+
+    let payment;
+    if (isObjectId) {
+        payment = await Payment.findById(paymentId).lean();
+    } else {
+        // Fallback: treat as gatewayReference (e.g., Razorpay order id or COD reference)
+        payment = await Payment.findOne({ gatewayReference: paymentId }).lean();
+    }
 
     if (!payment) throw new ApiError(404, "Payment not found");
 
-    // Access control
-    if (userRole === 'patient' && payment.patientId?.userId?._id.toString() !== userId.toString()) {
-        throw new ApiError(403, "Access denied.");
-    }
-    if (userRole === 'doctor' && payment.doctorId?._id.toString() !== userId.toString()) {
-        throw new ApiError(403, "Access denied.");
+    // Access control: only the owner, admin, or doctor linked to this payment can view it
+    if (userRole !== 'admin') {
+        const ownerUserId = payment.userId?.toString();
+        if (ownerUserId && ownerUserId !== userId.toString()) {
+            throw new ApiError(403, "Access denied.");
+        }
     }
 
-    return res.status(200).json(new ApiResponse(200, { payment }, "Payment fetched"));
+    // Optionally enrich with user info
+    const user = await User.findById(payment.userId)
+        .select('firstName lastName email phoneNumber role')
+        .lean();
+
+    return res.status(200).json(
+        new ApiResponse(200, { payment: { ...payment, user } }, "Payment fetched")
+    );
 });
 
 /**
@@ -308,11 +334,10 @@ const getUserPayments = asyncHandler(async (req, res) => {
     const payments = await Payment.find(query)
         .populate({
             path: 'patientId',
-            populate: { path: 'userId', select: 'firstName lastName' }
+            populate: { path: 'user', select: 'firstName lastName' }
         })
         .populate({ path: 'doctorId', select: 'firstName lastName' })
         .populate('appointmentId')
-        .populate('invoiceId')
         .sort(sort)
         .skip(skip)
         .limit(parseInt(limit))
@@ -368,7 +393,7 @@ const processRefund = asyncHandler(async (req, res) => {
     const payment = await Payment.findById(paymentId)
         .populate({
             path: 'patientId',
-            populate: { path: 'userId', select: 'firstName lastName email' }
+            populate: { path: 'user', select: 'firstName lastName email' }
         });
 
     if (!payment) throw new ApiError(404, "Payment not found");
@@ -416,8 +441,8 @@ const processRefund = asyncHandler(async (req, res) => {
 
     // Send refund email
     try {
-        await sendRefundConfirmation(payment.patientId.userId.email, {
-            patientName: `${payment.patientId.userId.firstName} ${payment.patientId.userId.lastName}`,
+        await sendRefundConfirmation(payment.patientId.user.email, {
+            patientName: `${payment.patientId.user.firstName} ${payment.patientId.user.lastName}`,
             originalAmount: payment.amount,
             refundAmount,
             currency: payment.currency,

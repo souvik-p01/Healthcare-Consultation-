@@ -117,4 +117,56 @@ export const paymentAPI = {
   getPaymentMethods: () => api.get('/payments/payment-methods'),
 };
 
+// Emergency services
+export const emergencyAPI = {
+  getHospitals: (params) => api.get('/emergency/hospitals', { params }),
+  requestAmbulance: (data) => api.post('/emergency/request-ambulance', data),
+  getAmbulanceRequest: (requestId) => api.get(`/emergency/ambulance-request/${requestId}`),
+  cancelAmbulanceRequest: (requestId) => api.post(`/emergency/ambulance-request/${requestId}/cancel`),
+};
+
+// Medicine services
+export const medicineAPI = {
+  getMedicines: (params) => api.get('/medicine', { params }),
+  getPharmacies: (params) => api.get('/medicine/pharmacies', { params }),
+};
+
+// Pharmacy Order services
+export const pharmacyOrderAPI = {
+  getOrder: (orderId) => api.get(`/pharmacy-orders/${orderId}`),
+  listOrders: (params) => api.get('/pharmacy-orders', { params }),
+  updateStatus: (orderId, status, note) =>
+    api.patch(`/pharmacy-orders/${orderId}/status`, { status, note }),
+  getStats: () => api.get('/pharmacy-orders/stats'),
+};
+
+// Health Monitoring services
+export const monitoringAPI = {
+  getVitals: () => api.get('/monitoring/vitals'),
+  getMetrics: (params) => api.get('/monitoring/metrics', { params }),
+  addMetric: (data) => api.post('/monitoring/metrics', data),
+  getWeeklyReport: () => api.get('/monitoring/weekly-report'),
+  // Devices
+  getDevices: () => api.get('/monitoring/devices'),
+  addDevice: (data) => api.post('/monitoring/devices', data),
+  updateDevice: (id, data) => api.patch(`/monitoring/devices/${id}`, data),
+  deleteDevice: (id) => api.delete(`/monitoring/devices/${id}`),
+  // Reminders
+  getReminders: () => api.get('/monitoring/reminders'),
+  addReminder: (data) => api.post('/monitoring/reminders', data),
+  updateReminder: (id, data) => api.patch(`/monitoring/reminders/${id}`, data),
+  deleteReminder: (id) => api.delete(`/monitoring/reminders/${id}`),
+  // Goals
+  getGoals: () => api.get('/monitoring/goals'),
+  addGoal: (data) => api.post('/monitoring/goals', data),
+  updateGoal: (id, data) => api.patch(`/monitoring/goals/${id}`, data),
+  deleteGoal: (id) => api.delete(`/monitoring/goals/${id}`),
+  // Alerts
+  getAlerts: () => api.get('/monitoring/alerts'),
+  saveAlerts: (alerts) => api.post('/monitoring/alerts', { alerts }),
+  // Settings
+  getSettings: () => api.get('/monitoring/settings'),
+  updateSettings: (data) => api.patch('/monitoring/settings', data),
+};
+
 export default api;

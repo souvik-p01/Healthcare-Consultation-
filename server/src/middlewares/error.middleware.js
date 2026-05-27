@@ -136,6 +136,15 @@ export const errorHandler = (err, req, res, next) => {
     // Add stack trace in development
     if (process.env.NODE_ENV === 'development') {
         response.stack = error.stack;
+        response.nodeEnv = process.env.NODE_ENV;
+        response.originalError = {
+            message: err.message,
+            stack: err.stack,
+            name: err.name,
+            code: err.code,
+            keys: Object.keys(err || {}),
+            stringified: String(err)
+        };
     }
     
     // Send error response

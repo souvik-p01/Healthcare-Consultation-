@@ -266,13 +266,14 @@ const TechnicianPortal = () => {
         read: false,
         limit: 10 
       });
-      setNotifications((response.data.data || []).map(notif => ({
+      const notifList = response.data.data?.notifications || response.data.data || [];
+      setNotifications((Array.isArray(notifList) ? notifList : []).map(notif => ({
         id: notif._id,
-        title: notif.title,
+        title: notif.title || notif.notificationType || 'Alert',
         desc: notif.message,
         time: formatTimeAgo(notif.createdAt),
-        read: notif.read,
-        type: notif.type
+        read: notif.isRead !== undefined ? notif.isRead : notif.read,
+        type: notif.notificationType || notif.type
       })));
     } catch (error) {
       console.error('Error fetching notifications:', error);

@@ -32,6 +32,9 @@ import userRoutes from "./routes/user.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import razorpayRoutes from "./routes/razorpay.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
+import doctorRoutes from "./routes/doctor.routes.js";
+import v1Routes from "./routes/api.routes.js";
 
 // Import middleware
 import { errorHandler } from "./middlewares/error.middleware.js";
@@ -53,10 +56,20 @@ import { DB_NAME } from "./constants.js";
 // Create Express application
 const app = express();
 
+// ✅ TOP-LEVEL DEBUG MIDDLEWARE (Nodemon reload trigger 3)
+app.use((req, res, next) => {
+    console.log(`🔍 [DEBUG] Incoming: ${req.method} ${req.url}`);
+    res.on('finish', () => {
+        console.log(`🔍 [DEBUG] Outgoing: ${req.method} ${req.url} -> Status: ${res.statusCode}`);
+    });
+    next();
+});
+
 // Security middleware
 app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production',
-    crossOriginEmbedderPolicy: process.env.NODE_ENV === 'production'
+    contentSecurityPolicy: false, // ✅ Disabled for GSI compatibility in dev
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" } // ✅ Allow Google Login popups
 }));
 
 // Compression middleware
@@ -107,23 +120,30 @@ const corsOptions = {
     origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ["http://localhost:3000", "http://localhost:5173"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-refresh-token"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-refresh-token", "x-request-id", "X-Request-ID"],
     exposedHeaders: ["x-access-token", "x-refresh-token"],
     maxAge: 86400 // 24 hours
 };
 app.use(cors(corsOptions));
 
-// Rate limiting
+// Rate limiting - DISABLED FOR DEVELOPMENT TO FIX 429 ERRORS
+/*
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'production' ? 100 : 1000, // Limit each IP
+    max: process.env.NODE_ENV === 'production' ? 100 : 10000, // ✅ Increased to 10000 for development
     message: 'Too many requests from this IP, please try again later',
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    skip: (req) => {
+        // ✅ Use originalUrl to be safe with mount points
+        const isAuthRoute = req.originalUrl.includes('/auth/') || req.originalUrl.includes('/google');
+        return process.env.NODE_ENV !== 'production' && isAuthRoute;
+    }
 });
 
 // Apply rate limiting to API routes
 app.use('/api/', limiter);
+*/
 
 // Static files middleware
 app.use(express.static("public"));
@@ -226,21 +246,31 @@ app.get("/", (req, res) => {
             users: "/api/v1/users",
             patients: "/api/v1/patients",
             admin: "/api/v1/admin",
+            doctors: "/api/v1/doctors",
             payments: "/api/v1/payments"
         }
     });
 });
 
-// Main API routes
-app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/users", userRoutes);
-app.use("/api/v1/patients", patientRoutes);
-app.use("/api/v1/admin", adminRoutes);
-app.use("/api/v1/payments", paymentRoutes);
-app.use("/api", razorpayRoutes); // Simple Razorpay endpoints for backward compatibility
+// ==========================================
+// MAIN API ROUTES
+// ==========================================
+
+console.log("🚀 REGISTERING HIGH-PRIORITY ROUTES...");
+
+// TEST ROUTE
+app.get("/api/v1/test-priority", (req, res) => {
+    res.json({ message: "High priority route is working!" });
+});
+
+// Centralized V1 Routes
+app.use("/api/v1", v1Routes);
+
+// 3. Other Routes
+app.use("/api", razorpayRoutes);
 
 // 404 handler for undefined routes
-app.use((req, res) => {
+app.use('/*splat', (req, res) => {
     console.warn(`Route not found: ${req.method} ${req.originalUrl}`, {
         ip: req.ip,
         userAgent: req.get('User-Agent')

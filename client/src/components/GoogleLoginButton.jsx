@@ -8,7 +8,7 @@ import { toast } from "react-toastify";
 const GoogleLoginButton = ({ buttonText = "Sign in with Google", isSignUp = false }) => {
   const { googleLogin, loading } = useAppContext();
 
-  const handleSuccess = async (credentialResponse) => {
+  const handleSuccess = React.useCallback(async (credentialResponse) => {
     try {
       if (!credentialResponse?.credential) {
         throw new Error("No credential received from Google");
@@ -31,7 +31,7 @@ const GoogleLoginButton = ({ buttonText = "Sign in with Google", isSignUp = fals
       console.error("Google login failed:", error);
       toast.error(error.message || "Google login failed. Please try again.");
     }
-  };
+  }, [googleLogin]);
 
   const handleError = (error) => {
     console.error("Google Sign-In error:", error);
@@ -43,12 +43,12 @@ const GoogleLoginButton = ({ buttonText = "Sign in with Google", isSignUp = fals
       <GoogleLogin
         onSuccess={handleSuccess}
         onError={handleError}
-        useOneTap
+        useOneTap={false}
         theme="outline"
         size="large"
         text={isSignUp ? "signup_with" : "signin_with"}
         shape="rectangular"
-        width="300" // ✅ Changed from "100%" to number "300"
+        width="300"
         locale="en"
         logo_alignment="center"
       />

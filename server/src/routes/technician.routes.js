@@ -15,7 +15,7 @@ import {
 const router = Router();
 
 router.use(verifyJWT);
-router.use(restrictTo('technician', 'admin'));
+router.use(restrictTo('technician', 'admin', 'staff'));
 
 router.get('/dashboard', getTechnicianDashboard);
 router.get('/tests', getTechnicianTests);

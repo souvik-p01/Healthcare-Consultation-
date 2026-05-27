@@ -18,7 +18,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Appointment } from "../models/appointment.model.js";
 import { User } from "../models/User.model.js";
 import { Patient } from "../models/Patient.model.js";
-import { Doctor } from "../models/doctor.model.js";
+import { Doctor } from "../models/Doctor.model.js";
 import { 
     sendAppointmentConfirmation,
     sendAppointmentReminder,

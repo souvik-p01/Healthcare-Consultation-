@@ -4,8 +4,28 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { Technician } from '../models/technician.model.js';
 
 export const getTechnicianDashboard = asyncHandler(async (req, res) => {
-    const technician = await Technician.findOne({ userId: req.user._id }).lean();
-    if (!technician) throw new ApiError(404, 'Technician profile not found');
+    let technician = await Technician.findOne({ user: req.user._id }).lean();
+    if (!technician) {
+        const allowedRoles = ['technician', 'staff', 'admin'];
+        if (allowedRoles.includes(req.user.role)) {
+            const employeeId = `TECH_${req.user._id.toString().substring(18).toUpperCase()}`;
+            const name = `${req.user.firstName || 'Technician'} ${req.user.lastName || ''}`.trim();
+            const newTechnician = await Technician.create({
+                user: req.user._id,
+                name: name || 'Default Technician',
+                employeeId,
+                role: 'Lab Technician',
+                experience: '2 years',
+                department: 'Pathology & Diagnostics',
+                phone: req.user.phoneNumber || '0000000000',
+                shift: 'Morning (8 AM - 4 PM)',
+                status: 'active'
+            });
+            technician = newTechnician.toObject ? newTechnician.toObject() : newTechnician;
+        } else {
+            throw new ApiError(404, 'Technician profile not found');
+        }
+    }
     return res.status(200).json(new ApiResponse(200, { technician }, 'Dashboard fetched'));
 });
 
@@ -35,7 +55,7 @@ export const controlEquipment = asyncHandler(async (req, res) => {
 
 export const updateTechnicianProfile = asyncHandler(async (req, res) => {
     const technician = await Technician.findOneAndUpdate(
-        { userId: req.user._id },
+        { user: req.user._id },
         { $set: req.body },
         { new: true, runValidators: true }
     );
