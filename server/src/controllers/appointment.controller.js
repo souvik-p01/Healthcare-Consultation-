@@ -29,6 +29,7 @@ import {
     sendSMSNotification,
     sendPushNotification 
 } from "../utils/notificationUtils.js";
+import { generateGoogleMeetLink } from "../utils/googleMeetUtils.js";
 
 /**
  * CREATE APPOINTMENT
@@ -90,15 +91,23 @@ const createAppointment = asyncHandler(async (req, res) => {
     }
 
     // 5. Check doctor availability for the requested time slot
-    const existingAppointment = await Appointment.findOne({
+    const requestedApptType = req.body.appointmentType || 'in-person';
+    const existingAppointments = await Appointment.find({
         doctorId,
         appointmentDate: new Date(appointmentDate),
         appointmentTime,
         status: { $in: ['scheduled', 'confirmed'] }
     });
 
-    if (existingAppointment) {
-        throw new ApiError(409, "Doctor is not available at the requested time slot");
+    if (existingAppointments.length > 0) {
+        const hasNonVideo = existingAppointments.some(apt => apt.appointmentType !== 'video');
+        if (hasNonVideo || requestedApptType !== 'video') {
+            throw new ApiError(409, "Doctor is not available at the requested time slot");
+        }
+        const maxVideoSlots = 10;
+        if (existingAppointments.length >= maxVideoSlots) {
+            throw new ApiError(409, `Doctor has reached the maximum capacity of ${maxVideoSlots} video consultations for this time slot`);
+        }
     }
 
     // 6. Check if patient has conflicting appointment
@@ -123,6 +132,12 @@ const createAppointment = asyncHandler(async (req, res) => {
     const appointmentCount = await Appointment.countDocuments();
     const appointmentNumber = `APT-${String(appointmentCount + 1).padStart(6, '0')}`;
 
+    const appointmentType = req.body.appointmentType || 'in-person';
+    let meetLink = null;
+    if (appointmentType === 'video') {
+        meetLink = generateGoogleMeetLink();
+    }
+
     // 9. Create appointment
     const appointmentData = {
         appointmentNumber,
@@ -130,13 +145,19 @@ const createAppointment = asyncHandler(async (req, res) => {
         doctorId,
         appointmentDate: new Date(appointmentDate),
         appointmentTime,
+        appointmentType,
         type,
         reason,
         symptoms: symptoms || [],
         priority,
         notes,
         status: 'scheduled',
-        createdBy: patientId
+        createdBy: patientId,
+        videoConsultation: appointmentType === 'video' ? {
+            meetingUrl: meetLink,
+            joinUrl: meetLink,
+            meetingId: meetLink.split('/').pop()
+        } : undefined
     };
 
     const appointment = await Appointment.create(appointmentData);
@@ -180,8 +201,48 @@ const createAppointment = asyncHandler(async (req, res) => {
         reason: reason
     });
 
-    } catch (emailError) {
-        console.error('⚠ Email sending failed:', emailError);
+     // Send SMS confirmation to patient
+    if (patientUser.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+        let meetMsg = "";
+        if (appointmentType === 'video') {
+            meetMsg = `Google Meet link: ${meetLink}`;
+        } else if (appointmentType === 'chat') {
+            meetMsg = `Chat Link: ${process.env.FRONTEND_URL || "http://localhost:5173"}/services/telemedicine?room=telemed_${appointment._id}`;
+        } else if (appointmentType === 'phone') {
+            meetMsg = `The doctor will call you on your registered phone.`;
+        } else {
+            meetMsg = `Location: Main Clinic`;
+        }
+        const patientMsg = `Hello ${patientUser.firstName}, your ${appointmentType} appointment with Dr. ${doctor.lastName} is scheduled for ${appointmentDate} at ${appointmentTime}. ${meetMsg}`;
+        await sendSMSNotification(patientUser.phoneNumber, {
+            message: patientMsg,
+            type: "appointment"
+        });
+        console.log(`📱 SMS confirmation sent to patient: ${patientUser.phoneNumber}`);
+    }
+
+    // Send SMS confirmation to doctor
+    if (doctor.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+        let meetMsg = "";
+        if (appointmentType === 'video') {
+            meetMsg = `Google Meet link: ${meetLink}`;
+        } else if (appointmentType === 'chat') {
+            meetMsg = `Chat Link: ${process.env.FRONTEND_URL || "http://localhost:5173"}/services/telemedicine?room=telemed_${appointment._id}`;
+        } else if (appointmentType === 'phone') {
+            meetMsg = `Please call the patient on: ${patientUser.phoneNumber}`;
+        } else {
+            meetMsg = `Location: Main Clinic`;
+        }
+        const doctorMsg = `Hello Dr. ${doctor.lastName}, you have a new ${appointmentType} appointment with ${patientUser.firstName} ${patientUser.lastName} on ${appointmentDate} at ${appointmentTime}. ${meetMsg}`;
+        await sendSMSNotification(doctor.phoneNumber, {
+            message: doctorMsg,
+            type: "appointment"
+        });
+        console.log(`📱 SMS confirmation sent to doctor: ${doctor.phoneNumber}`);
+    }
+
+    } catch (notifError) {
+        console.error('⚠ Notification sending failed in createAppointment:', notifError);
         // Don't throw error - appointment was created successfully
     }
 
@@ -453,6 +514,17 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
         updateData.completedAt = new Date();
     }
 
+    if (status === 'confirmed' && appointment.appointmentType === 'video') {
+        if (!appointment.videoConsultation || !appointment.videoConsultation.meetingUrl) {
+            const meetLink = generateGoogleMeetLink();
+            updateData.videoConsultation = {
+                meetingUrl: meetLink,
+                joinUrl: meetLink,
+                meetingId: meetLink.split('/').pop()
+            };
+        }
+    }
+
     const updatedAppointment = await Appointment.findByIdAndUpdate(
         appointmentId,
         { $set: updateData },
@@ -482,23 +554,112 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
                     appointmentTime: appointment.appointmentTime,
                     appointmentNumber: appointment.appointmentNumber,
                     cancellationReason
-
                 }
             );
-        } else if (status === 'confirmed') {
-            await sendAppointmentConfirmation(
-                appointment.patientId.userId.email,
+
+            // Also notify doctor by email
+            await sendAppointmentCancellation(
+                appointment.doctorId.email,
                 {
                     patientName: `${appointment.patientId.userId.firstName} ${appointment.patientId.userId.lastName}`,
                     doctorName: `${appointment.doctorId.firstName} ${appointment.doctorId.lastName}`,
                     appointmentDate: appointment.appointmentDate,
                     appointmentTime: appointment.appointmentTime,
-                    appointmentNumber: appointment.appointmentNumber
+                    appointmentNumber: appointment.appointmentNumber,
+                    cancellationReason
                 }
             );
+
+            // Send SMS to patient
+            if (appointment.patientId.userId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                const patientMsg = `Hello ${appointment.patientId.userId.firstName}, your appointment (${appointment.appointmentNumber}) with Dr. ${appointment.doctorId.lastName} has been cancelled. Reason: ${cancellationReason || 'N/A'}`;
+                await sendSMSNotification(appointment.patientId.userId.phoneNumber, {
+                    message: patientMsg,
+                    type: "appointment"
+                });
+                console.log(`📱 Cancellation SMS sent to patient: ${appointment.patientId.userId.phoneNumber}`);
+            }
+
+            // Send SMS to doctor
+            if (appointment.doctorId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                const doctorMsg = `Hello Dr. ${appointment.doctorId.lastName}, appointment ${appointment.appointmentNumber} with patient ${appointment.patientId.userId.firstName} has been cancelled. Reason: ${cancellationReason || 'N/A'}`;
+                await sendSMSNotification(appointment.doctorId.phoneNumber, {
+                    message: doctorMsg,
+                    type: "appointment"
+                });
+                console.log(`📱 Cancellation SMS sent to doctor: ${appointment.doctorId.phoneNumber}`);
+            }
+
+        } else if (status === 'confirmed') {
+            let meetMsg = "";
+            let emailMeetMsg = "Virtual Consultation Details";
+            if (updatedAppointment.appointmentType === 'video') {
+                const meetLink = updatedAppointment.videoConsultation?.meetingUrl || "";
+                meetMsg = `Google Meet link: ${meetLink}`;
+                emailMeetMsg = `Google Meet link: <a href="${meetLink}">${meetLink}</a>`;
+            } else if (updatedAppointment.appointmentType === 'chat') {
+                const joinUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/services/telemedicine?room=telemed_${updatedAppointment._id}`;
+                meetMsg = `Chat Link: ${joinUrl}`;
+                emailMeetMsg = `Chat Link: <a href="${joinUrl}">${joinUrl}</a>`;
+            } else if (updatedAppointment.appointmentType === 'phone') {
+                meetMsg = `The doctor will call you on your registered phone.`;
+                emailMeetMsg = meetMsg;
+            } else {
+                meetMsg = `Location: Main Clinic`;
+                emailMeetMsg = meetMsg;
+            }
+
+            await sendAppointmentConfirmation(
+                updatedAppointment.patientId.userId.email,
+                {
+                    patientName: `${updatedAppointment.patientId.userId.firstName} ${updatedAppointment.patientId.userId.lastName}`,
+                    doctorName: `${updatedAppointment.doctorId.firstName} ${updatedAppointment.doctorId.lastName}`,
+                    appointmentDate: updatedAppointment.appointmentDate.toISOString().split('T')[0],
+                    appointmentTime: updatedAppointment.appointmentTime,
+                    appointmentNumber: updatedAppointment.appointmentNumber,
+                    appointmentType: updatedAppointment.appointmentType,
+                    location: meetMsg,
+                    appointmentId: updatedAppointment._id
+                }
+            );
+
+            // Also notify doctor by email
+            await sendAppointmentConfirmation(
+                updatedAppointment.doctorId.email,
+                {
+                    patientName: `${updatedAppointment.patientId.userId.firstName} ${updatedAppointment.patientId.userId.lastName}`,
+                    doctorName: `${updatedAppointment.doctorId.firstName} ${updatedAppointment.doctorId.lastName}`,
+                    appointmentDate: updatedAppointment.appointmentDate.toISOString().split('T')[0],
+                    appointmentTime: updatedAppointment.appointmentTime,
+                    appointmentNumber: updatedAppointment.appointmentNumber,
+                    appointmentType: updatedAppointment.appointmentType,
+                    location: meetMsg,
+                    appointmentId: updatedAppointment._id
+                }
+            );
+
+            // Send SMS to patient
+            if (updatedAppointment.patientId.userId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                const patientMsg = `Hello ${updatedAppointment.patientId.userId.firstName}, your appointment (${updatedAppointment.appointmentNumber}) with Dr. ${updatedAppointment.doctorId.lastName} is confirmed. ${meetMsg}`;
+                await sendSMSNotification(updatedAppointment.patientId.userId.phoneNumber, {
+                    message: patientMsg,
+                    type: "appointment"
+                });
+                console.log(`📱 Confirmation SMS sent to patient: ${updatedAppointment.patientId.userId.phoneNumber}`);
+            }
+
+            // Send SMS to doctor
+            if (updatedAppointment.doctorId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                const doctorMsg = `Hello Dr. ${updatedAppointment.doctorId.lastName}, your appointment (${updatedAppointment.appointmentNumber}) with ${updatedAppointment.patientId.userId.firstName} is confirmed. ${meetMsg}`;
+                await sendSMSNotification(updatedAppointment.doctorId.phoneNumber, {
+                    message: doctorMsg,
+                    type: "appointment"
+                });
+                console.log(`📱 Confirmation SMS sent to doctor: ${updatedAppointment.doctorId.phoneNumber}`);
+            }
         }
     } catch (notificationError) {
-        console.error('⚠ Notification sending failed:', notificationError);
+        console.error('⚠ Notification sending failed in updateAppointmentStatus:', notificationError);
     }
 
     console.log('✅ Appointment status updated:', appointment.appointmentNumber, '->', status);
@@ -571,8 +732,9 @@ const rescheduleAppointment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "New appointment date and time must be in the future");
     }
 
-    // Check doctor availability for new time slot
-    const conflictingAppointment = await Appointment.findOne({
+    // Check doctor availability for new time slot (up to 10 video slots)
+    const requestedApptType = appointment.appointmentType || 'in-person';
+    const existingAppointments = await Appointment.find({
         doctorId: appointment.doctorId._id,
         appointmentDate: new Date(newAppointmentDate),
         appointmentTime: newAppointmentTime,
@@ -580,8 +742,15 @@ const rescheduleAppointment = asyncHandler(async (req, res) => {
         _id: { $ne: appointmentId }
     });
 
-    if (conflictingAppointment) {
-        throw new ApiError(409, "Doctor is not available at the requested time slot");
+    if (existingAppointments.length > 0) {
+        const hasNonVideo = existingAppointments.some(apt => apt.appointmentType !== 'video');
+        if (hasNonVideo || requestedApptType !== 'video') {
+            throw new ApiError(409, "Doctor is not available at the requested time slot");
+        }
+        const maxVideoSlots = 10;
+        if (existingAppointments.length >= maxVideoSlots) {
+            throw new ApiError(409, `Doctor has reached the maximum capacity of ${maxVideoSlots} video consultations for this time slot`);
+        }
     }
 
     // Check patient availability for new time slot
@@ -649,7 +818,7 @@ const rescheduleAppointment = asyncHandler(async (req, res) => {
             }
         );
 
-        // Also notify doctor
+        // Also notify doctor by email
         await sendAppointmentReschedule(
             appointment.doctorId.email,
             {
@@ -663,6 +832,30 @@ const rescheduleAppointment = asyncHandler(async (req, res) => {
                 reason: reason
             }
         );
+
+        // Send SMS to patient
+        if (appointment.patientId.userId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+            const roomID = `telemed_${appointment._id || appointment.id}`;
+            const joinUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/services/telemedicine?room=${roomID}`;
+            const patientMsg = `Hello ${appointment.patientId.userId.firstName}, your appointment (${appointment.appointmentNumber}) has been rescheduled to ${newAppointmentDate} at ${newAppointmentTime}. Join link: ${joinUrl}`;
+            await sendSMSNotification(appointment.patientId.userId.phoneNumber, {
+                message: patientMsg,
+                type: "appointment"
+            });
+            console.log(`📱 Reschedule SMS sent to patient: ${appointment.patientId.userId.phoneNumber}`);
+        }
+
+        // Send SMS to doctor
+        if (appointment.doctorId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+            const roomID = `telemed_${appointment._id || appointment.id}`;
+            const joinUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/services/telemedicine?room=${roomID}`;
+            const doctorMsg = `Hello Dr. ${appointment.doctorId.lastName}, appointment ${appointment.appointmentNumber} has been rescheduled to ${newAppointmentDate} at ${newAppointmentTime}. Join link: ${joinUrl}`;
+            await sendSMSNotification(appointment.doctorId.phoneNumber, {
+                message: doctorMsg,
+                type: "appointment"
+            });
+            console.log(`📱 Reschedule SMS sent to doctor: ${appointment.doctorId.phoneNumber}`);
+        }
     } catch (notificationError) {
         console.error('⚠ Reschedule notification failed:', notificationError);
     }
@@ -727,9 +920,7 @@ const getDoctorAvailability = asyncHandler(async (req, res) => {
         doctorId,
         appointmentDate: requestedDate,
         status: { $in: ['scheduled', 'confirmed'] }
-    }).select('appointmentTime');
-
-    const bookedSlots = existingAppointments.map(apt => apt.appointmentTime);
+    }).select('appointmentTime appointmentType');
 
     // Generate available time slots (30-minute intervals)
     const availableSlots = [];
@@ -750,18 +941,28 @@ const getDoctorAvailability = asyncHandler(async (req, res) => {
 
         const timeString = currentTime.toTimeString().slice(0, 5);
         
-        if (!bookedSlots.includes(timeString)) {
-            availableSlots.push({
-                time: timeString,
-                available: true
-            });
-        } else {
-            availableSlots.push({
-                time: timeString,
-                available: false,
-                booked: true
-            });
+        // Find existing appointments in this slot
+        const slotAppts = existingAppointments.filter(apt => apt.appointmentTime === timeString);
+        let isAvailable = true;
+        let isBooked = false;
+        let videoCount = 0;
+
+        if (slotAppts.length > 0) {
+            const hasNonVideo = slotAppts.some(apt => apt.appointmentType !== 'video');
+            videoCount = slotAppts.filter(apt => apt.appointmentType === 'video').length;
+
+            if (hasNonVideo || videoCount >= 10) {
+                isAvailable = false;
+                isBooked = true;
+            }
         }
+        
+        availableSlots.push({
+            time: timeString,
+            available: isAvailable,
+            booked: isBooked,
+            videoCount: videoCount
+        });
 
         currentTime.setMinutes(currentTime.getMinutes() + 30);
     }

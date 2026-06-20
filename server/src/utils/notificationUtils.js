@@ -34,9 +34,11 @@ export const sendEmailNotification = async (recipientEmail, options) => {
         // Generate email content based on template
         const emailContent = generateEmailContent(options.template, options.data);
 
+        const fromEmail = process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER || 'noreply@healthcare-system.com';
+
         // Send email
         const info = await transporter.sendMail({
-            from: `"Healthcare System" <${process.env.SMTP_FROM}>`,
+            from: `"Healthcare System" <${fromEmail}>`,
             to: recipientEmail,
             subject: options.subject,
             html: emailContent,
@@ -67,30 +69,75 @@ export const sendEmailNotification = async (recipientEmail, options) => {
  */
 export const sendSMSNotification = async (phoneNumber, options) => {
     try {
-        console.log(`📱 Sending SMS to: ${phoneNumber}`);
-        
-        // Initialize Twilio client
-        const client = twilio(
-            process.env.TWILIO_ACCOUNT_SID,
-            process.env.TWILIO_AUTH_TOKEN
-        );
+        // Strip any whitespace, hyphens, or parentheses to clean up
+        phoneNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
 
-        // Send SMS
+        // If it is a 10-digit phone number, assume India (+91)
+        if (/^\d{10}$/.test(phoneNumber)) {
+            phoneNumber = `+91${phoneNumber}`;
+        }
+
+        // Basic validation for E.164 format (starts with '+' and digits)
+        const e164Regex = /^\+\d{10,15}$/;
+        if (!e164Regex.test(phoneNumber)) {
+            console.warn(`⚠️ Phone number "${phoneNumber}" is not in E.164 format. Attempting to prepend '+'`);
+            // Attempt naive fix: prepend '+' if missing
+            if (!phoneNumber.startsWith('+')) {
+                phoneNumber = `+${phoneNumber}`;
+            }
+        }
+
+        console.log(`📱 Sending SMS to: ${phoneNumber}`);
+
+        // Ensure Twilio credentials are present
+        const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER } = process.env;
+        if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
+            throw new Error('Missing Twilio environment variables. Check .env file.');
+        }
+
+        // Prevent sending SMS to the same number as the Twilio sender (common in trial accounts)
+        if (phoneNumber === TWILIO_PHONE_NUMBER) {
+            console.warn('⚠️ Skipping SMS send: recipient number is identical to Twilio sender number.');
+            return {
+                success: false,
+                messageId: null,
+                status: 'skipped',
+                reason: 'Recipient equals sender number'
+            };
+        }
+
+        // Initialize Twilio client (reuse if already created)
+        if (!global.__twilioClient) {
+            global.__twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+        }
+        const client = global.__twilioClient;
+
+        // Send SMS via Twilio
         const message = await client.messages.create({
             body: options.message,
-            from: process.env.TWILIO_PHONE_NUMBER,
+            from: TWILIO_PHONE_NUMBER,
             to: phoneNumber
         });
 
-        console.log(`✅ SMS sent: ${message.sid}`);
-        
+        console.log(`✅ SMS sent: ${message.sid} (status: ${message.status})`);
         return {
             success: true,
             messageId: message.sid,
             status: message.status
         };
     } catch (error) {
-        console.error('❌ SMS sending failed:', error);
+        // Log detailed Twilio error information when available
+        if (error.code || error.status) {
+            console.error('❌ Twilio SMS error details:', {
+                code: error.code,
+                status: error.status,
+                message: error.message,
+                moreInfo: error.moreInfo || 'N/A'
+            });
+        } else {
+            console.error('❌ SMS sending failed:', error);
+        }
+        // Rethrow with more context for calling code
         throw new Error(`SMS sending failed: ${error.message}`);
     }
 };

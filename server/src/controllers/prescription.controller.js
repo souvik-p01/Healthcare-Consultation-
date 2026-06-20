@@ -26,6 +26,7 @@ import {
     sendPrescriptionReady,
     sendRefillReminder
 } from "../utils/emailUtils.js";
+import { sendSMSNotification } from "../utils/notificationUtils.js";
 
 /**
  * CREATE PRESCRIPTION
@@ -207,8 +208,18 @@ const createPrescription = asyncHandler(async (req, res) => {
             diagnosis: diagnosis,
             instructions: instructions
         });
-    } catch (emailError) {
-        console.error('⚠ Prescription email sending failed:', emailError);
+
+        // Send SMS to patient
+        if (patient.userId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+            const smsMsg = `Hello ${patient.userId.firstName}, Dr. ${req.user.lastName} has prescribed a new medication prescription (${prescriptionNumber}) for you. Check your patient portal for details.`;
+            await sendSMSNotification(patient.userId.phoneNumber, {
+                message: smsMsg,
+                type: "prescription"
+            });
+            console.log(`📱 Prescription SMS sent to patient: ${patient.userId.phoneNumber}`);
+        }
+    } catch (notificationError) {
+        console.error('⚠ Prescription notification sending failed:', notificationError);
     }
 
     console.log('✅ Prescription created successfully:', prescriptionNumber);
@@ -582,9 +593,19 @@ const updatePrescriptionStatus = asyncHandler(async (req, res) => {
                     filledDate: new Date().toDateString()
                 }
             );
+
+            // Send SMS to patient
+            if (prescription.patientId.userId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                const smsMsg = `Hello ${prescription.patientId.userId.firstName}, your prescription (${prescription.prescriptionNumber}) has been filled by ${pharmacyName || 'the pharmacist'} and is ready.`;
+                await sendSMSNotification(prescription.patientId.userId.phoneNumber, {
+                    message: smsMsg,
+                    type: "prescription"
+                });
+                console.log(`📱 Prescription filled SMS sent to patient: ${prescription.patientId.userId.phoneNumber}`);
+            }
         }
     } catch (notificationError) {
-        console.error('⚠ Notification sending failed:', notificationError);
+        console.error('⚠ Notification sending failed in updatePrescriptionStatus:', notificationError);
     }
 
     console.log('✅ Prescription status updated:', prescription.prescriptionNumber, '->', status);

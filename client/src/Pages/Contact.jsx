@@ -477,13 +477,13 @@ const ContactPage = () => {
         <div className="container mx-auto px-4 relative z-10">
           <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
 
-            <NavLink
+            {/* <NavLink
               to="/"
-              className="absolute top-4 right-4 flex items-center text-white hover:text-blue-200 transition-colors bg-white bg-opacity-20 px-3 py-1 rounded-full hover:bg-opacity-30 backdrop-blur-sm"
+              className="absolute top-0.5 left-4 flex items-center text-white hover:text-blue-200 transition-colors bg-white bg-opacity-20 px-5 py-3 rounded-full hover:bg-opacity-30 backdrop-blur-sm"
             >
               <Home className="w-4 h-4 mr-1" />
               <span className="text-sm font-medium">Back to Home</span>
-            </NavLink>
+            </NavLink> */}
           </div>
 
           <div className="text-center">
@@ -921,7 +921,7 @@ const ContactPage = () => {
           <div className="absolute -top-20 -right-20 w-40 h-40 bg-white bg-opacity-10 rounded-full animate-pulse"></div>
           <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-white bg-opacity-10 rounded-full"></div>
 
-          
+
           <h3 className="text-xl md:text-3xl font-bold mb-3 md:mb-4 relative z-10">Still Have Questions?</h3>
           <p className="text-sm md:text-lg mb-4 md:mb-6 text-white text-opacity-90 max-w-2xl mx-auto relative z-10 px-4">
             Our healthcare experts are available 24/7 to assist you with any concerns

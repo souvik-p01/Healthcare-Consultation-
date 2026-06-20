@@ -31,7 +31,8 @@ import {
   joinTelemedicineSession,
   getHealthTips,
   submitFeedback,
-  getPatientStatistics
+  getPatientStatistics,
+  getConsultationMessages
 } from "../controllers/patient.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 
@@ -136,6 +137,7 @@ router.post("/telemedicine/:sessionId/join", verifyJWT, joinTelemedicineSession)
 router.post("/telemedicine/:sessionId/cancel", verifyJWT, async (req, res) => {
   // Cancel session
 });
+router.get("/consultations/:consultationId/messages", verifyJWT, getConsultationMessages);
 
 // ==================== NOTIFICATIONS ====================
 router.get("/notifications", verifyJWT, getPatientNotifications);

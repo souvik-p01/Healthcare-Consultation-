@@ -123,7 +123,6 @@ const labTestSchema = new mongoose.Schema({
 });
 
 // Indexes for faster queries
-labTestSchema.index({ labCode: 1 });
 labTestSchema.index({ status: 1 });
 labTestSchema.index({ priority: 1 });
 labTestSchema.index({ 'patient.patientId': 1 });

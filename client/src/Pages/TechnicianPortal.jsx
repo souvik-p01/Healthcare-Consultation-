@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   BarChart3, 
   TestTube, 
@@ -37,10 +37,13 @@ import {
   UploadCloud,
   PlayCircle,
   PauseCircle,
-  StopCircle
+  StopCircle,
+  Phone,
+  Video,
+  Loader2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { 
+import api, { 
   technicianAPI, 
   testAPI, 
   equipmentAPI, 
@@ -49,6 +52,7 @@ import {
 } from '../Pages/services/api';
 import socketService from '../Pages/services/socket';
 import AiAssistance from './AIAssistantPage';
+import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 
 const TechnicianPortal = () => {
   const { user, logoutUser: authLogout } = useAppContext();
@@ -59,6 +63,15 @@ const TechnicianPortal = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [selectedTest, setSelectedTest] = useState(null);
   const [loading, setLoading] = useState(false);
+  
+  // Clinical Support Call States
+  const [supportCall, setSupportCall] = useState(null);
+  const [isSupportCallActive, setIsSupportCallActive] = useState(false);
+  const [supportZp, setSupportZp] = useState(null);
+  const [supportSearchQuery, setSupportSearchQuery] = useState('');
+  const [doctors, setDoctors] = useState([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const supportVideoContainerRef = useRef(null);
   
   // State for real data
   const [technician, setTechnician] = useState(null);
@@ -75,6 +88,7 @@ const TechnicianPortal = () => {
     { id: 'quality', label: 'Quality Control', icon: Shield },
     { id: 'maintenance', label: 'Maintenance', icon: Wrench },
     { id: 'ai-analysis', label: 'AI Analysis', icon: Brain },
+    { id: 'support', label: 'Clinical Support', icon: Phone },
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
@@ -1145,6 +1159,176 @@ const TechnicianPortal = () => {
     );
   };
 
+  const SupportContent = () => {
+    useEffect(() => {
+      const fetchDocs = async () => {
+        setLoadingDocs(true);
+        try {
+          const response = await api.get('/doctors');
+          setDoctors(response.data?.data?.doctors || []);
+        } catch (error) {
+          console.error("Error fetching doctors:", error);
+        } finally {
+          setLoadingDocs(false);
+        }
+      };
+      fetchDocs();
+    }, []);
+
+    const startSupportCall = async (doctor, type = 'video') => {
+      try {
+        const appID = Number(import.meta.env.VITE_ZEGO_APP_ID);
+        const serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
+
+        if (!appID || !serverSecret) {
+          alert('ZEGOCLOUD credentials not configured. Please check your .env file.');
+          return;
+        }
+
+        const roomID = `telemed_support_${user?._id || Date.now()}_${doctor._id || doctor.id}`;
+        const userID = `technician_${user?._id || Date.now()}`;
+        const userName = `Tech Support (${user?.firstName || 'Technician'})`;
+
+        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+          appID,
+          serverSecret,
+          roomID,
+          userID,
+          userName
+        );
+
+        const zp = ZegoUIKitPrebuilt.create(kitToken);
+        setSupportZp(zp);
+        setIsSupportCallActive(true);
+        setSupportCall({ roomID, doctor, type });
+
+        // Join room
+        setTimeout(() => {
+          if (supportVideoContainerRef.current) {
+            zp.joinRoom({
+              container: supportVideoContainerRef.current,
+              turnOnMicrophoneWhenJoining: true,
+              turnOnCameraWhenJoining: type === 'video',
+              showMyCameraToggleButton: type === 'video',
+              showMyMicrophoneToggleButton: true,
+              showAudioVideoSettingsButton: true,
+              maxUsers: 2,
+              layout: "Auto",
+              showLayoutButton: false,
+              showPreJoinView: false,
+              scenario: {
+                mode: ZegoUIKitPrebuilt.OneONoneCall,
+                config: { role: ZegoUIKitPrebuilt.Host }
+              },
+              onLeaveRoom: () => {
+                setIsSupportCallActive(false);
+                setSupportCall(null);
+                setSupportZp(null);
+              }
+            });
+          }
+        }, 100);
+
+      } catch (error) {
+        console.error("Support call error:", error);
+        alert("Failed to initiate call room.");
+      }
+    };
+
+    const endSupportCall = () => {
+      if (supportZp) {
+        supportZp.destroyRoom();
+      }
+      setIsSupportCallActive(false);
+      setSupportCall(null);
+      setSupportZp(null);
+    };
+
+    const filteredDoctors = doctors.filter(doc => 
+      `${doc.firstName || ''} ${doc.lastName || ''}`.toLowerCase().includes(supportSearchQuery.toLowerCase()) ||
+      (doc.specialization || '').toLowerCase().includes(supportSearchQuery.toLowerCase())
+    );
+
+    return (
+      <div className="bg-white rounded-lg shadow p-4 md:p-6 lg:p-8">
+        <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-2">Clinical Support Desk</h2>
+        <p className="text-gray-600 text-sm mb-6">Contact clinical practitioners directly for specimen questions, report clarifications, or diagnostic calibrations.</p>
+
+        {isSupportCallActive && (
+          <div className="mb-6 bg-gray-950 p-6 rounded-xl border border-gray-800">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="font-bold text-white text-base">Direct Clinical Link</h3>
+                <p className="text-gray-400 text-xs mt-0.5">Call with Dr. {supportCall?.doctor?.firstName} {supportCall?.doctor?.lastName}</p>
+              </div>
+              <button 
+                onClick={endSupportCall}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-colors"
+              >
+                Hang Up
+              </button>
+            </div>
+            <div 
+              ref={supportVideoContainerRef}
+              className="w-full h-96 bg-black rounded-lg overflow-hidden border border-gray-800"
+            />
+          </div>
+        )}
+
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Search doctors by name or specialty..."
+            value={supportSearchQuery}
+            onChange={(e) => setSupportSearchQuery(e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+          />
+        </div>
+
+        {loadingDocs ? (
+          <div className="text-center py-8 text-gray-500">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-purple-600" />
+            Searching clinical practitioners...
+          </div>
+        ) : filteredDoctors.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-sm">No doctors found.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredDoctors.map(doc => (
+              <div key={doc._id} className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:shadow-md transition-all">
+                <div className="flex gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                    {doc.firstName?.[0] || 'D'}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-800 text-sm">Dr. {doc.firstName} {doc.lastName}</h4>
+                    <p className="text-xs text-gray-500">{doc.specialization || 'Clinical Specialist'}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => startSupportCall(doc, 'phone')}
+                    className="flex-1 bg-white text-purple-600 border border-purple-300 py-2 rounded-lg text-xs font-semibold hover:bg-purple-50 transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    Audio Call
+                  </button>
+                  <button
+                    onClick={() => startSupportCall(doc, 'video')}
+                    className="flex-1 bg-purple-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    Video Call
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex overflow-hidden">
       {/* Sidebar Overlay */}
@@ -1343,11 +1527,13 @@ const TechnicianPortal = () => {
             {activeTab === 'tests' && <LabTestsContent />}
             {activeTab === 'equipment' && <EquipmentContent />}
             {activeTab === 'ai-analysis' && <AiAssistance role="technician" />}
+            {activeTab === 'support' && <SupportContent />}
             {activeTab === 'settings' && <SettingsContent />}
             {activeTab !== 'dashboard' && 
              activeTab !== 'tests' && 
              activeTab !== 'equipment' && 
              activeTab !== 'ai-analysis' &&
+             activeTab !== 'support' &&
              activeTab !== 'settings' && 
              <OtherTabContent />}
           </div>

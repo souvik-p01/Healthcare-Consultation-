@@ -169,4 +169,13 @@ export const monitoringAPI = {
   updateSettings: (data) => api.patch('/monitoring/settings', data),
 };
 
+// Appointment services
+export const appointmentAPI = {
+  schedule: (data) => api.post('/patients/appointments/schedule', data),
+  getPatientAppointments: (params) => api.get('/patients/appointments', { params }),
+  cancel: (id, reason) => api.post(`/patients/appointments/${id}/cancel`, { cancellationReason: reason }),
+  reschedule: (id, date, time) => api.post(`/patients/appointments/${id}/reschedule`, { newDate: date, newTime: time }),
+  getMessages: (consultationId) => api.get(`/patients/consultations/${consultationId}/messages`),
+};
+
 export default api;

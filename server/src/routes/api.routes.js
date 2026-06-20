@@ -11,6 +11,8 @@ import testRoutes from "./test.routes.js";
 import monitoringRoutes from "./monitoring.routes.js";
 import doctorRoutes from "./doctor.routes.js";
 import aiRoutes from "./ai.routes.js";
+import medicineRoutes from "./medicine.routes.js";
+import pharmacyOrderRoutes from "./pharmacyOrder.routes.js";
 
 const router = Router();
 
@@ -26,5 +28,7 @@ router.use("/tests", testRoutes);
 router.use("/monitoring", monitoringRoutes);
 router.use("/doctors", doctorRoutes);
 router.use("/ai", aiRoutes);
+router.use("/medicine", medicineRoutes);
+router.use("/pharmacy-orders", pharmacyOrderRoutes);
 
 export default router;

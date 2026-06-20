@@ -79,16 +79,23 @@ export const AppContextProvider = ({ children }) => {
             // Try to refresh the token using a clean axios call (no interceptors)
             const response = await axios.post(
               `${backendUrl}/api/v1/auth/refresh-token`,
-              {},
+              { refreshToken: localStorage.getItem('refreshToken') },
               { 
                 withCredentials: true,
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'x-refresh-token': localStorage.getItem('refreshToken')
+                }
               }
             );
 
             if (response.data?.success && response.data.data?.accessToken) {
               const newToken = response.data.data.accessToken;
+              const newRefreshToken = response.data.data.refreshToken;
               localStorage.setItem('accessToken', newToken);
+              if (newRefreshToken) {
+                localStorage.setItem('refreshToken', newRefreshToken);
+              }
               setToken(newToken);
               originalRequest.headers.Authorization = `Bearer ${newToken}`;
               return instance(originalRequest);
@@ -162,8 +169,11 @@ export const AppContextProvider = ({ children }) => {
     try {
       const response = await api.post('/auth/login', credentials);
       if (response.success && response.data) {
-        const { user: userData, accessToken } = response.data;
+        const { user: userData, accessToken, refreshToken: newRefreshToken } = response.data;
         localStorage.setItem('accessToken', accessToken);
+        if (newRefreshToken) {
+          localStorage.setItem('refreshToken', newRefreshToken);
+        }
         setToken(accessToken);
         setUser(userData);
         setUserRole(userData.role?.toLowerCase() || 'patient');
@@ -238,8 +248,14 @@ export const AppContextProvider = ({ children }) => {
   const refreshToken = React.useCallback(async () => {
     try {
       // Use clean axios instance for refresh to avoid loops
-      const response = await axios.post(`${backendUrl}/api/v1/auth/refresh-token`, {}, {
-        withCredentials: true
+      const response = await axios.post(`${backendUrl}/api/v1/auth/refresh-token`, {
+        refreshToken: localStorage.getItem('refreshToken')
+      }, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-refresh-token': localStorage.getItem('refreshToken')
+        }
       });
       
       if (response.data?.success && response.data.data) {

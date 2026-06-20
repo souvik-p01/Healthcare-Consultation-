@@ -24,7 +24,7 @@ import nodemailer from 'nodemailer';
  */
 const EMAIL_CONFIG = {
     SERVICE: process.env.EMAIL_SERVICE || 'gmail',
-    FROM_EMAIL: process.env.EMAIL_FROM || 'noreply@healthcare-system.com',
+    FROM_EMAIL: process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER || 'noreply@healthcare-system.com',
     FROM_NAME: process.env.EMAIL_FROM_NAME || 'Healthcare Consultation System',
     
     // HIPAA compliance settings
@@ -456,6 +456,148 @@ export const sendAppointmentConfirmation = async (patientEmail, appointmentData,
     } catch (error) {
         console.error('❌ Failed to send appointment confirmation:', error);
         throw new Error(`Appointment confirmation email failed: ${error.message}`);
+    }
+};
+
+/**
+ * Send appointment cancellation email
+ */
+export const sendAppointmentCancellation = async (patientEmail, appointmentData, options = {}) => {
+    try {
+        const emailId = `CANCEL-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const content = `
+            <h2>Hello ${appointmentData.patientName},</h2>
+            <p>Your appointment has been cancelled. Please find the details below:</p>
+            
+            <div class="info-box" style="border-left: 4px solid #dc3545; background-color: #fdf3f4;">
+                <h3>❌ Cancelled Appointment Details</h3>
+                <p><strong>Appointment ID/Number:</strong> ${appointmentData.appointmentNumber || appointmentData.appointmentId || 'N/A'}</p>
+                <p><strong>Date:</strong> ${appointmentData.appointmentDate}</p>
+                <p><strong>Time:</strong> ${appointmentData.appointmentTime}</p>
+                <p><strong>Doctor:</strong> Dr. ${appointmentData.doctorName}</p>
+                ${appointmentData.cancellationReason ? `<p><strong>Reason for Cancellation:</strong> ${appointmentData.cancellationReason}</p>` : ''}
+            </div>
+            
+            <div class="warning-box">
+                <h4>🔄 Rescheduling:</h4>
+                <p>If you would like to reschedule this appointment, please visit the healthcare portal or contact support.</p>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
+            to: patientEmail,
+            subject: `Appointment Cancelled - ${appointmentData.appointmentNumber || 'Notification'}`,
+            html: generateEmailTemplate(content, 'Appointment Cancelled', 'appointment'),
+            priority: 'high',
+            headers: {
+                'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.APPOINTMENT,
+                'X-Email-ID': emailId,
+                'X-Patient-ID': appointmentData.patientId || 'unknown',
+                'X-Appointment-ID': appointmentData.appointmentId || 'unknown'
+            }
+        };
+        
+        const result = await sendEmail(mailOptions, {
+            emailId,
+            category: EMAIL_CONFIG.CATEGORIES.APPOINTMENT,
+            recipientType: 'patient',
+            template: 'appointment-cancellation',
+            sentBy: options.sentBy,
+            recipient: patientEmail
+        });
+        
+        console.log('✅ Appointment cancellation email sent:', {
+            emailId,
+            patientEmail: patientEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
+            appointmentId: appointmentData.appointmentId
+        });
+        
+        return {
+            success: true,
+            emailId,
+            messageId: result.messageId,
+            category: EMAIL_CONFIG.CATEGORIES.APPOINTMENT
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to send appointment cancellation email:', error);
+        throw new Error(`Appointment cancellation email failed: ${error.message}`);
+    }
+};
+
+/**
+ * Send appointment reschedule email
+ */
+export const sendAppointmentReschedule = async (patientEmail, appointmentData, options = {}) => {
+    try {
+        const emailId = `RESCHED-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const content = `
+            <h2>Hello ${appointmentData.patientName},</h2>
+            <p>Your appointment has been successfully rescheduled. Please find the updated details below:</p>
+            
+            <div class="info-box" style="border-left: 4px solid #ffc107; background-color: #fefdf3;">
+                <h3>📅 Updated Appointment Details</h3>
+                <p><strong>Appointment ID/Number:</strong> ${appointmentData.appointmentNumber || appointmentData.appointmentId || 'N/A'}</p>
+                <p><strong>New Date:</strong> ${appointmentData.newAppointmentDate || appointmentData.appointmentDate}</p>
+                <p><strong>New Time:</strong> ${appointmentData.newAppointmentTime || appointmentData.appointmentTime}</p>
+                <p><strong>Doctor:</strong> Dr. ${appointmentData.doctorName}</p>
+                <p><strong>Previous Date:</strong> ${appointmentData.oldAppointmentDate || 'N/A'}</p>
+                <p><strong>Previous Time:</strong> ${appointmentData.oldAppointmentTime || 'N/A'}</p>
+                ${appointmentData.reason ? `<p><strong>Reason for Rescheduling:</strong> ${appointmentData.reason}</p>` : ''}
+            </div>
+            
+            <div class="warning-box">
+                <h4>📋 Please Remember:</h4>
+                <ul>
+                    <li>Please arrive 15 minutes before your new appointment time</li>
+                    <li>Bring a valid ID and insurance card</li>
+                    <li>If you need to reschedule again, please contact us at least 24 hours in advance</li>
+                </ul>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: `${EMAIL_CONFIG.FROM_NAME} <${EMAIL_CONFIG.FROM_EMAIL}>`,
+            to: patientEmail,
+            subject: `Appointment Rescheduled - ${appointmentData.appointmentNumber || 'Notification'}`,
+            html: generateEmailTemplate(content, 'Appointment Rescheduled', 'appointment'),
+            priority: 'high',
+            headers: {
+                'X-Healthcare-Category': EMAIL_CONFIG.CATEGORIES.APPOINTMENT,
+                'X-Email-ID': emailId,
+                'X-Patient-ID': appointmentData.patientId || 'unknown',
+                'X-Appointment-ID': appointmentData.appointmentId || 'unknown'
+            }
+        };
+        
+        const result = await sendEmail(mailOptions, {
+            emailId,
+            category: EMAIL_CONFIG.CATEGORIES.APPOINTMENT,
+            recipientType: 'patient',
+            template: 'appointment-reschedule',
+            sentBy: options.sentBy,
+            recipient: patientEmail
+        });
+        
+        console.log('✅ Appointment reschedule email sent:', {
+            emailId,
+            patientEmail: patientEmail.replace(/(.{3}).*(@.*)/, '$1***$2'),
+            appointmentId: appointmentData.appointmentId
+        });
+        
+        return {
+            success: true,
+            emailId,
+            messageId: result.messageId,
+            category: EMAIL_CONFIG.CATEGORIES.APPOINTMENT
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to send appointment reschedule email:', error);
+        throw new Error(`Appointment reschedule email failed: ${error.message}`);
     }
 };
 

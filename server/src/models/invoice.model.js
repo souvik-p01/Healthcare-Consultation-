@@ -242,8 +242,6 @@ const invoiceSchema = new mongoose.Schema({
 invoiceSchema.index({ patientId: 1, createdAt: -1 });
 invoiceSchema.index({ doctorId: 1, createdAt: -1 });
 invoiceSchema.index({ paymentStatus: 1, dueDate: 1 });
-invoiceSchema.index({ invoiceNumber: 1 }, { unique: true });
-invoiceSchema.index({ 'paymentHistory.transactionId': 1 }, { sparse: true });
 
 // Virtual for days overdue
 invoiceSchema.virtual('daysOverdue').get(function() {

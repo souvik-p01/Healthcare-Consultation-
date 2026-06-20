@@ -22,13 +22,6 @@ import {
   X,
   Loader
 } from 'lucide-react'
-import { 
-  healthMetricsService, 
-  deviceService, 
-  medicationService, 
-  reminderService, 
-  healthAlertService, 
-  healthGoalService 
 import {
   healthMetricsService,
   deviceService,
@@ -48,121 +41,6 @@ const MonitoringPage = () => {
   const [trends, setTrends] = useState({ labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], heartRate: [], bloodPressure: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-
-  // Modal states
-  const [showAddDevice, setShowAddDevice] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [showWeeklyReport, setShowWeeklyReport] = useState(false)
-  const [showAlerts, setShowAlerts] = useState(false)
-  const [showGoals, setShowGoals] = useState(false)
-  const [showAddReminder, setShowAddReminder] = useState(false)
-
-  // Form states
-  const [deviceForm, setDeviceForm] = useState({ name: '', type: 'wearable', manufacturer: '' })
-  const [reminderForm, setReminderForm] = useState({ time: '', action: '', reminderType: 'custom', priority: 'medium' })
-  const [alerts, setAlerts] = useState([])
-  const [goals, setGoals] = useState([])
-
-  
-  // Fetch data on mount
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const fetchData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      // Fetch all data in parallel
-      const [metricsRes, devicesRes, medicationsRes, remindersRes, alertsRes, goalsRes] = await Promise.allSettled([
-        healthMetricsService.getLatestMetrics(),
-        deviceService.getDevices(),
-        medicationService.getMedications(),
-        reminderService.getReminders(),
-        healthAlertService.getAlerts(),
-        healthGoalService.getGoals()
-      ])
-
-      // Handle metrics
-      if (metricsRes.status === 'fulfilled' && metricsRes.value.data.success) {
-        const metricsData = metricsRes.value.data.data
-        setVitals(formatVitals(metricsData))
-      } else {
-        setVitals(getDefaultVitals())
-      }
-
-      // Handle devices
-      if (devicesRes.status === 'fulfilled' && devicesRes.value.data.success) {
-        setDevices(devicesRes.value.data.data)
-      } else {
-        setDevices([])
-      }
-
-      // Handle medications
-      if (medicationsRes.status === 'fulfilled' && medicationsRes.value.data.success) {
-        setMedications(medicationsRes.value.data.data)
-      } else {
-        setMedications([])
-      }
-
-      // Handle reminders
-      if (remindersRes.status === 'fulfilled' && remindersRes.value.data.success) {
-        setReminders(remindersRes.value.data.data)
-      } else {
-        setReminders([])
-      }
-
-      // Handle alerts
-      if (alertsRes.status === 'fulfilled' && alertsRes.value.data.success) {
-        setAlerts(alertsRes.value.data.data)
-      } else {
-        setAlerts([])
-      }
-
-      // Handle goals
-      if (goalsRes.status === 'fulfilled' && goalsRes.value.data.success) {
-        setGoals(goalsRes.value.data.data)
-      } else {
-        setGoals([])
-      }
-
-      // Fetch trends
-      await fetchTrends()
-    } catch (err) {
-      console.error('Error fetching data:', err)
-      setError('Failed to load health data')
-      setVitals(getDefaultVitals())
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchTrends = async () => {
-    try {
-      const heartRes = await healthMetricsService.getMetricsTrend('heart_rate', 7)
-      const bpRes = await healthMetricsService.getMetricsTrend('blood_pressure', 7)
-      
-      if (heartRes.data.success && bpRes.data.success) {
-        const heartTrend = heartRes.data.data.map(m => m.value || 0)
-        const bpTrend = bpRes.data.data.map(m => m.systolic || 0)
-        setTrends({
-          labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-          heartRate: heartTrend.length > 0 ? heartTrend : [72, 75, 70, 68, 74, 72, 71],
-          bloodPressure: bpTrend.length > 0 ? bpTrend : [120, 118, 122, 119, 121, 120, 118]
-        })
-      }
-    } catch (err) {
-      console.error('Error fetching trends:', err)
-    }
-  }
-
-  const formatVitals = (metricsData) => {
-    return {
-      heart: metricsData.heart_rate || getDefaultVitals().heart,
-      bp: metricsData.blood_pressure || getDefaultVitals().bp,
-      temp: metricsData.temperature || getDefaultVitals().temp,
-      oxygen: metricsData.blood_oxygen || getDefaultVitals().oxygen
 
   // Modal states
   const [showAddDevice, setShowAddDevice] = useState(false)
@@ -203,7 +81,7 @@ const MonitoringPage = () => {
       ])
 
       // Handle metrics
-      if (metricsRes.status === 'fulfilled' && metricsRes.value.data.success) {
+      if (metricsRes.status === 'fulfilled' && metricsRes.value.data?.success) {
         const metricsData = metricsRes.value.data.data
         setVitals(formatVitals(metricsData))
       } else {
@@ -211,42 +89,42 @@ const MonitoringPage = () => {
       }
 
       // Handle devices
-      if (devicesRes.status === 'fulfilled' && devicesRes.value.data.success) {
+      if (devicesRes.status === 'fulfilled' && devicesRes.value.data?.success) {
         setDevices(devicesRes.value.data.data)
       } else {
         setDevices([])
       }
 
       // Handle medications
-      if (medicationsRes.status === 'fulfilled' && medicationsRes.value.data.success) {
+      if (medicationsRes.status === 'fulfilled' && medicationsRes.value.data?.success) {
         setMedications(medicationsRes.value.data.data)
       } else {
         setMedications([])
       }
 
       // Handle reminders
-      if (remindersRes.status === 'fulfilled' && remindersRes.value.data.success) {
+      if (remindersRes.status === 'fulfilled' && remindersRes.value.data?.success) {
         setReminders(remindersRes.value.data.data)
       } else {
         setReminders([])
       }
 
       // Handle alerts
-      if (alertsRes.status === 'fulfilled' && alertsRes.value.data.success) {
+      if (alertsRes.status === 'fulfilled' && alertsRes.value.data?.success) {
         setAlerts(alertsRes.value.data.data)
       } else {
         setAlerts([])
       }
 
       // Handle goals
-      if (goalsRes.status === 'fulfilled' && goalsRes.value.data.success) {
+      if (goalsRes.status === 'fulfilled' && goalsRes.value.data?.success) {
         setGoals(goalsRes.value.data.data)
       } else {
         setGoals([])
       }
 
       // Handle settings
-      if (settingsRes.status === 'fulfilled' && settingsRes.value.data.success) {
+      if (settingsRes.status === 'fulfilled' && settingsRes.value.data?.success) {
         setSettingsForm(settingsRes.value.data.data)
       }
 
@@ -266,7 +144,7 @@ const MonitoringPage = () => {
       const heartRes = await healthMetricsService.getMetricsTrend('heart_rate', 7)
       const bpRes = await healthMetricsService.getMetricsTrend('blood_pressure', 7)
       
-      if (heartRes.data.success && bpRes.data.success) {
+      if (heartRes.data?.success && bpRes.data?.success) {
         const heartTrend = heartRes.data.data.map(m => m.value || 0)
         const bpTrend = bpRes.data.data.map(m => m.systolic || 0)
         setTrends({
@@ -375,37 +253,7 @@ const MonitoringPage = () => {
     e.preventDefault()
     try {
       const res = await deviceService.addDevice(deviceForm)
-      if (res.data.success) {
-        setDevices([...devices, res.data.data])
-        setDeviceForm({ name: '', type: 'wearable', manufacturer: '' })
-        setShowAddDevice(false)
-      }
-    } catch (err) {
-      console.error('Error adding device:', err)
-    }
-  }
-
-  const handleAddReminder = async (e) => {
-    e.preventDefault()
-    try {
-      const res = await reminderService.addReminder(reminderForm)
-      if (res.data.success) {
-        setReminders([...reminders, res.data.data])
-        setReminderForm({ time: '', action: '', reminderType: 'custom', priority: 'medium' })
-        setShowAddReminder(false)
-      }
-    } catch (err) {
-      console.error('Error adding reminder:', err)
-    }
-  }
-
-  }
-
-  const handleAddDevice = async (e) => {
-    e.preventDefault()
-    try {
-      const res = await deviceService.addDevice(deviceForm)
-      if (res.data.success) {
+      if (res.data?.success) {
         setDevices([res.data.data, ...devices])
         setDeviceForm({ name: '', type: 'wearable', manufacturer: '' })
         setShowAddDevice(false)
@@ -419,7 +267,7 @@ const MonitoringPage = () => {
     e.preventDefault()
     try {
       const res = await reminderService.addReminder(reminderForm)
-      if (res.data.success) {
+      if (res.data?.success) {
         setReminders([...reminders, res.data.data])
         setReminderForm({ time: '', action: '', reminderType: 'custom', priority: 'medium' })
         setShowAddReminder(false)
@@ -432,7 +280,7 @@ const MonitoringPage = () => {
   const handleDeleteDevice = async (deviceId) => {
     try {
       const res = await deviceService.deleteDevice(deviceId)
-      if (res.data.success) {
+      if (res.data?.success) {
         setDevices(devices.filter(d => d._id !== deviceId))
       }
     } catch (err) {
@@ -443,7 +291,7 @@ const MonitoringPage = () => {
   const toggleAlertEnabled = async (alertId, currentEnabled) => {
     try {
       const res = await healthAlertService.updateAlert(alertId, { enabled: !currentEnabled })
-      if (res.data.success) {
+      if (res.data?.success) {
         setAlerts(prev => prev.map(a => a._id === alertId ? { ...a, enabled: !currentEnabled } : a))
       }
     } catch (err) {
@@ -455,7 +303,7 @@ const MonitoringPage = () => {
     e.preventDefault()
     try {
       const res = await healthGoalService.addGoal(goalForm)
-      if (res.data.success) {
+      if (res.data?.success) {
         setGoals([res.data.data, ...goals])
         setGoalForm({ title: '', targetValue: '', currentValue: '0', unit: '' })
       }
@@ -468,7 +316,7 @@ const MonitoringPage = () => {
     e.preventDefault()
     try {
       const res = await healthSettingsService.updateSettings(settingsForm)
-      if (res.data.success) {
+      if (res.data?.success) {
         setSettingsForm(res.data.data)
         setShowSettings(false)
       }
@@ -538,14 +386,12 @@ const MonitoringPage = () => {
             </div>
            
             <div className="flex items-center gap-4">
-              <button 
               <button
                 onClick={() => setShowAddDevice(true)}
                 className="flex items-center gap-2 bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700">
                 <Plus className="w-5 h-5" />
                 Add Device
               </button>
-              <button 
               <button
                 onClick={() => setShowSettings(true)}
                 className="flex items-center gap-2 border border-orange-600 text-orange-600 px-6 py-3 rounded-lg hover:bg-orange-50">
@@ -697,7 +543,6 @@ const MonitoringPage = () => {
                         }`}>
                           {device.connected ? 'Connected' : 'Disconnected'}
                         </span>
-                        <button 
                         <button
                           onClick={() => handleDeleteDevice(device._id)}
                           className="text-gray-400 hover:text-red-600">
@@ -724,7 +569,6 @@ const MonitoringPage = () => {
                   <span className="text-sm text-gray-500">{new Date().toLocaleDateString()}</span>
                 </div>
                 <div className="space-y-4">
-                  {medications.map((med) => (
                   {medications.length > 0 ? medications.map((med) => (
                     <div
                       key={med._id}
@@ -742,7 +586,6 @@ const MonitoringPage = () => {
                       </div>
                       <button
                         onClick={() => toggleMedication(med._id)}
-                        className={`w-12 h-6 rounded-full transition-colors ${
                         className={`w-12 h-6 rounded-full transition-colors relative flex items-center ${
                           med.taken
                             ? 'bg-green-500'
@@ -787,7 +630,6 @@ const MonitoringPage = () => {
                       </div>
                       <button
                         onClick={() => toggleReminder(reminder._id)}
-                        className={`w-12 h-6 rounded-full transition-colors ${
                         className={`w-12 h-6 rounded-full transition-colors relative flex items-center ${
                           reminder.active
                             ? 'bg-orange-500'
@@ -804,7 +646,6 @@ const MonitoringPage = () => {
                   )}
                 </div>
 
-                <button 
                 <button
                   onClick={() => setShowAddReminder(true)}
                   className="w-full mt-6 flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 text-gray-600 py-3 rounded-lg hover:bg-gray-50">
@@ -844,7 +685,6 @@ const MonitoringPage = () => {
               </div>
               <h3 className="font-bold text-gray-800 mb-2">{feature.title}</h3>
               <p className="text-sm text-gray-600 mb-4">{feature.desc}</p>
-              <button 
               <button
                 onClick={() => {
                   if (idx === 0) setShowWeeklyReport(true);
@@ -1002,29 +842,20 @@ const MonitoringPage = () => {
             </div>
             <div className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
-                <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg text-left">
                   <h4 className="font-medium text-gray-800 mb-2">Average Heart Rate</h4>
-                  <p className="text-2xl font-bold text-blue-600">72 bpm</p>
                   <p className="text-2xl font-bold text-blue-600">{stats.avgHeartRate} bpm</p>
                   <p className="text-sm text-gray-600">Normal range: 60-100 bpm</p>
                 </div>
-                <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
+                <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg text-left">
                   <h4 className="font-medium text-gray-800 mb-2">Average Blood Pressure</h4>
-                  <p className="text-2xl font-bold text-green-600">120/80 mmHg</p>
                   <p className="text-2xl font-bold text-green-600">{stats.avgBP.systolic}/{stats.avgBP.diastolic} mmHg</p>
                   <p className="text-sm text-gray-600">Healthy range</p>
                 </div>
               </div>
-              <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="p-4 bg-gray-50 rounded-lg text-left">
                 <h4 className="font-medium text-gray-800 mb-3">Week Summary</h4>
                 <ul className="space-y-2 text-sm text-gray-600">
-                  <li>✓ Medications taken: 28/28 (100%)</li>
-                  <li>✓ Health reminders: 21/21 (100%)</li>
-                  <li>✓ Avg. sleep: 7.5 hours</li>
-                  <li>✓ Steps: 45,230 (Average: 6,460/day)</li>
-                </ul>
-              </div>
-              <button onClick={() => setShowWeeklyReport(false)} className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">
                   <li>✓ Medications taken: {stats.medsCount.taken}/{stats.medsCount.total} ({stats.medsCount.percent}%)</li>
                   <li>✓ Health reminders: {stats.remindersCount.active}/{stats.remindersCount.total} active ({stats.remindersCount.percent}% active)</li>
                   <li>✓ Connected devices: {devices.filter(d => d.connected).length} active</li>
@@ -1049,25 +880,12 @@ const MonitoringPage = () => {
               </button>
             </div>
             <div className="space-y-4">
-              {[
-                { type: 'High Blood Pressure', threshold: '> 140/90 mmHg', enabled: true },
-                { type: 'Low Blood Pressure', threshold: '< 90/60 mmHg', enabled: false },
-                { type: 'High Heart Rate', threshold: '> 100 bpm', enabled: true },
-                { type: 'Low Oxygen', threshold: '< 95%', enabled: true }
-              ].map((alert, idx) => (
-                <div key={idx} className="p-4 border rounded-lg flex items-center justify-between">
               {alerts.length > 0 ? alerts.map((alert) => (
-                <div key={alert._id} className="p-4 border rounded-lg flex items-center justify-between">
+                <div key={alert._id} className="p-4 border rounded-lg flex items-center justify-between text-left">
                   <div>
                     <h4 className="font-medium text-gray-800">{alert.type}</h4>
                     <p className="text-sm text-gray-600">Threshold: {alert.threshold}</p>
                   </div>
-                  <button className={`w-12 h-6 rounded-full transition-colors ${alert.enabled ? 'bg-orange-500' : 'bg-gray-300'}`}>
-                    <div className={`w-4 h-4 rounded-full bg-white transform transition-transform ${alert.enabled ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                  </button>
-                </div>
-              ))}
-              <button onClick={() => setShowAlerts(false)} className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">
                   <button
                     onClick={() => toggleAlertEnabled(alert._id, alert.enabled)}
                     className={`w-12 h-6 rounded-full transition-colors relative flex items-center ${alert.enabled ? 'bg-orange-500' : 'bg-gray-300'}`}
@@ -1096,27 +914,7 @@ const MonitoringPage = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="space-y-4">
-              {goals.length > 0 ? goals.map((goal) => (
-                <div key={goal._id} className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-medium text-gray-800">{goal.title}</h4>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      goal.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                    }`}>
-                      {goal.status}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                    <div className="bg-orange-600 h-2 rounded-full" style={{width: `${goal.progress}%`}}></div>
-                  </div>
-                  <p className="text-sm text-gray-600">{goal.progress}% complete</p>
-                </div>
-              )) : (
-                <p className="text-gray-600">No goals set yet. Create one to get started!</p>
-              )}
-              <button onClick={() => setShowGoals(false)} className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">
-            <div className="space-y-6">
+            <div className="space-y-6 text-left">
               <div className="space-y-4">
                 {goals.length > 0 ? goals.map((goal) => (
                   <div key={goal._id} className="p-4 border rounded-lg">

@@ -250,11 +250,20 @@ export const getDoctorAppointments = asyncHandler(async (req, res) => {
         const patientName = apt.patientId?.user 
             ? `${apt.patientId.user.firstName} ${apt.patientId.user.lastName}` 
             : apt.patientId?.name || 'Unknown Patient';
+        
+        let typeStr = 'In-Person';
+        if (apt.appointmentType === 'video') typeStr = 'Video Consultation';
+        else if (apt.appointmentType === 'phone') typeStr = 'Phone Call';
+        else if (apt.appointmentType === 'chat') typeStr = 'Online Chat';
+
         return {
             id: apt._id,
             name: patientName,
             time: apt.appointmentTime || '10:00 AM',
-            type: apt.appointmentType === 'video' ? 'Video Consultation' : 'In-Person',
+            date: apt.appointmentDate,
+            type: typeStr,
+            appointmentType: apt.appointmentType || 'in-person',
+            paymentStatus: apt.paymentStatus || 'pending',
             condition: apt.chiefComplaint || apt.symptoms || 'General Checkup',
             status: apt.status === 'scheduled' ? 'pending' : apt.status,
             age: apt.patientId?.user?.dateOfBirth 

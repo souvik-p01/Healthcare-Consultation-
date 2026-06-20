@@ -219,7 +219,7 @@ const App = () => {
           <Route 
             path="/services/telemedicine" 
             element={
-              <ProtectedRoute allowedRoles={["patient", "doctor", "provider", "admin"]}>
+              <ProtectedRoute allowedRoles={["patient", "doctor", "provider", "technician", "admin"]}>
                 <Telemedicine />
               </ProtectedRoute>
             } 

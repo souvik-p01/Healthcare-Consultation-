@@ -384,7 +384,7 @@ const UserRolesSection = () => {
                 </div>
               </div>
               <button
-                onClick={() => navigate('/profile')}
+                onClick={() => navigate('/dashboard')}
                 className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-2.5 bg-white text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-all duration-300 border-2 border-blue-200 hover:border-blue-300 shadow-sm hover:shadow text-sm sm:text-base"
               >
                 View Profile

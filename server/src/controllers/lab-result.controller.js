@@ -27,6 +27,7 @@ import {
     sendCriticalResultAlert,
     sendLabResultToDoctor
 } from "../utils/emailUtils.js";
+import { sendSMSNotification } from "../utils/notificationUtils.js";
 
 /**
  * CREATE LAB RESULT
@@ -230,6 +231,16 @@ const createLabResult = asyncHandler(async (req, res) => {
                 isCritical: hasCriticalValues
             });
 
+            // Send SMS to patient
+            if (patient.userId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                const smsMsg = `Hello ${patient.userId.firstName}, your lab test result for ${testName} (${labResultNumber}) is ready. Log in to your portal to view it.`;
+                await sendSMSNotification(patient.userId.phoneNumber, {
+                    message: smsMsg,
+                    type: "lab-result"
+                });
+                console.log(`📱 Lab result ready SMS sent to patient: ${patient.userId.phoneNumber}`);
+            }
+
             // Notify ordering doctor if critical results
             if (hasCriticalValues && orderedBy) {
                 const doctor = await User.findById(orderedBy);
@@ -241,11 +252,21 @@ const createLabResult = asyncHandler(async (req, res) => {
                         labResultNumber: labResultNumber,
                         criticalValues: analyzedResults.filter(r => r.isCritical).map(r => r.testItem)
                     });
+
+                    // Send SMS to doctor if critical
+                    if (doctor.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                        const docSMSMsg = `CRITICAL ALERT: Lab test result ${labResultNumber} (${testName}) for patient ${patient.userId.firstName} ${patient.userId.lastName} contains critical values. Please review immediately.`;
+                        await sendSMSNotification(doctor.phoneNumber, {
+                            message: docSMSMsg,
+                            type: "lab-result"
+                        });
+                        console.log(`📱 Critical lab result SMS sent to doctor: ${doctor.phoneNumber}`);
+                    }
                 }
             }
         }
-    } catch (emailError) {
-        console.error('⚠ Lab result email sending failed:', emailError);
+    } catch (notificationError) {
+        console.error('⚠ Lab result notification failed:', notificationError);
     }
 
     console.log('✅ Lab result created successfully:', labResultNumber);
@@ -535,7 +556,7 @@ const updateLabResultStatus = asyncHandler(async (req, res) => {
         })
         .populate({
             path: 'orderedBy',
-            select: 'firstName lastName email'
+            select: 'firstName lastName email phoneNumber'
         });
 
     if (!labResult) {
@@ -600,12 +621,12 @@ const updateLabResultStatus = asyncHandler(async (req, res) => {
         path: 'patientId',
         populate: {
             path: 'userId',
-            select: 'firstName lastName email'
+            select: 'firstName lastName email phoneNumber'
         }
     })
     .populate({
         path: 'orderedBy',
-        select: 'firstName lastName specialization'
+        select: 'firstName lastName specialization email phoneNumber'
     })
     .populate({
         path: 'verifiedBy',
@@ -616,31 +637,51 @@ const updateLabResultStatus = asyncHandler(async (req, res) => {
     try {
         if (status === 'completed' || status === 'verified') {
             await sendLabResultReady(
-                labResult.patientId.userId.email,
+                updatedLabResult.patientId.userId.email,
                 {
-                    patientName: `${labResult.patientId.userId.firstName} ${labResult.patientId.userId.lastName}`,
-                    testName: labResult.testName,
-                    labResultNumber: labResult.labResultNumber,
+                    patientName: `${updatedLabResult.patientId.userId.firstName} ${updatedLabResult.patientId.userId.lastName}`,
+                    testName: updatedLabResult.testName,
+                    labResultNumber: updatedLabResult.labResultNumber,
                     reportedDate: new Date().toDateString()
                 }
             );
 
-            if (labResult.orderedBy) {
+            // Send SMS to patient
+            if (updatedLabResult.patientId.userId.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                const smsMsg = `Hello ${updatedLabResult.patientId.userId.firstName}, your lab test result for ${updatedLabResult.testName} (${updatedLabResult.labResultNumber}) is ready. Log in to your portal to view it.`;
+                await sendSMSNotification(updatedLabResult.patientId.userId.phoneNumber, {
+                    message: smsMsg,
+                    type: "lab-result"
+                });
+                console.log(`📱 Lab result ready SMS sent to patient: ${updatedLabResult.patientId.userId.phoneNumber}`);
+            }
+
+            if (updatedLabResult.orderedBy) {
                 await sendLabResultToDoctor(
-                    labResult.orderedBy.email,
+                    updatedLabResult.orderedBy.email,
                     {
-                        doctorName: `${labResult.orderedBy.firstName} ${labResult.orderedBy.lastName}`,
-                        patientName: `${labResult.patientId.userId.firstName} ${labResult.patientId.userId.lastName}`,
-                        testName: labResult.testName,
-                        labResultNumber: labResult.labResultNumber,
+                        doctorName: `${updatedLabResult.orderedBy.firstName} ${updatedLabResult.orderedBy.lastName}`,
+                        patientName: `${updatedLabResult.patientId.userId.firstName} ${updatedLabResult.patientId.userId.lastName}`,
+                        testName: updatedLabResult.testName,
+                        labResultNumber: updatedLabResult.labResultNumber,
                         hasAbnormalValues: updatedLabResult.hasAbnormalValues,
                         isCritical: updatedLabResult.isCritical
                     }
                 );
+
+                // Send SMS to doctor if critical
+                if (updatedLabResult.isCritical && updatedLabResult.orderedBy.phoneNumber && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+                    const docSMSMsg = `CRITICAL ALERT: Lab test result ${updatedLabResult.labResultNumber} (${updatedLabResult.testName}) for patient ${updatedLabResult.patientId.userId.firstName} ${updatedLabResult.patientId.userId.lastName} contains critical values. Please review immediately.`;
+                    await sendSMSNotification(updatedLabResult.orderedBy.phoneNumber, {
+                        message: docSMSMsg,
+                        type: "lab-result"
+                    });
+                    console.log(`📱 Critical lab result SMS sent to doctor: ${updatedLabResult.orderedBy.phoneNumber}`);
+                }
             }
         }
     } catch (notificationError) {
-        console.error('⚠ Lab result notification failed:', notificationError);
+        console.error('⚠ Lab result notification failed in updateLabResultStatus:', notificationError);
     }
 
     console.log('✅ Lab result status updated:', labResult.labResultNumber, '->', status);

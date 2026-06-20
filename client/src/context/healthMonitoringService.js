@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8001/api/v1';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1';
 
 const api = axios.create({
@@ -13,7 +12,6 @@ const api = axios.create({
 // Add auth token to requests
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
     const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -43,7 +41,6 @@ export const healthMetricsService = {
   addMetric: (data) => api.post('/metrics', data),
   getMetrics: (params) => api.get('/metrics', { params }),
   getLatestMetrics: () => api.get('/metrics/latest'),
-  getMetricsTrend: (metricType, days = 7) => 
   getMetricsTrend: (metricType, days = 7) =>
     api.get('/metrics/trend', { params: { metricType, days } })
 };
@@ -62,7 +59,6 @@ export const deviceService = {
 export const medicationService = {
   addMedication: (data) => api.post('/medications', data),
   getMedications: () => api.get('/medications'),
-  toggleMedicationTaken: (medicationId) => 
   toggleMedicationTaken: (medicationId) =>
     api.put(`/medications/${medicationId}/toggle`)
 };
@@ -72,7 +68,6 @@ export const medicationService = {
 export const reminderService = {
   addReminder: (data) => api.post('/reminders', data),
   getReminders: () => api.get('/reminders'),
-  toggleReminder: (reminderId) => 
   toggleReminder: (reminderId) =>
     api.put(`/reminders/${reminderId}/toggle`)
 };

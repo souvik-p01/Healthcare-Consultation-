@@ -40,6 +40,7 @@ import v1Routes from "./routes/api.routes.js";
 // Import middleware
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { requestLogger } from "./middlewares/logging.middleware.js";
+import { initializeSocket } from "./socket.js";
 
 // Import database utilities
 import connectDB, { checkDBHealth, disconnectDB } from "./db/index.js";
@@ -601,6 +602,10 @@ const startServer = async () => {
                 }, 3600000); // Every hour
             }
         });
+
+        // Initialize Socket.io
+        initializeSocket(server);
+        console.log('🔌 Socket.io initialized on Express server');
 
         // Step 4: Handle server-level errors
         server.on("error", (error) => {

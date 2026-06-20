@@ -905,7 +905,7 @@ const PharmacyPage = () => {
         lat: searchCoords.lat,
         lng: searchCoords.lng
       });
-      const backendPharmacies = response.data.pharmacies || [];
+      const backendPharmacies = response.data.data?.pharmacies || response.data.pharmacies || [];
       
       let mapped = backendPharmacies.map(pharm => {
         let lat = pharm.coordinates.lat;
@@ -1009,7 +1009,8 @@ const PharmacyPage = () => {
       }
 
       const response = await medicineAPI.getMedicines(params)
-      const data = response.data
+      const responseData = response.data
+      const data = responseData.data || responseData
       
       const apiMedicines = data.medicines || []
       const transformedMedicines = apiMedicines.map((med, index) => ({
@@ -1935,26 +1936,52 @@ const PharmacyPage = () => {
       )}
 
       {/* Payment Gateway */}
-      {showPayment && (
-        <PaymentGateway
-          amount={getCartTotal()}
-          onSuccess={handlePaymentSuccess}
-          onClose={() => setShowPayment(false)}
-          orderDetails={{
-            description: 'Medicine Purchase',
-            customerName: 'Customer Name', // Get from your auth system
-            customerEmail: 'customer@example.com', // Get from your auth system
-            customerPhone: '9999999999', // Get from your auth system
-            notes: {
-              address: 'Customer Address', // Get from your address system
-              items: cart.length
-            }
-          }}
-          businessName="MedCare Pharmacy"
-          businessLogo="https://cdn-icons-png.flaticon.com/512/2966/2966327.png"
-          paymentMethods={['razorpay', 'cod']} // Enable both payment methods
-        />
-      )}
+      {showPayment && (() => {
+        const storedUser = (() => {
+          try {
+            const u = localStorage.getItem('user');
+            return u ? JSON.parse(u) : null;
+          } catch {
+            return null;
+          }
+        })();
+        const addressText = storedUser?.address?.street 
+          ? `${storedUser.address.street}, ${storedUser.address.city}, ${storedUser.address.state}` 
+          : 'Customer Address';
+
+        return (
+          <PaymentGateway
+            amount={getCartTotal()}
+            onSuccess={handlePaymentSuccess}
+            onClose={() => setShowPayment(false)}
+            orderDetails={{
+              description: 'Medicine Purchase',
+              customerName: storedUser ? `${storedUser.firstName} ${storedUser.lastName}` : 'Customer Name',
+              customerEmail: storedUser?.email || 'customer@example.com',
+              customerPhone: storedUser?.phoneNumber || '9999999999',
+              serviceType: 'pharmacy',
+              metadata: {
+                items: JSON.stringify(cart.map(item => ({
+                  id: item.id,
+                  name: item.name,
+                  brand: item.brand,
+                  quantity: item.quantity,
+                  price: item.discountPrice || item.price
+                }))),
+                pharmacyName: cart[0]?.selectedPharmacy || 'MedCare Pharmacy',
+                address: addressText
+              },
+              notes: {
+                address: addressText,
+                items: cart.length
+              }
+            }}
+            businessName="MedCare Pharmacy"
+            businessLogo="https://cdn-icons-png.flaticon.com/512/2966/2966327.png"
+            paymentMethods={['razorpay', 'cod']} // Enable both payment methods
+          />
+        );
+      })()}
 
       {/* Delivery Tracking */}
       {showDelivery && orderId && userLocation && selectedPharmacyLocation && mapLoaded && (

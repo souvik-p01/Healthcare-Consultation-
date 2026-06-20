@@ -8,6 +8,7 @@ import { Patient } from "../models/Patient.model.js";
 import { Doctor } from "../models/Doctor.model.js";
 import { Appointment } from "../models/appointment.model.js";
 import Invoice from "../models/invoice.model.js";
+import { PharmacyOrder } from "../models/pharmacyOrder.model.js";
 import {
     createRazorpayOrder,
     verifyRazorpaySignature,
@@ -113,6 +114,34 @@ const createPaymentOrder = asyncHandler(async (req, res) => {
         initiatedAt: new Date(),
         metadata: metadataObj,
     });
+
+    if (serviceType === 'pharmacy') {
+        let items = [];
+        if (metadataObj.items) {
+            try {
+                items = typeof metadataObj.items === 'string' ? JSON.parse(metadataObj.items) : metadataObj.items;
+            } catch (err) {
+                console.error("Failed to parse items in createPaymentOrder:", err);
+            }
+        }
+        await PharmacyOrder.create({
+            orderId: orderIdVal,
+            userId,
+            items: items.map(item => ({
+                medicineId: item.id,
+                name: item.name,
+                brand: item.brand,
+                quantity: item.quantity,
+                price: item.price
+            })),
+            amount,
+            paymentMethod: isCod ? 'cash' : 'online',
+            paymentStatus: 'pending',
+            status: isCod ? 'confirmed' : 'pending', // COD is instantly confirmed
+            address: metadataObj.address || "User Delivery Address",
+            pharmacyName: metadataObj.pharmacyName || "MedCare Pharmacy"
+        });
+    }
 
     return res.status(201).json(
         new ApiResponse(201, {
@@ -227,6 +256,18 @@ const confirmPayment = asyncHandler(async (req, res) => {
             paymentStatus: 'paid',
             paidAt: new Date(),
         });
+    }
+
+    if (payment.serviceType === 'pharmacy') {
+        await PharmacyOrder.findOneAndUpdate(
+            { orderId: razorpay_order_id },
+            {
+                $set: {
+                    paymentStatus: 'paid',
+                    status: 'confirmed'
+                }
+            }
+        );
     }
 
     // Send emails (implement your email logic)

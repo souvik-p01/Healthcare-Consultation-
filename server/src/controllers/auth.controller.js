@@ -101,8 +101,8 @@ export const register = async (req, res) => {
                     phoneNumber: user.phoneNumber,
                     role: user.role
                 },
-                accessToken
-                // Note: refreshToken is in cookie only, not in response body
+                accessToken,
+                refreshToken
             }
         });
 
@@ -164,8 +164,8 @@ export const login = async (req, res) => {
                     phoneNumber: user.phoneNumber,
                     role: user.role
                 },
-                accessToken
-                // Note: refreshToken is in cookie only, not in response body
+                accessToken,
+                refreshToken
             }
         });
 
@@ -344,7 +344,7 @@ export const logout = async (req, res) => {
  */
 export const refreshToken = async (req, res) => {
     try {
-        const refreshToken = req.cookies.refreshToken;
+        const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken || req.headers?.["x-refresh-token"];
 
         if (!refreshToken) {
             return res.status(401).json({
