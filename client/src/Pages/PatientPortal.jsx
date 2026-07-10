@@ -31,7 +31,9 @@ import {
   Eye,
   Thermometer,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Mic
 } from 'lucide-react';
 import AiAssistance from './AIAssistantPage';
 import Telemedicine from './services/Telemedicine';

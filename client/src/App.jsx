@@ -1,5 +1,5 @@
 // App.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -19,6 +19,8 @@ import Service from "./Pages/Service";
 import Contact from "./Pages/Contact";
 import LoginSignUpPage from "./Pages/LoginSignUpPage";
 import Dashboard from "./Pages/Dashboard";
+import PaymentPage from "./Pages/PaymentPage";
+import ReceiptPage from "./Pages/services/ReceiptPage";
 import ProfileCompletion from "./Pages/ProfileCompletion";
 
 /* -------- Portals -------- */
@@ -42,6 +44,7 @@ import WellnessPrograms from "./Pages/services/WellnessPrograms";
 
 /* -------- Admin Dashboard -------- */
 import AdminDashboard from "./Pages/AdminDashboard";
+import Dashboard from "./Pages/Dashboard";
 
 /* -------- Error Pages -------- */
 const Unauthorized = () => (
@@ -214,8 +217,24 @@ const App = () => {
               </ProtectedRoute>
             } 
           />
+          
+          <Route 
+            path="/services/payment" 
+            element={
+              <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
+                <PaymentPage />
+              </ProtectedRoute>
+            } 
+          />
 
-          {/* ===== Extra Services ===== */}
+          <Route 
+            path="/services/receipt" 
+            element={
+              <ProtectedRoute allowedRoles={["patient", "doctor", "admin"]}>
+                <ReceiptPage />
+              </ProtectedRoute>
+            } 
+          />
           <Route 
             path="/services/telemedicine" 
             element={

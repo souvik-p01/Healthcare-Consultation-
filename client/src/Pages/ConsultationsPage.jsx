@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
+import { toast } from 'react-toastify'
 import {
   Stethoscope,
   ChevronLeft,
@@ -18,8 +19,13 @@ import {
 } from 'lucide-react'
 
 const ConsultationsPage = () => {
+  const navigate = useNavigate()
   const [selectedSpecialty, setSelectedSpecialty] = useState('all')
   const [selectedDoctor, setSelectedDoctor] = useState(null)
+  const [appointmentInfo, setAppointmentInfo] = useState({})
+
+  const [showReceipt, setShowReceipt] = useState(false)
+  const [receiptInfo, setReceiptInfo] = useState({})
 
   const specialties = [
     { id: 'all', name: 'All Specialties', count: 24 },
@@ -61,7 +67,7 @@ const ConsultationsPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 py-8">
       <div className="container mx-auto px-4">
-        <Link 
+        <Link
           to="/services"
           className="inline-flex items-center text-blue-600 hover:text-blue-700 mb-6 bg-white px-4 py-2 rounded-full shadow"
         >
@@ -81,7 +87,7 @@ const ConsultationsPage = () => {
                 <p className="text-gray-600">Book appointments with certified specialists</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <div className="text-sm text-gray-500">Average Response Time</div>
@@ -97,8 +103,8 @@ const ConsultationsPage = () => {
           <div className="flex flex-col md:flex-row gap-4 mb-8">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Search doctors by name, specialty, or symptoms..."
                 className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -130,11 +136,10 @@ const ConsultationsPage = () => {
                 <button
                   key={specialty.id}
                   onClick={() => setSelectedSpecialty(specialty.id)}
-                  className={`px-4 py-2 rounded-full font-medium transition-all ${
-                    selectedSpecialty === specialty.id
+                  className={`px-4 py-2 rounded-full font-medium transition-all ${selectedSpecialty === specialty.id
                       ? 'bg-blue-600 text-white shadow-lg'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   {specialty.name}
                   <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">
@@ -174,7 +179,7 @@ const ConsultationsPage = () => {
                           </span>
                         )}
                       </div>
-                      
+
                       <div className="flex items-center gap-2 mt-2">
                         <div className="flex items-center">
                           <Star className="w-4 h-4 text-yellow-400 fill-current" />
@@ -182,7 +187,7 @@ const ConsultationsPage = () => {
                           <span className="ml-1 text-sm text-gray-500">({doctor.reviews} reviews)</span>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-3 mt-3 text-sm text-gray-600">
                         <span className="flex items-center gap-1">
                           <Clock className="w-4 h-4" />
@@ -193,7 +198,7 @@ const ConsultationsPage = () => {
                           {doctor.languages?.join(', ')}
                         </span>
                       </div>
-                      
+
                       <div className="mt-4">
                         <div className="text-xs text-gray-500 mb-1">Available on:</div>
                         <div className="flex gap-1">
@@ -209,7 +214,7 @@ const ConsultationsPage = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
                       <div className="text-sm text-gray-500">Starting from</div>
@@ -246,7 +251,7 @@ const ConsultationsPage = () => {
                   ✕
                 </button>
               </div>
-              
+
               <div className="flex items-center gap-4 mb-6">
                 <div className="text-4xl">{selectedDoctor.image}</div>
                 <div>
@@ -254,7 +259,7 @@ const ConsultationsPage = () => {
                   <p className="text-blue-600">{selectedDoctor.specialty}</p>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -265,7 +270,7 @@ const ConsultationsPage = () => {
                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Select Time Slot
@@ -281,7 +286,7 @@ const ConsultationsPage = () => {
                     ))}
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Consultation Type
@@ -299,7 +304,7 @@ const ConsultationsPage = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="mt-8 flex gap-3">
                 <button
                   onClick={() => setSelectedDoctor(null)}
@@ -309,7 +314,12 @@ const ConsultationsPage = () => {
                 </button>
                 <button
                   onClick={() => {
-                    alert('Appointment booked successfully!')
+                    // Store minimal appointment info
+                    const info = { doctor: selectedDoctor }
+                    setAppointmentInfo(info)
+                    toast.success('Appointment booked successfully!')
+                    // Navigate to payment page with state
+                    navigate('/services/payment', { state: { appointmentInfo: info } })
                     setSelectedDoctor(null)
                   }}
                   className="flex-1 bg-gradient-to-r from-blue-500 to-cyan-600 text-white py-3 rounded-lg hover:shadow-lg"

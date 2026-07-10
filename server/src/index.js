@@ -609,19 +609,22 @@ const startServer = async () => {
 
         // Step 4: Handle server-level errors
         server.on("error", (error) => {
-            console.error("❌ Server Error:", error);
-            
-            if (logger && logger.error) {
-                logger.error('Server error', { error: error.message, code: error.code });
-            }
-            
             if (error.code === 'EADDRINUSE') {
-                console.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
-                process.exit(1);
+                console.warn(`⚠️  Port ${PORT} busy — waiting 2s for it to free up, then retrying...`);
+                server.close();
+                setTimeout(() => {
+                    server.listen(PORT, () => {
+                        logServerInfo();
+                    });
+                }, 2000);
             } else if (error.code === 'EACCES') {
                 console.error(`❌ Permission denied to use port ${PORT}`);
                 process.exit(1);
             } else {
+                console.error("❌ Server Error:", error);
+                if (logger && logger.error) {
+                    logger.error('Server error', { error: error.message, code: error.code });
+                }
                 throw error;
             }
         });

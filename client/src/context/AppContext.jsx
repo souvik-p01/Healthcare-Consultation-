@@ -29,9 +29,8 @@ export const AppContextProvider = ({ children }) => {
   // ✅ Use ref for stable loading guard (prevents concurrent calls even before state updates)
   const isPendingRef = React.useRef(false);
 
-  useEffect(() => {
-    console.log("AppContextProvider mounted");
-  }, []);
+  // Remove the noisy mount log — it fires every render in development
+  // useEffect(() => { console.log("AppContextProvider mounted"); }, []);
   
   const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
@@ -62,10 +61,16 @@ export const AppContextProvider = ({ children }) => {
       (response) => response.data,
       async (error) => {
         const originalRequest = error.config;
-        
-        if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-          toast.error('Unable to connect to server. Please try again later.');
-          throw new Error('Unable to proceed now, please try after some time.');
+
+        // Server down — don't spam toasts for background/auth requests
+        if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK' || !error.response) {
+          const isBackground = originalRequest?.url?.includes('/users/current') ||
+                               originalRequest?.url?.includes('/users/me') ||
+                               originalRequest?.url?.includes('/auth/refresh-token');
+          if (!isBackground) {
+            toast.error('Server unavailable. Please check your connection.');
+          }
+          throw error;
         }
 
         // Handle token refresh on 401 errors
@@ -102,7 +107,6 @@ export const AppContextProvider = ({ children }) => {
             }
           } catch (refreshError) {
             console.error('Token refresh failed:', refreshError);
-            // Don't call logoutUser here to avoid potential recursion
             localStorage.removeItem('accessToken');
             setToken(null);
             setUser(null);
@@ -112,12 +116,12 @@ export const AppContextProvider = ({ children }) => {
         
         const message = error.response?.data?.message || error.message || 'API request failed';
         
-        // Don't show toast for 401 errors as they'll be handled by refresh
+        // Don't show toast for 401/background errors
         if (error.response?.status !== 401) {
           toast.error(message);
         }
         
-        throw new Error(message);
+        throw error;
       }
     );
 
@@ -275,7 +279,7 @@ export const AppContextProvider = ({ children }) => {
 
   const getCurrentUser = React.useCallback(async () => {
     try {
-      const response = await api.get('/users/me');
+      const response = await api.get('/users/current');
       if (response.success && response.data) {
         setUser(response.data);
         setUserRole(response.data.role?.toLowerCase() || 'patient');
@@ -451,6 +455,15 @@ export const AppContextProvider = ({ children }) => {
           setUserRole(userData.role?.toLowerCase() || 'patient');
         }
       } catch (error) {
+        // If server is down (network error), keep the stored token but don't crash
+        const isNetworkError = !error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED';
+        if (isNetworkError) {
+          console.warn("Server unavailable during auth check — will retry when server is up.");
+          setInitialLoading(false);
+          return;
+        }
+
+        // Token invalid — try refresh
         console.log("Token invalid, attempting refresh...");
         try {
           const newToken = await refreshToken();
@@ -472,13 +485,16 @@ export const AppContextProvider = ({ children }) => {
       }
     };
     verifyAuth();
-  }, [getCurrentUser, refreshToken]);
+  }, []); // ← empty deps: run once on mount only
 
   useEffect(() => {
     if (!token) return;
     const interval = setInterval(() => {
-      refreshToken().catch(() => {
-        console.log('Token refresh failed');
+      refreshToken().catch((err) => {
+        // Silently ignore network errors — server might be temporarily down
+        if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED') {
+          console.warn('Token refresh failed:', err?.message);
+        }
       });
     }, 14 * 60 * 1000);
     return () => clearInterval(interval);

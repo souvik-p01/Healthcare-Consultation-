@@ -39,8 +39,11 @@ const styles = `
   .ai-page {
     font-family: 'DM Sans', sans-serif;
     background: radial-gradient(circle at top left, #f8fafc, #f1f5f9);
-    min-height: 100vh;
+    height: calc(100vh - 144px);
+    display: flex;
+    flex-direction: column;
     color: var(--ink);
+    overflow: hidden;
   }
 
   .glass-panel {
@@ -110,7 +113,7 @@ const styles = `
   .ai-workspace {
     display: grid;
     grid-template-columns: 280px 1fr 260px;
-    height: calc(100vh - 65px);
+    flex: 1;
     overflow: hidden;
   }
   @media (max-width: 1100px) {
@@ -213,7 +216,7 @@ const styles = `
   /* ── CHAT AREA ── */
   .ai-chat-area {
     display: flex; flex-direction: column;
-    background: #f4f4f9;
+    background: #f8fafc;
     overflow: hidden;
   }
 
@@ -290,7 +293,7 @@ const styles = `
   }
   .ai-msg-avatar.user { background: var(--surface); border: 1px solid var(--border); }
 
-  .ai-bubble-wrap { display: flex; flex-direction: column; max-width: 68%; }
+  .ai-bubble-wrap { display: flex; flex-direction: column; max-width: 80%; }
   .ai-msg-row.user .ai-bubble-wrap { align-items: flex-end; }
 
   .ai-bubble {
