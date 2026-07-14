@@ -9,8 +9,16 @@ class SocketService {
   connect(token) {
     if (this.isConnected) return;
     
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 
-      (import.meta.env.PROD ? 'https://healthcare-backend-ltkv.onrender.com' : 'http://localhost:8001');
+    const backendEnvUrl = import.meta.env.VITE_BACKEND_URL;
+    let backendUrl = backendEnvUrl;
+    
+    if (import.meta.env.PROD) {
+      if (!backendEnvUrl || backendEnvUrl.includes('localhost') || backendEnvUrl.includes('127.0.0.1')) {
+        backendUrl = 'https://healthcare-backend-ltkv.onrender.com';
+      }
+    } else {
+      backendUrl = backendEnvUrl || 'http://localhost:8001';
+    }
     this.socket = io(backendUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],

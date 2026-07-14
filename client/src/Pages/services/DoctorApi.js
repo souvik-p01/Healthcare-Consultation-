@@ -29,15 +29,22 @@ const getApiBaseUrl = () => {
     }
     
     // Default URL
-    if (import.meta.env.VITE_API_URL) {
-        return import.meta.env.VITE_API_URL;
+    const envUrl = import.meta.env.VITE_API_URL;
+    const backendEnvUrl = import.meta.env.VITE_BACKEND_URL;
+    
+    if (import.meta.env.PROD) {
+        if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+            return envUrl;
+        }
+        if (backendEnvUrl && !backendEnvUrl.includes('localhost') && !backendEnvUrl.includes('127.0.0.1')) {
+            return `${backendEnvUrl}/api/v1`;
+        }
+        return 'https://healthcare-backend-ltkv.onrender.com/api/v1';
     }
-    if (import.meta.env.VITE_BACKEND_URL) {
-        return `${import.meta.env.VITE_BACKEND_URL}/api/v1`;
-    }
-    return import.meta.env.PROD 
-        ? 'https://healthcare-backend-ltkv.onrender.com/api/v1' 
-        : 'http://localhost:8001/api/v1';
+    
+    if (envUrl) return envUrl;
+    if (backendEnvUrl) return `${backendEnvUrl}/api/v1`;
+    return 'http://localhost:8001/api/v1';
 };
 
 const API_BASE_URL = getApiBaseUrl();

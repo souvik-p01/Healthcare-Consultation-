@@ -18,9 +18,24 @@ import {
 import healthcareLogo from '../assets/healthcare-logo.png';
 import healthcareLogoFont from '../assets/healthcare-logofont.png';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  (import.meta.env.VITE_BACKEND_URL ? `${import.meta.env.VITE_BACKEND_URL}/api/v1` : '') ||
-  (import.meta.env.PROD ? 'https://healthcare-backend-ltkv.onrender.com/api/v1' : 'http://localhost:8001/api/v1');
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  const backendEnvUrl = import.meta.env.VITE_BACKEND_URL;
+  if (import.meta.env.PROD) {
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+      return envUrl;
+    }
+    if (backendEnvUrl && !backendEnvUrl.includes('localhost') && !backendEnvUrl.includes('127.0.0.1')) {
+      return `${backendEnvUrl}/api/v1`;
+    }
+    return 'https://healthcare-backend-ltkv.onrender.com/api/v1';
+  }
+  if (envUrl) return envUrl;
+  if (backendEnvUrl) return `${backendEnvUrl}/api/v1`;
+  return 'http://localhost:8001/api/v1';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const COLORS = ['#2563eb', '#0891b2', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
