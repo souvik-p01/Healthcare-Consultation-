@@ -47,7 +47,14 @@ const PaymentPage = () => {
   const { state } = useLocation();
   const appointmentInfo = state?.appointmentInfo;
   const doctor = appointmentInfo?.doctor;
-  const amount = doctor?.price ? parseFloat(doctor.price) : 0;
+  const amount = (() => {
+    if (!doctor) return 0;
+    const val = doctor.price || doctor.consultationFee || 0;
+    if (typeof val === 'number') return val;
+    const cleaned = String(val).replace(/[^0-9.]/g, '');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  })();
 
   const [selectedMethod, setSelectedMethod] = useState('upi');
   const [isProcessing, setIsProcessing] = useState(false);

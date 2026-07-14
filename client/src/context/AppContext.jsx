@@ -29,10 +29,11 @@ export const AppContextProvider = ({ children }) => {
   // ✅ Use ref for stable loading guard (prevents concurrent calls even before state updates)
   const isPendingRef = React.useRef(false);
 
-  // Remove the noisy mount log — it fires every render in development
-  // useEffect(() => { console.log("AppContextProvider mounted"); }, []);
-  
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+  // ✅ Flag to suppress the interceptor's auto-refresh during the startup verifyAuth flow
+  //    so we don't get a double-refresh race condition.
+  const skipInterceptorRefreshRef = React.useRef(false);
+
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
 
   // ✅ Configure axios instance with useMemo to keep reference stable
   const api = React.useMemo(() => {
@@ -76,8 +77,21 @@ export const AppContextProvider = ({ children }) => {
         // Handle token refresh on 401 errors
         // Skip refresh for auth routes to prevent loops
         const isAuthRoute = originalRequest.url.includes('/auth/');
-        
-        if (error.response?.status === 401 && !originalRequest?._retry && !isAuthRoute) {
+
+        // ✅ Key fix: Don't auto-refresh if:
+        //    1. Already retried (prevents infinite loop)
+        //    2. This IS an auth route (prevents refresh-on-refresh loop)
+        //    3. We're in the startup verifyAuth flow (prevents double-refresh)
+        //    4. No refresh token is available (nothing to refresh with)
+        const hasRefreshToken = !!localStorage.getItem('refreshToken');
+
+        if (
+          error.response?.status === 401 &&
+          !originalRequest?._retry &&
+          !isAuthRoute &&
+          !skipInterceptorRefreshRef.current &&
+          hasRefreshToken
+        ) {
           originalRequest._retry = true;
 
           try {
@@ -85,9 +99,9 @@ export const AppContextProvider = ({ children }) => {
             const response = await axios.post(
               `${backendUrl}/api/v1/auth/refresh-token`,
               { refreshToken: localStorage.getItem('refreshToken') },
-              { 
+              {
                 withCredentials: true,
-                headers: { 
+                headers: {
                   'Content-Type': 'application/json',
                   'x-refresh-token': localStorage.getItem('refreshToken')
                 }
@@ -108,19 +122,20 @@ export const AppContextProvider = ({ children }) => {
           } catch (refreshError) {
             console.error('Token refresh failed:', refreshError);
             localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
             setToken(null);
             setUser(null);
             return Promise.reject(refreshError);
           }
         }
-        
+
         const message = error.response?.data?.message || error.message || 'API request failed';
-        
+
         // Don't show toast for 401/background errors
         if (error.response?.status !== 401) {
           toast.error(message);
         }
-        
+
         throw error;
       }
     );
@@ -163,7 +178,7 @@ export const AppContextProvider = ({ children }) => {
       setLoading(false);
       isPendingRef.current = false;
     }
-  }, [api]); // ✅ Removed 'loading' dependency
+  }, [api]);
 
   // ✅ Login function - Memoized & Stable
   const loginUser = React.useCallback(async (credentials) => {
@@ -191,7 +206,7 @@ export const AppContextProvider = ({ children }) => {
       setLoading(false);
       isPendingRef.current = false;
     }
-  }, [api]); // ✅ Removed 'loading' dependency
+  }, [api]);
 
   // ✅ Google Login function - Memoized & Stable
   const googleLogin = React.useCallback(async ({ credential }) => {
@@ -200,19 +215,19 @@ export const AppContextProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await api.post('/auth/google', { credential });
-      
+
       if (response.success && response.data) {
         const { user: userData, accessToken, refreshToken: newRefreshToken } = response.data;
-        
+
         localStorage.setItem('accessToken', accessToken);
         if (newRefreshToken) {
           localStorage.setItem('refreshToken', newRefreshToken);
         }
-        
+
         setToken(accessToken);
         setUser(userData);
         setUserRole(userData.role?.toLowerCase() || 'patient');
-        
+
         toast.success('Google login successful!');
         return response;
       }
@@ -226,7 +241,7 @@ export const AppContextProvider = ({ children }) => {
       setLoading(false);
       isPendingRef.current = false;
     }
-  }, [api]); // ✅ Removed 'loading' dependency
+  }, [api]);
 
   const logoutUser = React.useCallback(async () => {
     try {
@@ -250,18 +265,23 @@ export const AppContextProvider = ({ children }) => {
   }, [backendUrl]);
 
   const refreshToken = React.useCallback(async () => {
+    const storedRefreshToken = localStorage.getItem('refreshToken');
+    if (!storedRefreshToken) {
+      throw new Error('No refresh token available');
+    }
+
     try {
       // Use clean axios instance for refresh to avoid loops
       const response = await axios.post(`${backendUrl}/api/v1/auth/refresh-token`, {
-        refreshToken: localStorage.getItem('refreshToken')
+        refreshToken: storedRefreshToken
       }, {
         withCredentials: true,
         headers: {
           'Content-Type': 'application/json',
-          'x-refresh-token': localStorage.getItem('refreshToken')
+          'x-refresh-token': storedRefreshToken
         }
       });
-      
+
       if (response.data?.success && response.data.data) {
         const { accessToken, refreshToken: newRefreshToken } = response.data.data;
         localStorage.setItem('accessToken', accessToken);
@@ -271,6 +291,8 @@ export const AppContextProvider = ({ children }) => {
         setToken(accessToken);
         return accessToken;
       }
+
+      throw new Error('Refresh response missing token data');
     } catch (error) {
       console.error('Token refresh failed:', error);
       throw error;
@@ -402,7 +424,16 @@ export const AppContextProvider = ({ children }) => {
   // Payment APIs
   const createPaymentOrder = React.useCallback(async (data) => {
     try {
-      const response = await paymentAPI.createOrder(data);
+      // Sanitize amount before sending to prevent 400 errors
+      const sanitizedData = { ...data };
+      if (sanitizedData.amount !== undefined) {
+        const raw = sanitizedData.amount;
+        if (typeof raw !== 'number') {
+          const cleaned = String(raw || 0).replace(/[^0-9.]/g, '');
+          sanitizedData.amount = parseFloat(cleaned) || 0;
+        }
+      }
+      const response = await paymentAPI.createOrder(sanitizedData);
       return response.data;
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to create payment order');
@@ -440,60 +471,132 @@ export const AppContextProvider = ({ children }) => {
     return false;
   }, []);
 
+  // ✅ Single startup auth verification — no double-refresh, no interceptor conflicts
   useEffect(() => {
     const verifyAuth = async () => {
-      const storedToken = localStorage.getItem("accessToken");
-      if (!storedToken) {
+      const storedToken = localStorage.getItem('accessToken');
+      const storedRefreshToken = localStorage.getItem('refreshToken');
+
+      // No tokens at all — user is logged out, nothing to do
+      if (!storedToken && !storedRefreshToken) {
         setInitialLoading(false);
         return;
       }
 
+      // ✅ Tell the axios interceptor NOT to auto-refresh during this flow
+      //    We handle refresh ourselves below, once, explicitly.
+      skipInterceptorRefreshRef.current = true;
+
       try {
-        const userData = await getCurrentUser();
-        if (userData) {
-          setUser(userData);
-          setUserRole(userData.role?.toLowerCase() || 'patient');
+        if (storedToken) {
+          // Try fetching the current user with the existing access token
+          // using a raw axios call to completely bypass our custom interceptor
+          const response = await axios.get(`${backendUrl}/api/v1/users/current`, {
+            withCredentials: true,
+            headers: {
+              'Authorization': `Bearer ${storedToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.data?.success && response.data?.data) {
+            const userData = response.data.data;
+            setUser(userData);
+            setUserRole(userData.role?.toLowerCase() || 'patient');
+            setToken(storedToken);
+            setInitialLoading(false);
+            return; // ✅ Happy path — token valid, user loaded
+          }
         }
+
+        // Access token missing or the above didn't return — try refresh
+        throw new Error('Access token invalid or missing');
+
       } catch (error) {
-        // If server is down (network error), keep the stored token but don't crash
+        // If server is unreachable, keep the stored token and don't clear auth
         const isNetworkError = !error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED';
         if (isNetworkError) {
-          console.warn("Server unavailable during auth check — will retry when server is up.");
+          console.warn('Server unavailable during auth check — will retry when server is up.');
           setInitialLoading(false);
+          skipInterceptorRefreshRef.current = false;
           return;
         }
 
-        // Token invalid — try refresh
-        console.log("Token invalid, attempting refresh...");
-        try {
-          const newToken = await refreshToken();
-          if (newToken) {
-            const userData = await getCurrentUser();
-            setUser(userData);
-            setUserRole(userData.role?.toLowerCase() || 'patient');
+        // Access token was rejected (401) — attempt a single refresh if we have a refresh token
+        if (storedRefreshToken) {
+          console.log('Access token invalid, attempting refresh...');
+          try {
+            const refreshResponse = await axios.post(
+              `${backendUrl}/api/v1/auth/refresh-token`,
+              { refreshToken: storedRefreshToken },
+              {
+                withCredentials: true,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-refresh-token': storedRefreshToken
+                }
+              }
+            );
+
+            if (refreshResponse.data?.success && refreshResponse.data?.data?.accessToken) {
+              const { accessToken: newAccessToken, refreshToken: newRefreshToken } = refreshResponse.data.data;
+              localStorage.setItem('accessToken', newAccessToken);
+              if (newRefreshToken) {
+                localStorage.setItem('refreshToken', newRefreshToken);
+              }
+              setToken(newAccessToken);
+
+              // Fetch user with the new token
+              const userResponse = await axios.get(`${backendUrl}/api/v1/users/current`, {
+                withCredentials: true,
+                headers: {
+                  'Authorization': `Bearer ${newAccessToken}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+
+              if (userResponse.data?.success && userResponse.data?.data) {
+                const userData = userResponse.data.data;
+                setUser(userData);
+                setUserRole(userData.role?.toLowerCase() || 'patient');
+              }
+            } else {
+              throw new Error('Refresh response missing token');
+            }
+          } catch (refreshError) {
+            console.log('Refresh failed, clearing auth...', refreshError.message);
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            setToken(null);
+            setUser(null);
+            setUserRole('patient');
           }
-        } catch (refreshError) {
-          console.log("Refresh failed, clearing auth...");
+        } else {
+          // No refresh token — access token is invalid, clear everything
+          console.log('No refresh token, clearing auth...');
           localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
           setToken(null);
           setUser(null);
           setUserRole('patient');
         }
       } finally {
+        // ✅ Re-enable interceptor auto-refresh for normal runtime requests
+        skipInterceptorRefreshRef.current = false;
         setInitialLoading(false);
       }
     };
+
     verifyAuth();
   }, []); // ← empty deps: run once on mount only
 
+  // ✅ Proactive token refresh every 14 minutes (before the 1-day expiry)
   useEffect(() => {
     if (!token) return;
     const interval = setInterval(() => {
       refreshToken().catch((err) => {
         // Silently ignore network errors — server might be temporarily down
         if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED') {
-          console.warn('Token refresh failed:', err?.message);
+          console.warn('Proactive token refresh failed:', err?.message);
         }
       });
     }, 14 * 60 * 1000);

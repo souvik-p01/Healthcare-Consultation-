@@ -87,6 +87,14 @@ const PaymentGateway = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [success, setSuccess]  = useState(false);
 
+  // Sanitize the amount (converting strings like "₹590" to 590)
+  const numericAmount = (() => {
+    if (typeof amount === 'number') return amount;
+    const cleaned = String(amount || 0).replace(/[^0-9.]/g, '');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  })();
+
   /* UPI fields */
   const [upiId, setUpiId] = useState('');
   /* Card fields */
@@ -105,7 +113,7 @@ const PaymentGateway = ({
     if (!loaded) throw new Error('Failed to load Razorpay SDK');
 
     const { data: orderData } = await paymentAPI.createOrder({
-      amount,
+      amount: numericAmount,
       currency: 'INR',
       serviceType: orderDetails.serviceType || 'consultation',
       description: orderDetails.description || 'Payment for service',
@@ -158,7 +166,7 @@ const PaymentGateway = ({
   /* ── COD ── */
   const handleCOD = async () => {
     const { data: orderData } = await paymentAPI.createOrder({
-      amount,
+      amount: numericAmount,
       currency: 'INR',
       serviceType: orderDetails.serviceType || 'pharmacy',
       description: orderDetails.description || 'Cash on Delivery',
@@ -387,7 +395,7 @@ const PaymentGateway = ({
                 {selectedMethod === 'cod' ? 'Placing Order...' : 'Processing...'}
               </span>
             ) : (
-              selectedMethod === 'cod' ? 'Place Order (COD)' : `Pay ₹${amount.toFixed(2)}`
+              selectedMethod === 'cod' ? 'Place Order (COD)' : `Pay ₹${numericAmount.toFixed(2)}`
             )}
           </button>
 

@@ -54,7 +54,7 @@ const userSchema = new Schema(
         },
         password: {
             type: String,
-            required: [true, "Password is required"],
+            required: false, // Optional for Google OAuth users
             minlength: [8, "Password must be at least 8 characters"],
             select: false
         },
@@ -215,6 +215,18 @@ const userSchema = new Schema(
             default: Date.now
         },
         
+        // OAuth / Social Login
+        googleId: {
+            type: String,
+            sparse: true,
+            index: true
+        },
+        authProvider: {
+            type: String,
+            enum: ['local', 'google'],
+            default: 'local'
+        },
+
         // References
         patientId: {
             type: Schema.Types.ObjectId,

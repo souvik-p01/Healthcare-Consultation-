@@ -79,8 +79,23 @@ const app = express();
  * Handles Cross-Origin Resource Sharing for healthcare client applications
  */
 app.use(cors({
-    origin: true,
-    credentials: true
+    origin: function (origin, callback) {
+        // Allow requests with no origin (server-to-server, curl, Postman)
+        if (!origin) return callback(null, true);
+        const allowedOrigins = process.env.CORS_ORIGIN
+            ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+            : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        console.warn(`⚠️  CORS blocked origin: ${origin}`);
+        return callback(new Error('CORS policy violation'), false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-refresh-token', 'X-Requested-With'],
+    exposedHeaders: ['X-Request-ID'],
+    optionsSuccessStatus: 204
 }));
 
 /**

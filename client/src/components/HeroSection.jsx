@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import coverPhoto from '../assets/CoverPhoto.png';
+import demoVideo from '../assets/video.mp4';
 
 // Hero Section Component
 const HeroSection = () => {
@@ -163,14 +165,10 @@ const HeroSection = () => {
             <div className="relative">
               <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-2xl p-8">
                 <img 
-                  src="/src/assets/CoverPhoto.png" 
+                  src={coverPhoto} 
                   alt="Healthcare professionals using digital tablets and medical equipment" 
                   className="rounded-lg shadow-2xl w-full h-auto"
                   loading="lazy"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'https://via.placeholder.com/800x500/1e40af/ffffff?text=Healthcare+Professionals';
-                  }}
                 />
               </div>
             </div>
@@ -211,17 +209,8 @@ const HeroSection = () => {
                 autoPlay
                 playsInline
                 aria-label="Healthcare platform demo video"
-                poster="/src/assets/video-poster.jpg"
               >
-                <source src="/src/assets/video.mp4" type="video/mp4" />
-                <source src="/src/assets/video.webm" type="video/webm" />
-                <track
-                  kind="captions"
-                  src="/src/assets/video-captions.vtt"
-                  srcLang="en"
-                  label="English"
-                  default
-                />
+                <source src={demoVideo} type="video/mp4" />
                 Your browser does not support the video tag.
               </video>
             </div>

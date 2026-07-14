@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # 1. MongoDB Service
+  mongodb:
+    image: mongo:latest
+    container_name: healthcare_mongodb_prod
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data_prod:/data/db
+    restart: always
+
+  # 2. Server (Backend API)
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: healthcare_server_prod
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./server/.env
+    environment:
+      - PORT=8001
+      - NODE_ENV=production
+      # Connects to the local MongoDB container
+      - MONGODB_URI=mongodb://mongodb:27017/healthcare
+      - CORS_ORIGIN=http://localhost:5173
+    depends_on:
+      - mongodb
+    restart: always
+
+  # 3. Client (Frontend Nginx Service)
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: healthcare_client_prod
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    restart: always
+
+volumes:
+  mongodb_data_prod:

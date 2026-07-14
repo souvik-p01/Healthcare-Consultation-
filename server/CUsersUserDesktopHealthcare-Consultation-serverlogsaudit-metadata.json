@@ -1,0 +1,25 @@
+{
+    "keep": {
+        "days": false,
+        "amount": 7
+    },
+    "auditLog": "C:\\Users\\User\\Desktop\\Healthcare-Consultation-\\server\\logs\\audit-metadata.json",
+    "files": [
+        {
+            "date": 1783760962297,
+            "name": "C:\\Users\\User\\Desktop\\Healthcare-Consultation-\\server\\logs\\healthcare-audit-2026-07-11.log",
+            "hash": "7c7e59237cbf5a498f4a14af5ab3f8cf0bb3f060ac586a5d3d397570510e0351"
+        },
+        {
+            "date": 1783862706826,
+            "name": "C:\\Users\\User\\Desktop\\Healthcare-Consultation-\\server\\logs\\healthcare-audit-2026-07-12.log",
+            "hash": "ebd67aa10cb71fbda913d680de0c6a7e06962d5bb9cf0c482695aa7abc4aefa2"
+        },
+        {
+            "date": 1784020631136,
+            "name": "/app/logs/healthcare-audit-2026-07-14.log",
+            "hash": "b420b6b240be00716129ee232fff90ff0e2a2a3b057b5d350c9b48aa8ed47fb5"
+        }
+    ],
+    "hashType": "sha256"
+}

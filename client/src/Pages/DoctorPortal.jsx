@@ -165,6 +165,7 @@ const DoctorPortal = () => {
     { id: 'consultations', label: 'Video Consultations', icon: Video },
     { id: 'prescriptions', label: 'Prescriptions', icon: Pill },
     { id: 'ai-assist', label: 'AI Assistant', icon: Brain },
+    { id: 'ai-intake', label: 'AI Intake Review', icon: Brain },
     { id: 'reports', label: 'Medical Reports', icon: FileText },
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
@@ -872,6 +873,311 @@ const DoctorPortal = () => {
     </div>
   );
 
+  const AIIntakeReviewContent = () => {
+    const [selectedPatientId, setSelectedPatientId] = useState("");
+    const [patientsList, setPatientsList] = useState([]);
+    const [sessions, setSessions] = useState([]);
+    const [loadingSessions, setLoadingSessions] = useState(false);
+    const [selectedSession, setSelectedSession] = useState(null);
+    const [savingEhr, setSavingEhr] = useState(false);
+    
+    // SOAP edit states
+    const [subjective, setSubjective] = useState("");
+    const [objective, setObjective] = useState("");
+    const [assessment, setAssessment] = useState("");
+    const [plan, setPlan] = useState("");
+
+    // Fetch patients list
+    useEffect(() => {
+      const loadPatients = async () => {
+        try {
+          const res = await doctorService.getPatients({ page: 1, limit: 100 });
+          if (res.data.data?.patients) {
+            setPatientsList(res.data.data.patients);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      loadPatients();
+    }, []);
+
+    // Load sessions when patient is selected
+    const handlePatientChange = async (patientId) => {
+      setSelectedPatientId(patientId);
+      setSelectedSession(null);
+      if (!patientId) {
+        setSessions([]);
+        return;
+      }
+      try {
+        setLoadingSessions(true);
+        const patientObj = patientsList.find(p => p.id === patientId);
+        const res = await apiCall(`/ai-symptom/doctor/${patientObj.userId || patientId}`);
+        if (res.success && res.data?.sessions) {
+          setSessions(res.data.sessions);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingSessions(false);
+      }
+    };
+
+    const handleSelectSession = (session) => {
+      setSelectedSession(session);
+      setSubjective(session.soapNote?.subjective || "");
+      setObjective(session.soapNote?.objective || "");
+      setAssessment(session.soapNote?.assessment || "");
+      setPlan(session.soapNote?.plan || "");
+    };
+
+    const handleCommitToEHR = async () => {
+      try {
+        setSavingEhr(true);
+        const res = await apiCall(`/ai-symptom/${selectedSession._id}/save-ehr`, {
+          method: 'POST',
+          body: {
+            subjective,
+            objective,
+            assessment,
+            plan,
+            doctorId: authUser._id
+          }
+        });
+        if (res.success) {
+          toast.success("SOAP intake assessment successfully committed to EHR");
+          setSelectedSession(null);
+          handlePatientChange(selectedPatientId);
+        }
+      } catch (e) {
+        toast.error("Failed to commit SOAP assessment to EHR");
+        console.error(e);
+      } finally {
+        setSavingEhr(false);
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">AI Intake & SOAP Review</h2>
+            <p className="text-sm text-gray-500 mt-1">Review AI-assisted clinical symptom intakes and verify SOAP notes for EHR entry.</p>
+          </div>
+
+          <div className="w-full md:w-72">
+            <label className="text-xs font-bold text-gray-400 block mb-1">Select Patient:</label>
+            <select
+              value={selectedPatientId}
+              onChange={(e) => handlePatientChange(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">-- Choose Patient --</option>
+              {patientsList.map(p => (
+                <option key={p.id} value={p.id}>{p.name} ({p.gender}, {p.age}y)</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* SESSIONS LIST */}
+          <div className="bg-white border rounded-xl p-5 shadow-sm space-y-4">
+            <h3 className="font-bold text-gray-800 text-sm border-b pb-2">Patient AI Assessments</h3>
+            
+            {loadingSessions ? (
+              <div className="text-center py-10">
+                <RefreshCw className="animate-spin text-blue-600 mx-auto" size={20} />
+              </div>
+            ) : !selectedPatientId ? (
+              <div className="text-center py-10 text-gray-400 text-xs">
+                Select a patient to view intake assessments.
+              </div>
+            ) : sessions.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 text-xs">
+                No AI assessments found for this patient.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                {sessions.map(s => {
+                  const isSelected = selectedSession?._id === s._id;
+                  return (
+                    <button
+                      key={s._id}
+                      onClick={() => handleSelectSession(s)}
+                      className={`w-full p-4 border rounded-xl text-left transition-all ${
+                        isSelected 
+                          ? 'border-blue-500 bg-blue-50/50 shadow-sm' 
+                          : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center text-[10px] text-gray-400 font-bold mb-1">
+                        <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+                        <span className={`px-2 py-0.5 rounded ${
+                          s.riskAssessment?.level === 'emergency' ? 'bg-red-100 text-red-700' :
+                          s.riskAssessment?.level === 'high' ? 'bg-amber-100 text-amber-700' :
+                          'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {s.riskAssessment?.level?.toUpperCase()}
+                        </span>
+                      </div>
+                      <h4 className="font-bold text-gray-700 text-xs">
+                        Complaint: {s.symptoms.find(item => item.isPrimary)?.name || "General"}
+                      </h4>
+                      <p className="text-[10px] text-gray-500 mt-1 line-clamp-1 italic">
+                        "{s.voiceInput?.translatedText}"
+                      </p>
+                      {s.status === 'reviewed' && (
+                        <span className="text-[9px] text-green-600 font-bold mt-2 block">✓ Committed to EHR</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* SOAP NOTE EDITOR & CLINICAL VALUES */}
+          <div className="lg:col-span-2 space-y-6">
+            {!selectedSession ? (
+              <div className="bg-white border rounded-xl p-12 text-center text-gray-400 text-sm shadow-sm h-full flex flex-col justify-center items-center">
+                <Brain className="w-12 h-12 text-gray-200 mb-2 animate-pulse" />
+                Select an intake assessment from the left panel to review and edit SOAP notes.
+              </div>
+            ) : (
+              <div className="bg-white border rounded-xl p-6 shadow-sm space-y-6">
+                <div className="border-b pb-4 flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-gray-800 text-base">Encounter Details</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Date: {new Date(selectedSession.createdAt).toLocaleString()}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    selectedSession.status === 'reviewed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {selectedSession.status?.toUpperCase()}
+                  </span>
+                </div>
+
+                {/* Patient Vitals & Info */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
+                  <div>
+                    <span className="text-gray-400 font-medium block">Age / Gender</span>
+                    <span className="font-bold text-gray-700 mt-0.5 block capitalize">
+                      {selectedSession.additionalInfo?.age || "N/A"}y / {selectedSession.additionalInfo?.gender || "N/A"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-medium block">Temperature</span>
+                    <span className="font-bold text-gray-700 mt-0.5 block">
+                      {selectedSession.additionalInfo?.vitals?.temperature || "N/A"} °C
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-medium block">SpO2 / Pulse</span>
+                    <span className="font-bold text-gray-700 mt-0.5 block">
+                      {selectedSession.additionalInfo?.vitals?.oxygenSaturation || "N/A"}% / {selectedSession.additionalInfo?.vitals?.pulse || "N/A"} bpm
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-medium block">Blood Pressure</span>
+                    <span className="font-bold text-gray-700 mt-0.5 block">
+                      {selectedSession.additionalInfo?.vitals?.bloodPressure?.systolic || "N/A"}/{selectedSession.additionalInfo?.vitals?.bloodPressure?.diastolic || "N/A"} mmHg
+                    </span>
+                  </div>
+                </div>
+
+                {/* Symptoms and SNOMED */}
+                <div>
+                  <h4 className="font-bold text-gray-700 text-xs mb-2">Clinical Symptoms (SNOMED CT)</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedSession.symptoms.map((s, idx) => (
+                      <span key={idx} className="bg-slate-100 border border-slate-200 text-gray-600 px-2.5 py-1 rounded text-xs font-semibold">
+                        {s.name} <span className="text-[9px] text-gray-400 font-bold ml-1">({s.somedCode})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Suggested Conditions & ICD-11 */}
+                <div>
+                  <h4 className="font-bold text-gray-700 text-xs mb-2">Condition Probabilities (ICD-11)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {selectedSession.clinicalReasoning.map((c, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-slate-50 border p-2 rounded-lg text-xs font-semibold">
+                        <span className="text-gray-700">{c.condition} (ICD-11: {c.icd11})</span>
+                        <span className="text-blue-600">{c.probability}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SOAP Note Editor */}
+                <div className="space-y-4">
+                  <h4 className="font-bold text-gray-800 text-sm border-b pb-1 flex items-center gap-2">
+                    <FileText size={16} className="text-blue-600" /> Edit SOAP Report Note
+                  </h4>
+
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <label className="font-bold text-gray-600 block mb-1">Subjective (S) - Patient History & Symptoms:</label>
+                      <textarea
+                        value={subjective}
+                        onChange={(e) => setSubjective(e.target.value)}
+                        className="w-full h-20 border rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-medium text-gray-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-gray-600 block mb-1">Objective (O) - Vital Signs & Clinical Checks:</label>
+                      <textarea
+                        value={objective}
+                        onChange={(e) => setObjective(e.target.value)}
+                        className="w-full h-20 border rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-medium text-gray-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-gray-600 block mb-1">Assessment (A) - Diagnoses & ICD-11 Mapping:</label>
+                      <textarea
+                        value={assessment}
+                        onChange={(e) => setAssessment(e.target.value)}
+                        className="w-full h-20 border rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-medium text-gray-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-gray-600 block mb-1">Plan (P) - Treatment & Doctor Recommendations:</label>
+                      <textarea
+                        value={plan}
+                        onChange={(e) => setPlan(e.target.value)}
+                        className="w-full h-20 border rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-medium text-gray-700"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    onClick={() => setSelectedSession(null)}
+                    className="px-4 py-2 border rounded-lg text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCommitToEHR}
+                    disabled={savingEhr}
+                    className="px-5 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-xs font-bold shadow hover:from-blue-700 hover:to-blue-800 transition-all flex items-center gap-1.5"
+                  >
+                    {savingEhr ? <RefreshCw className="animate-spin" size={13} /> : <CheckCircle size={13} />}
+                    Save & Commit to Patient EHR
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const OtherTabContent = () => {
     const currentNavItem = navItems.find(item => item.id === activeTab);
     const Icon = currentNavItem?.icon;
@@ -1110,6 +1416,7 @@ const DoctorPortal = () => {
             {activeTab === 'appointments' && <AppointmentsContent />}
             {activeTab === 'consultations' && <Telemedicine role="doctor" />}
             {activeTab === 'ai-assist' && <AiAssistance role="doctor" />}
+            {activeTab === 'ai-intake' && <AIIntakeReviewContent />}
             {activeTab === 'reports' && <HealthReports role="doctor" />}
             {activeTab === 'settings' && <SettingsContent />}
 

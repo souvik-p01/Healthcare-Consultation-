@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import { useAppContext } from '../context/AppContext';
+import SymptomCheckerWizard from '../components/SymptomCheckerWizard';
 
 /* ── Design Tokens ──────────────────────────────────────────── */
 const styles = `
@@ -39,7 +40,8 @@ const styles = `
   .ai-page {
     font-family: 'DM Sans', sans-serif;
     background: radial-gradient(circle at top left, #f8fafc, #f1f5f9);
-    height: calc(100vh - 144px);
+    height: calc(100vh - 120px);
+    min-height: 0;
     display: flex;
     flex-direction: column;
     color: var(--ink);
@@ -114,6 +116,7 @@ const styles = `
     display: grid;
     grid-template-columns: 280px 1fr 260px;
     flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
   @media (max-width: 1100px) {
@@ -124,6 +127,20 @@ const styles = `
     .ai-workspace { grid-template-columns: 1fr; }
     .ai-left-panel { display: none; }
     .ai-left-panel.open { display: flex; position: fixed; left: 0; top: 65px; bottom: 0; width: 280px; z-index: 99; }
+  }
+
+  /* ── WIZARD OVERLAY ── */
+  .ai-wizard-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
   }
 
   /* ── LEFT PANEL ── */
@@ -218,6 +235,7 @@ const styles = `
     display: flex; flex-direction: column;
     background: #f8fafc;
     overflow: hidden;
+    min-height: 0;
   }
 
   /* chat header */
@@ -606,6 +624,7 @@ const AIAssistantPage = ({ role }) => {
 
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [healthScore, setHealthScore] = useState(85);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     // Backend AI is always considered connected if we have a token
@@ -731,6 +750,15 @@ const AIAssistantPage = ({ role }) => {
           {/* ── LEFT PANEL ── */}
           <div className={`ai-left-panel${sidebarOpen ? ' open' : ''}`}>
             <div className="ai-panel-section">
+              <button 
+                onClick={() => setShowWizard(true)}
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-teal-500 via-cyan-500 to-indigo-500 hover:from-teal-600 hover:to-indigo-600 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-teal-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 mb-2 uppercase tracking-wider"
+              >
+                <Brain size={16} className="animate-pulse" />
+                Symptom Checker
+              </button>
+            </div>
+            <div className="ai-panel-section">
               <div className="ai-section-label">Quick Actions</div>
               <div className="ai-quick-grid">
                 {quickActions.map((a, i) => (
@@ -799,8 +827,14 @@ const AIAssistantPage = ({ role }) => {
             </div>
           </div>
 
-          {/* ── CHAT AREA ── */}
-          <div className="ai-chat-area">
+          {showWizard ? (
+            <div className="ai-wizard-overlay" onClick={(e) => e.target === e.currentTarget && setShowWizard(false)}>
+              <SymptomCheckerWizard onClose={() => setShowWizard(false)} />
+            </div>
+          ) : (
+            <>
+              {/* ── CHAT AREA ── */}
+              <div className="ai-chat-area">
 
             {/* chat header */}
             <div className="ai-chat-header">
@@ -952,6 +986,8 @@ const AIAssistantPage = ({ role }) => {
               </div>
             </div>
           </div>
+          </>
+          )}
         </div>
 
         {/* ── UPLOAD MODAL ── */}

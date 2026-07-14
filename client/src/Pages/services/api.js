@@ -3,11 +3,12 @@ import axios from 'axios';
 // Base URL for API requests
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL
   ? `${import.meta.env.VITE_BACKEND_URL}/api/v1`
-  : 'http://localhost:8000/api/v1';
+  : 'http://localhost:8001/api/v1';
 
 // Create axios instance with default config
 const api = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true, // send cookies for JWT auth
   headers: {
     'Content-Type': 'application/json',
   },

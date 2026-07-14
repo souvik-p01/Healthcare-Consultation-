@@ -1,0 +1,72 @@
+# See all running containers and their health
+docker compose ps
+
+# View live logs from ALL containers (Ctrl+C to stop)
+docker compose logs -f
+
+# View logs for a specific container only
+docker compose logs -f healthcare_server
+docker compose logs -f healthcare_client
+docker compose logs -f healthcare_mongodb
+
+
+2. After Code Changes — Rebuild & Restart
+
+# Rebuild images and restart all containers (most common)
+docker compose up -d --build
+
+# Rebuild only the server (faster if only backend changed)
+docker compose up -d --build server
+
+# Rebuild only the client (faster if only frontend changed)
+docker compose up -d --build client
+
+
+3. Force Full Reset (if containers are stale/cached)
+
+# Stop all containers, remove them, rebuild from scratch
+docker compose down && docker compose up -d --build
+
+# Nuclear option: remove volumes too (WARNING: clears MongoDB data)
+docker compose down -v && docker compose up -d --build
+
+
+# Nuclear Reset (removes volumes too — ⚠️ clears local MongoDB data)
+
+docker compose down -v; docker compose up -d --build
+
+# ── CHECK STATUS ──────────────────────────────────
+docker compose ps
+
+# ── VIEW LOGS ─────────────────────────────────────
+docker compose logs -f
+docker compose logs -f healthcare_server
+docker compose logs -f healthcare_client
+
+# ── REBUILD AFTER CHANGES ─────────────────────────
+docker compose up -d --build           # all containers
+docker compose up -d --build server    # backend only
+docker compose up -d --build client    # frontend only
+
+# ── FULL RESET ────────────────────────────────────
+docker compose down; docker compose up -d --build
+
+# ── RUN SEED SCRIPTS ──────────────────────────────
+docker compose exec healthcare_server node src/db/seed_medicines.js
+docker compose exec healthcare_server node src/db/seed_pharmacies.js
+docker compose exec healthcare_server node src/db/seed_doctors.js
+
+# ── HEALTH CHECK ──────────────────────────────────
+Invoke-WebRequest -Uri http://localhost:8001/api/v1/health | Select-Object StatusCode
+
+
+# ✅ Full reset — PowerShell way
+docker compose down; docker compose up -d --build
+
+# ✅ Only run next if previous succeeds (true && equivalent)
+(docker compose down) -and (docker compose up -d --build)
+
+# ✅ Rebuild after any code change
+docker compose up -d --build server    # backend changes
+docker compose up -d --build client    # frontend changes
+docker compose up -d --build           # both

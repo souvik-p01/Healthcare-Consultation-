@@ -29,7 +29,6 @@ import { generateInvoiceNumber } from "../utils/invoiceUtils.js";
  */
 const createPaymentOrder = asyncHandler(async (req, res) => {
     const {
-        amount,
         currency = 'INR',
         appointmentId,
         serviceType,
@@ -38,11 +37,20 @@ const createPaymentOrder = asyncHandler(async (req, res) => {
         metadata = {}
     } = req.body;
 
+    // Sanitize amount: strip any currency symbols/letters and parse to float
+    const rawAmount = req.body.amount;
+    const amount = (() => {
+        if (typeof rawAmount === 'number') return rawAmount;
+        const cleaned = String(rawAmount ?? '').replace(/[^0-9.]/g, '');
+        const parsed = parseFloat(cleaned);
+        return isNaN(parsed) ? 0 : parsed;
+    })();
+
     const userId = req.user._id;
     const userRole = req.user.role;
 
     if (!amount || amount <= 0) {
-        throw new ApiError(400, "Valid payment amount is required");
+        throw new ApiError(400, `Valid payment amount is required. Received: ${JSON.stringify(req.body.amount)}`);
     }
     if (!serviceType) {
         throw new ApiError(400, "Service type is required");

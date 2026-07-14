@@ -14,7 +14,7 @@ const doctorSchema = new Schema({
     specialty: {
         type: String,
         required: true,
-        enum: ['Cardiology', 'Neurology', 'Pediatrics', 'Orthopedics', 'Dermatology', 'Psychiatry', 'General Medicine'],
+        enum: ['Cardiology', 'Neurology', 'Pediatrics', 'Orthopedics', 'Dermatology', 'Psychiatry', 'General Medicine', 'Pulmonology'],
         default: 'General Medicine'
     },
     experience: {

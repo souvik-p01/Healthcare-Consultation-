@@ -888,12 +888,12 @@ const PharmacyPage = () => {
   const BASE_URL = 'https://beta.myupchar.com/api/medicine/search'
 
   const categories = [
-    { id: 'all', name: 'All Medicines', count: 256 },
-    { id: 'Allopath', name: 'Allopath', count: 128 },
-    { id: 'Ayurveda', name: 'Ayurveda', count: 78 },
-    { id: 'Homeopath', name: 'Homeopath', count: 32 },
-    { id: 'Unani', name: 'Unani', count: 18 },
-    { id: 'General', name: 'General', count: 45 }
+    { id: 'all', name: 'All Medicines', count: 33 },
+    { id: 'Allopath', name: 'Allopath', count: 10 },
+    { id: 'Ayurveda', name: 'Ayurveda', count: 8 },
+    { id: 'Homeopath', name: 'Homeopath', count: 4 },
+    { id: 'Unani', name: 'Unani', count: 3 },
+    { id: 'General', name: 'General', count: 8 }
   ]
   const [currentCity, setCurrentCity] = useState("Your Location")
   const [pharmacyList, setPharmacyList] = useState([])
@@ -1068,7 +1068,8 @@ const PharmacyPage = () => {
       }
 
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`
+      // loading=async prevents the 'loaded directly without loading=async' warning
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places,marker&loading=async`
       script.async = true
       script.defer = true
       script.onload = () => setMapLoaded(true)

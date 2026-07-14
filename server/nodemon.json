@@ -1,0 +1,9 @@
+{
+  "watch": [
+    "src"
+  ],
+  "ignore": [
+    "src/db/seed.js"
+  ],
+  "delay": "1500"
+}

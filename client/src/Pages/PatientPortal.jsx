@@ -189,6 +189,7 @@ const PatientPortal = () => {
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'health-ai', label: 'AI Assistant', icon: Brain },
     { id: 'records', label: 'Medical Records', icon: FileText },
+    { id: 'ai-history', label: 'AI Intake History', icon: Clock },
     { id: 'pharmacy', label: 'Pharmacy', icon: Pill },
     { id: 'telemedicine', label: 'Telemedicine', icon: Video },
     { id: 'emergency', label: 'Emergency', icon: Ambulance },
@@ -873,6 +874,187 @@ const PatientPortal = () => {
     </div>
   );
 
+  const AIHistoryContent = () => {
+    const [sessions, setSessions] = useState([]);
+    const [loadingHistory, setLoadingHistory] = useState(true);
+    const [selectedSession, setSelectedSession] = useState(null);
+
+    useEffect(() => {
+      const fetchHistory = async () => {
+        try {
+          const res = await apiCall('/ai-symptom/patient');
+          if (res?.success && res.data?.sessions) {
+            setSessions(res.data.sessions);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setLoadingHistory(false);
+        }
+      };
+      fetchHistory();
+    }, []);
+
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">AI Symptom Check History</h2>
+            <p className="text-sm text-gray-500 mt-1">Review all your previous virtual clinical intake sessions.</p>
+          </div>
+          <button 
+            onClick={() => setActiveTab('health-ai')}
+            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all font-semibold text-sm shadow flex items-center gap-2"
+          >
+            <Plus size={16} /> Start New Intake
+          </button>
+        </div>
+
+        {loadingHistory ? (
+          <div className="text-center py-20 bg-white rounded-xl border border-gray-100">
+            <RefreshCw className="animate-spin text-blue-600 mx-auto mb-2" size={24} />
+            <p className="text-sm text-gray-500">Loading assessments...</p>
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-xl border border-gray-100 text-gray-500 text-sm">
+            You haven't run any AI symptom checks yet. Click "Start New Intake" to begin!
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {sessions.map((session) => (
+              <div key={session._id} className="bg-white rounded-xl p-5 border border-gray-100 hover:shadow-md transition-shadow flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">{new Date(session.createdAt).toLocaleDateString()}</span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                      session.riskAssessment?.level === 'emergency' ? 'bg-red-50 text-red-700 border-red-200' :
+                      session.riskAssessment?.level === 'high' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                      'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    }`}>
+                      {session.riskAssessment?.level.toUpperCase()} RISK
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-gray-800 text-base">
+                    Chief Complaint: {session.symptoms.find(s => s.isPrimary)?.name || "General Malaise"}
+                  </h4>
+                  <p className="text-xs text-gray-500 mt-1 line-clamp-2 italic">
+                    "{session.voiceInput?.translatedText}"
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {session.symptoms.slice(0, 3).map((sym, idx) => (
+                      <span key={idx} className="bg-slate-100 text-gray-600 px-2 py-0.5 rounded text-[10px] font-medium">
+                        {sym.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-100 mt-5 pt-4 flex gap-3">
+                  <button 
+                    onClick={() => setSelectedSession(session)}
+                    className="flex-1 bg-slate-50 hover:bg-slate-100 border border-gray-200 text-gray-700 text-xs font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Eye size={13} /> View Intake Note
+                  </button>
+                  {session.status === 'reviewed' && (
+                    <span className="text-[10px] text-green-600 bg-green-50 border border-green-200 px-3 py-2 rounded-lg font-bold flex items-center gap-1">
+                      ✓ Reviewed by Doctor
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* DETAILS MODAL */}
+        {selectedSession && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 relative">
+              <button 
+                onClick={() => setSelectedSession(null)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+              <h3 className="font-bold text-gray-800 text-lg border-b pb-3 mb-4">Intake Assessment Details</h3>
+              
+              <div className="space-y-6 text-sm">
+                <div>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Intake Text:</span>
+                  <p className="font-medium text-gray-700 italic bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1">
+                    "{selectedSession.voiceInput?.translatedText}"
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-xs font-bold text-gray-400 uppercase block">Risk Classification:</span>
+                    <span className="font-bold text-slate-800 mt-1 block">{selectedSession.riskAssessment?.level?.toUpperCase()}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-gray-400 uppercase block">Recommended Specialty:</span>
+                    <span className="font-semibold text-teal-600 mt-1 block">{selectedSession.doctorRecommendation?.specialty}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-xs font-bold text-gray-400 uppercase block mb-2">Clinical Symptoms (SNOMED CT):</span>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedSession.symptoms.map((sym, idx) => (
+                      <span key={idx} className="bg-slate-50 border border-slate-200 text-gray-700 px-3 py-1 rounded-lg text-xs font-semibold">
+                        {sym.name} (SNOMED: {sym.somedCode})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-xs font-bold text-gray-400 uppercase block mb-2">Ranked Conditions (ICD-11):</span>
+                  <div className="space-y-2">
+                    {selectedSession.clinicalReasoning.map((cond, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-xs font-semibold">
+                        <span className="text-slate-800">{cond.condition} (ICD-11: {cond.icd11})</span>
+                        <span className="text-teal-600">{cond.probability}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedSession.soapNote && (
+                  <div>
+                    <span className="text-xs font-bold text-gray-400 uppercase block mb-2">SOAP Report:</span>
+                    <div className="space-y-2 text-xs leading-relaxed text-gray-600 bg-slate-50 border p-4 rounded-xl">
+                      <p><strong>Subjective:</strong> {selectedSession.soapNote.subjective}</p>
+                      <p><strong>Objective:</strong> {selectedSession.soapNote.objective}</p>
+                      <p><strong>Assessment:</strong> {selectedSession.soapNote.assessment}</p>
+                      <p><strong>Plan:</strong> {selectedSession.soapNote.plan}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-gray-100 mt-6 pt-4 flex justify-end gap-3">
+                <button 
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-gray-700 transition-colors flex items-center gap-1.5"
+                >
+                  <Download size={13} /> Print Report
+                </button>
+                <button 
+                  onClick={() => setSelectedSession(null)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors"
+                >
+                  Close Window
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const OtherTabContent = () => {
     const currentNavItem = navItems.find(item => item.id === activeTab);
     const Icon = currentNavItem?.icon;
@@ -1131,6 +1313,8 @@ const PatientPortal = () => {
             {activeTab === 'appointments' && <AppointmentsContent />}
 
             {activeTab === 'records' && <HealthReports role="patient" />}
+
+            {activeTab === 'ai-history' && <AIHistoryContent />}
 
             {activeTab === 'pharmacy' && <PharmacyPage role="patient" />}
 

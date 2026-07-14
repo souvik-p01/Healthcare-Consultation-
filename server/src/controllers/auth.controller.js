@@ -183,9 +183,10 @@ export const login = async (req, res) => {
  * GOOGLE AUTHENTICATION
  */
 export const googleAuth = async (req, res) => {
-    console.log("👉 [DEBUG] googleAuth controller hit!");
+    console.log("👉 [googleAuth] Controller hit — method:", req.method, "| body keys:", Object.keys(req.body || {}));
     try {
         const { credential } = req.body;
+        console.log("📥 [googleAuth] credential received:", credential ? `${credential.substring(0, 20)}...` : "MISSING");
 
         if (!credential) {
             return res.status(400).json({
@@ -194,30 +195,40 @@ export const googleAuth = async (req, res) => {
             });
         }
 
-        // Verify Google token
-        const ticket = await googleClient.verifyIdToken({
-            idToken: credential,
-            audience: process.env.GOOGLE_CLIENT_ID
-        });
+        // ── Step 1: Verify Google token ──────────────────────────
+        console.log("🔍 [googleAuth] Verifying Google ID token with audience:", process.env.GOOGLE_CLIENT_ID?.substring(0, 20) + "...");
+        let ticket;
+        try {
+            ticket = await googleClient.verifyIdToken({
+                idToken: credential,
+                audience: process.env.GOOGLE_CLIENT_ID
+            });
+        } catch (verifyError) {
+            console.error("❌ [googleAuth] Google token verification FAILED:", verifyError.message);
+            return res.status(401).json({
+                success: false,
+                message: "Google token verification failed — invalid or expired credential",
+                error: verifyError.message
+            });
+        }
 
         const payload = ticket.getPayload();
         const { email, name, picture, sub: googleId } = payload;
+        console.log("✅ [googleAuth] Token verified — email:", email, "| googleId:", googleId?.substring(0, 10) + "...");
 
-        // Split name into firstName and lastName
-        const nameParts = name.split(' ');
-        const firstName = nameParts[0];
-        const lastName = nameParts.slice(1).join(' ') || '';
+        // ── Step 2: Parse name ───────────────────────────────────
+        const nameParts = (name || "").split(" ");
+        const firstName = nameParts[0] || "User";
+        const lastName = nameParts.slice(1).join(" ") || "Unknown";
 
-        // Check if user exists
-        let user = await User.findOne({ 
-            $or: [
-                { email },
-                { googleId }
-            ]
+        // ── Step 3: Find or create user ──────────────────────────
+        console.log("🔎 [googleAuth] Looking up user by email/googleId:", email);
+        let user = await User.findOne({
+            $or: [{ email }, { googleId }]
         });
 
         if (!user) {
-            // Create new user
+            console.log("🆕 [googleAuth] Creating new Google user:", email);
             user = await User.create({
                 firstName,
                 lastName,
@@ -225,21 +236,21 @@ export const googleAuth = async (req, res) => {
                 googleId,
                 avatar: picture,
                 role: "patient",
-                isEmailVerified: true, // Google emails are pre-verified
+                isEmailVerified: true,
                 authProvider: "google"
             });
+            console.log("✅ [googleAuth] New user created:", user._id);
 
-            // ✅ Create patient profile for new Google user
-            const patient = await Patient.create({
-                user: user._id,
-            });
+            // Create patient profile for new Google user
+            const patient = await Patient.create({ user: user._id });
             user.patientId = patient._id;
-            await user.save();
-            console.log("✅ Created new Google user and Patient profile:", email);
-            
+            await user.save({ validateBeforeSave: false });
+            console.log("✅ [googleAuth] Patient profile created:", patient._id);
+
         } else {
-            // Update existing user with Google info if needed
+            console.log("🔄 [googleAuth] Existing user found:", user._id, "| provider:", user.authProvider);
             let needsSave = false;
+
             if (!user.googleId) {
                 user.googleId = googleId;
                 user.authProvider = "google";
@@ -248,42 +259,38 @@ export const googleAuth = async (req, res) => {
                 needsSave = true;
             }
 
-            // ✅ Safety check: If role is patient but profile is missing, create it
             if (user.role === "patient" && !user.patientId) {
-                const patient = await Patient.create({
-                    user: user._id,
-                });
+                const patient = await Patient.create({ user: user._id });
                 user.patientId = patient._id;
                 needsSave = true;
-                console.log("✅ Fixed missing Patient profile for existing user:", email);
+                console.log("✅ [googleAuth] Fixed missing Patient profile for:", email);
             }
 
             if (needsSave) {
-                await user.save();
+                await user.save({ validateBeforeSave: false });
             }
         }
 
-        // Generate JWT tokens
+        // ── Step 4: Generate JWT tokens ──────────────────────────
+        console.log("🔑 [googleAuth] Generating JWT access token for:", user._id);
         const accessToken = jwt.sign(
-            { 
-                _id: user._id,
-                email: user.email,
-                role: user.role 
-            },
+            { _id: user._id, email: user.email, role: user.role },
             process.env.ACCESS_TOKEN_SECRET,
-            { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m" }
+            { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "1d" }
         );
 
+        console.log("🔄 [googleAuth] Generating refresh token for:", user._id);
         const refreshToken = jwt.sign(
             { _id: user._id },
             process.env.REFRESH_TOKEN_SECRET,
             { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d" }
         );
 
-        // Set refresh token in cookie
+        // ── Step 5: Set cookie ────────────────────────────────────
+        console.log("🍪 [googleAuth] Setting refreshToken cookie — httpOnly, sameSite:lax, secure:", process.env.NODE_ENV === "production");
         setTokenCookies(res, refreshToken);
 
-        // ✅ Return both tokens in response for Google auth (frontend may need refresh token)
+        console.log("🎉 [googleAuth] Authentication successful for:", email);
         return res.status(200).json({
             success: true,
             message: "Google authentication successful",
@@ -299,16 +306,18 @@ export const googleAuth = async (req, res) => {
                     authProvider: user.authProvider
                 },
                 accessToken,
-                refreshToken // ✅ Include refresh token in response body
+                refreshToken
             }
         });
 
     } catch (error) {
-        console.error("Google Auth Error:", error);
-        return res.status(401).json({
+        console.error("💥 [googleAuth] Unexpected error:", error.name, "|", error.message);
+        // Return 500 for unexpected server errors, not 401
+        // 401 is only for authentication failures (handled above per-step)
+        return res.status(500).json({
             success: false,
-            message: "Google authentication failed",
-            error: error.message
+            message: "Google authentication failed due to a server error",
+            error: process.env.NODE_ENV === "development" ? error.message : undefined
         });
     }
 };

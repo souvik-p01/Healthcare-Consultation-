@@ -8,6 +8,7 @@ import App from './App.jsx';
 import './index.css';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+console.log("Active Google Client ID in Frontend:", googleClientId);
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <GoogleOAuthProvider clientId={googleClientId}>

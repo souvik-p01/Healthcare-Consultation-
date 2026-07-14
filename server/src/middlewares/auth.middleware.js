@@ -59,12 +59,12 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
 export const optionalVerifyJWT = asyncHandler(async (req, res, next) => {
     try {
         const token =
-            req.cookies?.refreshToken ||
+            req.cookies?.accessToken ||
             req.header("Authorization")?.replace("Bearer ", "").trim();
 
         if (token) {
-            const decodedToken = verifyToken(token, process.env.ACCESS_TOKEN_SECRET);
-            const user = await User.findById(decodedToken.userId)
+            const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            const user = await User.findById(decodedToken._id)
                 .select("-password -refreshToken")
                 .lean();
 

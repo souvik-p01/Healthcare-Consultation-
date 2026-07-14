@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # 1. MongoDB Service (Local Database)
+  mongodb:
+    image: mongo:latest
+    container_name: healthcare_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+
+  # 2. Server (Backend API)
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: healthcare_server
+    # Run server in dev mode with nodemon for hot reloading
+    command: npm run dev
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    # Load default configuration and keys from local server .env
+    env_file:
+      - ./server/.env
+    environment:
+      - PORT=8001
+      # ✅ Using MongoDB Atlas URI from server/.env (has all real user/medicine/doctor data)
+      # To use local Docker MongoDB instead, uncomment the line below:
+      # - MONGODB_URI=mongodb://mongodb:27017/healthcare
+      - CORS_ORIGIN=http://localhost:5173
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  # 3. Client (Frontend React/Vite App)
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: healthcare_client
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    # Load frontend env configurations
+    env_file:
+      - ./client/.env
+    environment:
+      - VITE_BACKEND_URL=http://localhost:8001
+      # Enable polling for stable hot module replacement inside Docker
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:

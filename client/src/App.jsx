@@ -44,7 +44,6 @@ import WellnessPrograms from "./Pages/services/WellnessPrograms";
 
 /* -------- Admin Dashboard -------- */
 import AdminDashboard from "./Pages/AdminDashboard";
-import Dashboard from "./Pages/Dashboard";
 
 /* -------- Error Pages -------- */
 const Unauthorized = () => (
