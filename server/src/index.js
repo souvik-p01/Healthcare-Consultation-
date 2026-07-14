@@ -122,7 +122,12 @@ const getCorsOrigins = () => {
     if (process.env.CORS_ORIGIN) {
         return process.env.CORS_ORIGIN.split(',').map(o => o.trim());
     }
-    const origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"];
+    const origins = [
+        "http://localhost:3000", 
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173",
+        "https://healthcare-consultation-one.vercel.app"
+    ];
     if (process.env.FRONTEND_URL && !origins.includes(process.env.FRONTEND_URL)) {
         origins.push(process.env.FRONTEND_URL);
     }
@@ -420,6 +425,14 @@ const checkRequiredEnvVars = () => {
     }
     if (process.env.JWT_REFRESH_SECRET && !process.env.REFRESH_TOKEN_SECRET) {
         process.env.REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET;
+    }
+
+    // Standardize email notification credentials fallbacks
+    if (process.env.SMTP_USER && !process.env.EMAIL_USER) {
+        process.env.EMAIL_USER = process.env.SMTP_USER;
+    }
+    if (process.env.SMTP_PASS && !process.env.EMAIL_PASS) {
+        process.env.EMAIL_PASS = process.env.SMTP_PASS;
     }
 
     const requiredVars = [

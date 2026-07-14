@@ -84,7 +84,7 @@ const createEmailTransporter = () => {
             delete transportConfig.service;
         }
         
-        const transporter = nodemailer.createTransporter(transportConfig);
+        const transporter = nodemailer.createTransport(transportConfig);
         
         // Verify transporter configuration
         transporter.verify((error, success) => {
