@@ -28,8 +28,16 @@ const getApiBaseUrl = () => {
         }
     }
     
-    // Default development URL
-    return (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000') + '/api/v1';
+    // Default URL
+    if (import.meta.env.VITE_API_URL) {
+        return import.meta.env.VITE_API_URL;
+    }
+    if (import.meta.env.VITE_BACKEND_URL) {
+        return `${import.meta.env.VITE_BACKEND_URL}/api/v1`;
+    }
+    return import.meta.env.PROD 
+        ? 'https://healthcare-backend-ltkv.onrender.com/api/v1' 
+        : 'http://localhost:8001/api/v1';
 };
 
 const API_BASE_URL = getApiBaseUrl();

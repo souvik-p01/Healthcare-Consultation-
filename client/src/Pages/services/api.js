@@ -1,9 +1,9 @@
 import axios from 'axios';
 
 // Base URL for API requests
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL
-  ? `${import.meta.env.VITE_BACKEND_URL}/api/v1`
-  : 'http://localhost:8001/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.VITE_BACKEND_URL ? `${import.meta.env.VITE_BACKEND_URL}/api/v1` : '') ||
+  (import.meta.env.PROD ? 'https://healthcare-backend-ltkv.onrender.com/api/v1' : 'http://localhost:8001/api/v1');
 
 // Create axios instance with default config
 const api = axios.create({

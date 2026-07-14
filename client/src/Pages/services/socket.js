@@ -9,7 +9,9 @@ class SocketService {
   connect(token) {
     if (this.isConnected) return;
     
-    this.socket = io(import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000', {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 
+      (import.meta.env.PROD ? 'https://healthcare-backend-ltkv.onrender.com' : 'http://localhost:8001');
+    this.socket = io(backendUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
     });

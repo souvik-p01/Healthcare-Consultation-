@@ -33,7 +33,9 @@ export const AppContextProvider = ({ children }) => {
   //    so we don't get a double-refresh race condition.
   const skipInterceptorRefreshRef = React.useRef(false);
 
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 
+    (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api/v1', '') : '') ||
+    (import.meta.env.PROD ? 'https://healthcare-backend-ltkv.onrender.com' : 'http://localhost:8001');
 
   // ✅ Configure axios instance with useMemo to keep reference stable
   const api = React.useMemo(() => {
