@@ -456,7 +456,7 @@ class HealthcareLogger {
         const emergencyLog = {
             type: 'EMERGENCY',
             message: this.sanitizeSensitiveData(message),
-            ...this.sanitizeSensitiveData(details),
+            ...(details ? JSON.parse(this.sanitizeSensitiveData(details)) : {}),
             timestamp: new Date().toISOString()
         };
 

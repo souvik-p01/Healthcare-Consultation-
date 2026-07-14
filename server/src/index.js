@@ -118,10 +118,19 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration
+const getCorsOrigins = () => {
+    if (process.env.CORS_ORIGIN) {
+        return process.env.CORS_ORIGIN.split(',').map(o => o.trim());
+    }
+    const origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"];
+    if (process.env.FRONTEND_URL && !origins.includes(process.env.FRONTEND_URL)) {
+        origins.push(process.env.FRONTEND_URL);
+    }
+    return origins;
+};
+
 const corsOptions = {
-    origin: process.env.CORS_ORIGIN
-        ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-        : ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: getCorsOrigins(),
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-refresh-token", "x-request-id", "X-Request-ID"],
@@ -130,24 +139,21 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Rate limiting - DISABLED FOR DEVELOPMENT TO FIX 429 ERRORS
-/*
+// Rate limiting - Enabled in production and skipped in development
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'production' ? 100 : 10000, // ✅ Increased to 10000 for development
+    max: 100, // Limit each IP to 100 requests per 15 minutes in production
     message: 'Too many requests from this IP, please try again later',
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => {
-        // ✅ Use originalUrl to be safe with mount points
-        const isAuthRoute = req.originalUrl.includes('/auth/') || req.originalUrl.includes('/google');
-        return process.env.NODE_ENV !== 'production' && isAuthRoute;
+        // Skip rate limiting in development mode to prevent local 429 issues
+        return process.env.NODE_ENV !== 'production';
     }
 });
 
 // Apply rate limiting to API routes
 app.use('/api/', limiter);
-*/
 
 // Static files middleware
 app.use(express.static("public"));
@@ -408,6 +414,14 @@ const logServerShutdown = (reason) => {
  * Check if all required environment variables are present
  */
 const checkRequiredEnvVars = () => {
+    // Standardize JWT environment variable fallbacks for production deployment platforms
+    if (process.env.JWT_SECRET && !process.env.ACCESS_TOKEN_SECRET) {
+        process.env.ACCESS_TOKEN_SECRET = process.env.JWT_SECRET;
+    }
+    if (process.env.JWT_REFRESH_SECRET && !process.env.REFRESH_TOKEN_SECRET) {
+        process.env.REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET;
+    }
+
     const requiredVars = [
         'MONGODB_URI',
         'ACCESS_TOKEN_SECRET',
@@ -610,9 +624,22 @@ const startServer = async () => {
         console.log('🔌 Socket.io initialized on Express server');
 
         // Step 4: Handle server-level errors
+        let portRetryCount = 0;
+        const MAX_PORT_RETRIES = 3;
+
         server.on("error", (error) => {
             if (error.code === 'EADDRINUSE') {
-                console.warn(`⚠️  Port ${PORT} busy — waiting 2s for it to free up, then retrying...`);
+                portRetryCount++;
+                if (portRetryCount > MAX_PORT_RETRIES) {
+                    console.error(`\n❌ Port ${PORT} is permanently busy after ${MAX_PORT_RETRIES} attempts.`);
+                    console.error(`💡 Suggestion: Check if another instance of the server is running (e.g., in a Docker container or another terminal).`);
+                    console.error(`💡 You can run 'docker stop healthcare_server' to free up the port if it's occupied by Docker.`);
+                    if (logger && logger.emergency) {
+                        logger.emergency('Server startup failed - Port busy', { port: PORT, attempts: portRetryCount });
+                    }
+                    process.exit(1);
+                }
+                console.warn(`⚠️  Port ${PORT} busy — waiting 2s for it to free up, then retrying (Attempt ${portRetryCount}/${MAX_PORT_RETRIES})...`);
                 server.close();
                 setTimeout(() => {
                     server.listen(PORT, () => {
