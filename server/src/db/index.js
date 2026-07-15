@@ -274,18 +274,54 @@ const connectDB = async () => {
         setupConnectionListeners();
 
     } catch (error) {
-        console.error("❌ MONGODB Connection Error:", error.message);
+        console.error("❌ Primary MONGODB Connection Error:", error.message);
         
-        // Log additional error details for debugging
-        if (error.code) {
-            console.error(`🔢 Error Code: ${error.code}`);
+        // If we are in development mode, attempt automatic fallbacks to keep development working offline/un-whitelisted
+        if (process.env.NODE_ENV !== 'production') {
+            console.log("\n🔄 NODE_ENV is development. Attempting connection fallback...");
+            
+            // Fallback 1: Local MongoDB Instance
+            const localUri = `mongodb://127.0.0.1:27017/${DB_NAME}`;
+            console.log(`🔌 Attempting to connect to local MongoDB (${localUri})...`);
+            try {
+                const localInstance = await mongoose.connect(localUri, {
+                    ...connectionOptions,
+                    serverSelectionTimeoutMS: 2000 // Fast timeout for local fallback
+                });
+                console.log(`✅ Connected successfully to fallback local MongoDB!`);
+                console.log(`🏥 Healthcare Database Host: ${localInstance.connection.host}`);
+                setupConnectionListeners();
+                return;
+            } catch (localError) {
+                console.error("❌ Local MongoDB connection failed:", localError.message);
+                
+                // Fallback 2: Dynamic In-Memory MongoDB Server
+                console.log("🔌 Attempting to spin up and connect to an in-memory MongoDB server...");
+                try {
+                    const { MongoMemoryServer } = await import('mongodb-memory-server');
+                    const mongoServer = await MongoMemoryServer.create();
+                    const mongoUri = mongoServer.getUri();
+                    console.log(`📍 In-Memory MongoDB Server started at: ${mongoUri}`);
+                    
+                    const inMemoryInstance = await mongoose.connect(mongoUri, {
+                        ...connectionOptions,
+                        serverSelectionTimeoutMS: 5000
+                    });
+                    
+                    // Store server instance reference to stop it gracefully on disconnect
+                    mongoose.connection.mongoServer = mongoServer;
+                    
+                    console.log(`✅ Connected successfully to fallback in-memory MongoDB!`);
+                    setupConnectionListeners();
+                    return;
+                } catch (memError) {
+                    console.error("❌ In-Memory MongoDB connection failed:", memError.message);
+                }
+            }
         }
         
-        // For healthcare systems, we want to fail fast and clearly
+        // Fail fast in production or if all fallbacks fail
         console.error("🚨 Healthcare system cannot operate without database connection");
-        console.error("🔄 Please check your MONGODB_URI and network connectivity");
-        
-        // Exit the process - healthcare systems need reliable database access
         process.exit(1);
     }
 };
@@ -330,6 +366,10 @@ const setupConnectionListeners = () => {
 export const disconnectDB = async () => {
     try {
         await mongoose.connection.close();
+        if (mongoose.connection.mongoServer) {
+            await mongoose.connection.mongoServer.stop();
+            console.log('🔒 Fallback in-memory MongoDB server stopped gracefully');
+        }
         console.log('✅ Healthcare Database disconnected gracefully');
     } catch (error) {
         console.error('❌ Error during database disconnection:', error);
