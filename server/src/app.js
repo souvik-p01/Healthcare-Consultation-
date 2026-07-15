@@ -93,8 +93,8 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-refresh-token', 'X-Requested-With'],
-    exposedHeaders: ['X-Request-ID'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-refresh-token', 'X-Requested-With', 'x-rtb-fingerprint-id', 'request-id', 'X-Request-ID'],
+    exposedHeaders: ['X-Request-ID', 'x-rtb-fingerprint-id', 'request-id'],
     optionsSuccessStatus: 204
 }));
 

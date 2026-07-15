@@ -617,8 +617,10 @@ export const scheduleAppointment = asyncHandler(async (req, res) => {
   }
 
   const now = new Date();
-  if (appointmentDateTime < now) {
-    throw new ApiError(400, "Appointment date and time cannot be in the past");
+  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const apptDateOnly = new Date(appointmentDateTime.getFullYear(), appointmentDateTime.getMonth(), appointmentDateTime.getDate());
+  if (apptDateOnly < todayDate) {
+    throw new ApiError(400, "Appointment date cannot be in the past");
   }
 
   const hours = appointmentDateTime.getHours();

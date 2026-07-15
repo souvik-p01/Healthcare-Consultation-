@@ -14,6 +14,7 @@ import aiRoutes from "./ai.routes.js";
 import medicineRoutes from "./medicine.routes.js";
 import pharmacyOrderRoutes from "./pharmacyOrder.routes.js";
 import aiSymptomRoutes from "./aiSymptom.routes.js";
+import emergencyRoutes from "./emergency.routes.js";
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use("/ai", aiRoutes);
 router.use("/medicine", medicineRoutes);
 router.use("/pharmacy-orders", pharmacyOrderRoutes);
 router.use("/ai-symptom", aiSymptomRoutes);
+router.use("/emergency", emergencyRoutes);
 
 export default router;
