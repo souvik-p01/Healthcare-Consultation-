@@ -280,42 +280,58 @@ const connectDB = async () => {
         if (process.env.NODE_ENV !== 'production') {
             console.log("\n🔄 NODE_ENV is development. Attempting connection fallback...");
             
-            // Fallback 1: Local MongoDB Instance
-            const localUri = `mongodb://127.0.0.1:27017/${DB_NAME}`;
-            console.log(`🔌 Attempting to connect to local MongoDB (${localUri})...`);
+            // Fallback 1: Docker Local MongoDB Container Service
+            const dockerUri = `mongodb://mongodb:27017/${DB_NAME}`;
+            console.log(`🔌 Attempting to connect to Docker local MongoDB (${dockerUri})...`);
             try {
-                const localInstance = await mongoose.connect(localUri, {
+                const dockerInstance = await mongoose.connect(dockerUri, {
                     ...connectionOptions,
-                    serverSelectionTimeoutMS: 2000 // Fast timeout for local fallback
+                    serverSelectionTimeoutMS: 2000 // Fast timeout
                 });
-                console.log(`✅ Connected successfully to fallback local MongoDB!`);
-                console.log(`🏥 Healthcare Database Host: ${localInstance.connection.host}`);
+                console.log(`✅ Connected successfully to fallback Docker local MongoDB!`);
+                console.log(`🏥 Healthcare Database Host: ${dockerInstance.connection.host}`);
                 setupConnectionListeners();
                 return;
-            } catch (localError) {
-                console.error("❌ Local MongoDB connection failed:", localError.message);
+            } catch (dockerError) {
+                console.log("❌ Docker local MongoDB connection failed. Trying host instance...");
                 
-                // Fallback 2: Dynamic In-Memory MongoDB Server
-                console.log("🔌 Attempting to spin up and connect to an in-memory MongoDB server...");
+                // Fallback 2: Host Local MongoDB Instance
+                const localUri = `mongodb://127.0.0.1:27017/${DB_NAME}`;
+                console.log(`🔌 Attempting to connect to host local MongoDB (${localUri})...`);
                 try {
-                    const { MongoMemoryServer } = await import('mongodb-memory-server');
-                    const mongoServer = await MongoMemoryServer.create();
-                    const mongoUri = mongoServer.getUri();
-                    console.log(`📍 In-Memory MongoDB Server started at: ${mongoUri}`);
-                    
-                    const inMemoryInstance = await mongoose.connect(mongoUri, {
+                    const localInstance = await mongoose.connect(localUri, {
                         ...connectionOptions,
-                        serverSelectionTimeoutMS: 5000
+                        serverSelectionTimeoutMS: 2000
                     });
-                    
-                    // Store server instance reference to stop it gracefully on disconnect
-                    mongoose.connection.mongoServer = mongoServer;
-                    
-                    console.log(`✅ Connected successfully to fallback in-memory MongoDB!`);
+                    console.log(`✅ Connected successfully to fallback host local MongoDB!`);
+                    console.log(`🏥 Healthcare Database Host: ${localInstance.connection.host}`);
                     setupConnectionListeners();
                     return;
-                } catch (memError) {
-                    console.error("❌ In-Memory MongoDB connection failed:", memError.message);
+                } catch (localError) {
+                    console.error("❌ Host local MongoDB connection failed:", localError.message);
+                    
+                    // Fallback 3: Dynamic In-Memory MongoDB Server
+                    console.log("🔌 Attempting to spin up and connect to an in-memory MongoDB server...");
+                    try {
+                        const { MongoMemoryServer } = await import('mongodb-memory-server');
+                        const mongoServer = await MongoMemoryServer.create();
+                        const mongoUri = mongoServer.getUri();
+                        console.log(`📍 In-Memory MongoDB Server started at: ${mongoUri}`);
+                        
+                        const inMemoryInstance = await mongoose.connect(mongoUri, {
+                            ...connectionOptions,
+                            serverSelectionTimeoutMS: 5000
+                        });
+                        
+                        // Store server instance reference to stop it gracefully on disconnect
+                        mongoose.connection.mongoServer = mongoServer;
+                        
+                        console.log(`✅ Connected successfully to fallback in-memory MongoDB!`);
+                        setupConnectionListeners();
+                        return;
+                    } catch (memError) {
+                        console.error("❌ In-Memory MongoDB connection failed:", memError.message);
+                    }
                 }
             }
         }
