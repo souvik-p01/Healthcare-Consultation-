@@ -154,30 +154,64 @@ const EmergencyPage = () => {
     }
   }
 
+  const getRealAddressAndHospitals = async (coords) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lng}&format=json`, {
+        headers: {
+          'User-Agent': 'HealthcareConsultationApp/1.0'
+        }
+      })
+      const data = await res.json()
+      if (data && data.display_name) {
+        setLocation(data.display_name)
+      } else {
+        setLocation(`Lat: ${coords.lat.toFixed(4)}, Lng: ${coords.lng.toFixed(4)}`)
+      }
+    } catch (err) {
+      console.error('Reverse geocode failed:', err)
+      setLocation(`Lat: ${coords.lat.toFixed(4)}, Lng: ${coords.lng.toFixed(4)}`)
+    }
+    loadHospitals(coords)
+  }
+
   // Get user location
   useEffect(() => {
+    const fallbackToIpGeo = async () => {
+      try {
+        const ipResponse = await fetch('https://ipapi.co/json/')
+        const ipData = await ipResponse.json()
+        if (ipData.latitude && ipData.longitude) {
+          const coords = { lat: ipData.latitude, lng: ipData.longitude }
+          setUserCoordinates(coords)
+          await getRealAddressAndHospitals(coords)
+          return
+        }
+      } catch (ipError) {
+        console.error('IP Geolocation fallback failed:', ipError)
+      }
+      
+      setLocation('Mumbai (Default)')
+      const coords = { lat: 19.0760, lng: 72.8777 }
+      setUserCoordinates(coords)
+      loadHospitals(coords)
+    }
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords
           const coords = { lat: latitude, lng: longitude }
           setUserCoordinates(coords)
-          setLocation(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`)
-          loadHospitals(coords)
+          getRealAddressAndHospitals(coords)
         },
         (error) => {
-          console.error('Error getting location:', error)
-          setLocation('Mumbai (Default)')
-          const coords = { lat: 19.0760, lng: 72.8777 }
-          setUserCoordinates(coords)
-          loadHospitals(coords)
+          console.warn('Browser Geolocation failed, falling back to IP Geolocation:', error.message)
+          fallbackToIpGeo()
         },
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
       )
     } else {
-      const coords = { lat: 19.0760, lng: 72.8777 }
-      setUserCoordinates(coords)
-      loadHospitals(coords)
+      fallbackToIpGeo()
     }
   }, [])
 

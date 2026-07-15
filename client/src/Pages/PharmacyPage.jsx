@@ -948,6 +948,24 @@ const PharmacyPage = () => {
 
   // Resolve city/neighborhood (using guess as immediate fallback, and Geocoder as precise refinement)
   useEffect(() => {
+    const fallbackGeocode = async (coords) => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lng}&format=json`, {
+          headers: {
+            'User-Agent': 'HealthcareConsultationApp/1.0'
+          }
+        });
+        const data = await res.json();
+        if (data && data.address) {
+          const addr = data.address;
+          const resolvedCity = addr.city || addr.town || addr.village || addr.suburb || addr.county || "Your Location";
+          setCurrentCity(resolvedCity);
+        }
+      } catch (err) {
+        console.error("Nominatim reverse geocode failed in PharmacyPage:", err);
+      }
+    };
+
     if (userLocation) {
       const guessed = guessCityFromCoords(userLocation);
       setCurrentCity(guessed);
@@ -979,12 +997,19 @@ const PharmacyPage = () => {
               
               if (resolved) {
                 setCurrentCity(resolved);
+              } else {
+                fallbackGeocode(userLocation);
               }
+            } else {
+              fallbackGeocode(userLocation);
             }
           });
         } catch (err) {
           console.error("Error geocoding userLocation:", err);
+          fallbackGeocode(userLocation);
         }
+      } else {
+        fallbackGeocode(userLocation);
       }
     }
   }, [userLocation, mapLoaded]);
@@ -1082,6 +1107,20 @@ const PharmacyPage = () => {
 
   // Get user location
   useEffect(() => {
+    const fallbackToIpGeo = async () => {
+      try {
+        const ipResponse = await fetch('https://ipapi.co/json/')
+        const ipData = await ipResponse.json()
+        if (ipData.latitude && ipData.longitude) {
+          setUserLocation({ lat: ipData.latitude, lng: ipData.longitude })
+          return
+        }
+      } catch (ipError) {
+        console.error('IP Geolocation fallback failed in PharmacyPage:', ipError)
+      }
+      setUserLocation({ lat: 19.0760, lng: 72.8777 })
+    }
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -1091,9 +1130,12 @@ const PharmacyPage = () => {
           })
         },
         () => {
-          setUserLocation({ lat: 19.0760, lng: 72.8777 })
-        }
+          fallbackToIpGeo()
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
       )
+    } else {
+      fallbackToIpGeo()
     }
   }, [])
 
