@@ -82,12 +82,25 @@ app.use(cors({
     origin: function (origin, callback) {
         // Allow requests with no origin (server-to-server, curl, Postman)
         if (!origin) return callback(null, true);
+        
         const allowedOrigins = process.env.CORS_ORIGIN
             ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-            : ['http://localhost:5173', 'http://127.0.0.1:5173'];
-        if (allowedOrigins.includes(origin)) {
+            : [];
+            
+        const localAndProductionDefaults = [
+            'http://localhost:5173', 
+            'http://127.0.0.1:5173',
+            'https://healthcare-consultation-one.vercel.app'
+        ];
+        
+        if (
+            allowedOrigins.includes(origin) || 
+            localAndProductionDefaults.includes(origin) || 
+            origin.endsWith('.vercel.app')
+        ) {
             return callback(null, true);
         }
+        
         console.warn(`⚠️  CORS blocked origin: ${origin}`);
         return callback(new Error('CORS policy violation'), false);
     },
