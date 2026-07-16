@@ -134,7 +134,8 @@ export const paymentAPI = {
 
 // Emergency services
 export const emergencyAPI = {
-  getHospitals: (params) => api.get('/emergency/hospitals', { params }),
+  getHospitals: (params) => api.get('/hospitals/nearby', { params }),
+  getNearbyAmbulances: (params) => api.get('/ambulance/nearby', { params }),
   requestAmbulance: (data) => api.post('/emergency/request-ambulance', data),
   getAmbulanceRequest: (requestId) => api.get(`/emergency/ambulance-request/${requestId}`),
   cancelAmbulanceRequest: (requestId) => api.post(`/emergency/ambulance-request/${requestId}/cancel`),
@@ -143,7 +144,7 @@ export const emergencyAPI = {
 // Medicine services
 export const medicineAPI = {
   getMedicines: (params) => api.get('/medicine', { params }),
-  getPharmacies: (params) => api.get('/medicine/pharmacies', { params }),
+  getPharmacies: (params) => api.get('/pharmacy/nearby', { params }),
 };
 
 // Pharmacy Order services

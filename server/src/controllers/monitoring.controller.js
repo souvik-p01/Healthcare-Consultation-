@@ -88,6 +88,13 @@ const seedInitialData = async (userId) => {
         const diastolicBP = [80, 78, 81, 79, 82, 80, 79];
         const temperatures = [98.6, 98.4, 98.7, 98.5, 98.8, 98.6, 98.6];
         const oxygens = [98, 97, 98, 99, 98, 98, 98];
+        const respiration = [16, 17, 15, 16, 18, 16, 16];
+        const sugar = [90, 95, 88, 92, 94, 89, 90];
+        const bmiVals = [22.4, 22.4, 22.5, 22.5, 22.5, 22.5, 22.5];
+        const weightVals = [70.2, 70.1, 70.3, 70.4, 70.4, 70.3, 70.2];
+        const sleepHours = [7.2, 7.5, 6.8, 8.0, 7.4, 7.1, 7.5];
+        const stepCounts = [8400, 9200, 7500, 6800, 8100, 10200, 8400];
+        const calorieCounts = [2200, 2350, 2100, 2050, 2250, 2450, 2200];
 
         for (let i = 6; i >= 0; i--) {
             const timestamp = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
@@ -141,6 +148,90 @@ const seedInitialData = async (userId) => {
                 trend: "stable",
                 timestamp
             });
+
+            // Respiratory Rate
+            metricsToInsert.push({
+                userId,
+                metricType: "respiratory_rate",
+                value: respiration[idx],
+                unit: "breaths/min",
+                status: "normal",
+                range: "12-20",
+                trend: "stable",
+                timestamp
+            });
+
+            // Blood Sugar
+            metricsToInsert.push({
+                userId,
+                metricType: "blood_sugar",
+                value: sugar[idx],
+                unit: "mg/dL",
+                status: "normal",
+                range: "70-140",
+                trend: "stable",
+                timestamp
+            });
+
+            // BMI
+            metricsToInsert.push({
+                userId,
+                metricType: "bmi",
+                value: bmiVals[idx],
+                unit: "kg/m²",
+                status: "normal",
+                range: "18.5-24.9",
+                trend: "stable",
+                timestamp
+            });
+
+            // Weight
+            metricsToInsert.push({
+                userId,
+                metricType: "weight",
+                value: weightVals[idx],
+                unit: "kg",
+                status: "normal",
+                range: "60-80",
+                trend: "stable",
+                timestamp
+            });
+
+            // Sleep
+            metricsToInsert.push({
+                userId,
+                metricType: "sleep",
+                value: sleepHours[idx],
+                unit: "hrs",
+                status: "normal",
+                range: "7-9",
+                trend: "stable",
+                timestamp
+            });
+
+            // Steps
+            metricsToInsert.push({
+                userId,
+                metricType: "steps",
+                value: stepCounts[idx],
+                unit: "steps",
+                status: "normal",
+                range: "5000-10000",
+                trend: "stable",
+                timestamp
+            });
+
+            // Calories
+            metricsToInsert.push({
+                userId,
+                metricType: "calories",
+                value: calorieCounts[idx],
+                unit: "kcal",
+                status: "normal",
+                range: "1800-2500",
+                trend: "stable",
+                timestamp
+            });
         }
         await HealthMetric.insertMany(metricsToInsert);
     }
@@ -171,6 +262,24 @@ export const addMetric = asyncHandler(async (req, res) => {
     } else if (metricType === "blood_oxygen") {
         range = "95-100";
         status = value >= 95 ? "good" : "warning";
+    } else if (metricType === "respiratory_rate") {
+        range = "12-20";
+        if (value < 12 || value > 20) status = "warning";
+    } else if (metricType === "blood_sugar") {
+        range = "70-140";
+        if (value < 70 || value > 140) status = "warning";
+    } else if (metricType === "bmi") {
+        range = "18.5-24.9";
+        if (value < 18.5 || value > 24.9) status = "warning";
+    } else if (metricType === "weight") {
+        range = "60-80";
+    } else if (metricType === "sleep") {
+        range = "7-9";
+        if (value < 7) status = "warning";
+    } else if (metricType === "steps") {
+        range = "5000-10000";
+    } else if (metricType === "calories") {
+        range = "1800-2500";
     }
 
     const metric = await HealthMetric.create({
@@ -219,7 +328,10 @@ export const getLatestMetrics = asyncHandler(async (req, res) => {
     const userId = req.user.userId || req.user._id;
     await seedInitialData(userId);
 
-    const types = ["heart_rate", "blood_pressure", "temperature", "blood_oxygen"];
+    const types = [
+        "heart_rate", "blood_pressure", "temperature", "blood_oxygen",
+        "respiratory_rate", "blood_sugar", "bmi", "weight", "sleep", "steps", "calories"
+    ];
     const latestMetrics = {};
 
     for (const type of types) {

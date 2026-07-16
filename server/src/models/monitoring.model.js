@@ -11,7 +11,7 @@ const metricSchema = new Schema({
     metricType: {
         type: String,
         required: true,
-        enum: ["heart_rate", "blood_pressure", "temperature", "blood_oxygen"]
+        enum: ["heart_rate", "blood_pressure", "temperature", "blood_oxygen", "respiratory_rate", "blood_sugar", "bmi", "weight", "sleep", "steps", "calories"]
     },
     value: {
         type: Number

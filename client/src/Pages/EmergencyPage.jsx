@@ -32,6 +32,31 @@ const EmergencyPage = () => {
   const [mapHospitals, setMapHospitals] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [ambulances, setAmbulances] = useState([])
+  const [availableAmbulances, setAvailableAmbulances] = useState([])
+  const [selectedAmbulanceProvider, setSelectedAmbulanceProvider] = useState('')
+
+  // Fetch available ambulances near coordinates
+  useEffect(() => {
+    if (userCoordinates) {
+      const fetchAmbulances = async () => {
+        try {
+          const res = await emergencyAPI.getNearbyAmbulances({
+            lat: userCoordinates.lat,
+            lng: userCoordinates.lng
+          })
+          if (res?.data?.success) {
+            setAvailableAmbulances(res.data.data)
+            if (res.data.data.length > 0) {
+              setSelectedAmbulanceProvider(res.data.data[0].providerName)
+            }
+          }
+        } catch (error) {
+          console.error("Failed to fetch nearby ambulances:", error)
+        }
+      }
+      fetchAmbulances()
+    }
+  }, [userCoordinates])
   const [mapError, setMapError] = useState(null)
   const [mapLoaded, setMapLoaded] = useState(false)
   const mapContainerRef = useRef(null)
@@ -532,7 +557,8 @@ const EmergencyPage = () => {
           lng: userCoordinates?.lng || 72.8777,
           address: location
         },
-        eta: eta
+        eta: eta,
+        providerName: selectedAmbulanceProvider
       })
 
       if (response?.data?.success) {
@@ -702,6 +728,27 @@ const EmergencyPage = () => {
           <div className="p-4 md:p-8">
             {!emergencyActive ? (
               <div>
+                {/* Ambulance Provider Dropdown */}
+                {availableAmbulances.length > 0 && (
+                  <div className="max-w-md mx-auto mb-6 bg-red-50 border border-red-100 rounded-xl p-4 text-left">
+                    <label htmlFor="ambulance-provider-select" className="block text-sm font-bold text-red-700 mb-2">
+                      Select Preferred Ambulance Provider (Dynamic)
+                    </label>
+                    <select
+                      id="ambulance-provider-select"
+                      value={selectedAmbulanceProvider}
+                      onChange={(e) => setSelectedAmbulanceProvider(e.target.value)}
+                      className="w-full px-4 py-3 bg-white border border-red-200 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-500 shadow-sm font-medium cursor-pointer"
+                    >
+                      {[...new Set(availableAmbulances.map(a => a.providerName))].map((prov) => (
+                        <option key={prov} value={prov}>
+                          {prov}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Emergency Button */}
                 <div className="text-center mb-8 md:mb-12">
                   <button

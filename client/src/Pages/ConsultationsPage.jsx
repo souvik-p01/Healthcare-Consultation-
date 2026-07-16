@@ -27,15 +27,9 @@ const ConsultationsPage = () => {
   const [showReceipt, setShowReceipt] = useState(false)
   const [receiptInfo, setReceiptInfo] = useState({})
 
-  const specialties = [
-    { id: 'all', name: 'All Specialties', count: 24 },
-    { id: 'cardiology', name: 'Cardiology', count: 6 },
-    { id: 'neurology', name: 'Neurology', count: 4 },
-    { id: 'pediatrics', name: 'Pediatrics', count: 5 },
-    { id: 'orthopedics', name: 'Orthopedics', count: 4 },
-    { id: 'dermatology', name: 'Dermatology', count: 3 },
-    { id: 'psychiatry', name: 'Psychiatry', count: 2 }
-  ]
+  const [specialties, setSpecialties] = useState([
+    { id: 'all', name: 'All Specialties', count: 0 }
+  ])
 
   const consultationTypes = [
     { type: 'video', icon: <Video className="w-5 h-5" />, label: 'Video Consultation' },
@@ -47,11 +41,40 @@ const ConsultationsPage = () => {
   const [doctors, setDoctors] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // Fetch specialties counts on mount
+  useEffect(() => {
+    const fetchSpecialties = async () => {
+      try {
+        const response = await apiCall('/specialties')
+        if (response?.data) {
+          const fetched = response.data
+          const total = fetched.reduce((sum, item) => sum + item.count, 0)
+          setSpecialties([
+            { id: 'all', name: 'All Specialties', count: total },
+            ...fetched.map(s => ({
+              id: s.name.toLowerCase(),
+              name: s.name,
+              count: s.count
+            }))
+          ])
+        }
+      } catch (error) {
+        console.error("Failed to fetch specialties:", error)
+      }
+    }
+    fetchSpecialties()
+  }, [])
+
+  // Fetch filtered doctors from backend
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
         setLoading(true)
-        const response = await apiCall(`/doctors?specialty=${selectedSpecialty === 'all' ? '' : selectedSpecialty}`)
+        const selectedItem = specialties.find(s => s.id === selectedSpecialty)
+        const specName = (selectedItem && selectedItem.id !== 'all') ? selectedItem.name : ''
+        
+        // Fetch matching doctors from backend
+        const response = await apiCall(`/doctors?specialization=${specName}`)
         setDoctors(response.data || [])
       } catch (error) {
         console.error("Failed to fetch doctors:", error)
@@ -60,7 +83,7 @@ const ConsultationsPage = () => {
       }
     }
     fetchDoctors()
-  }, [selectedSpecialty])
+  }, [selectedSpecialty, specialties])
 
   const filteredDoctors = doctors
 

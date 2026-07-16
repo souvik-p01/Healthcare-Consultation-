@@ -16,6 +16,12 @@ import pharmacyOrderRoutes from "./pharmacyOrder.routes.js";
 import aiSymptomRoutes from "./aiSymptom.routes.js";
 import emergencyRoutes from "./emergency.routes.js";
 
+// New geospatial & specialty routes
+import hospitalRoutes from "./hospital.routes.js";
+import ambulanceRoutes from "./ambulance.routes.js";
+import pharmacyRoutes from "./pharmacy.routes.js";
+import { getSpecialties } from "../controllers/doctor.controller.js";
+
 const router = Router();
 
 router.use("/auth", authRoutes);
@@ -34,5 +40,11 @@ router.use("/medicine", medicineRoutes);
 router.use("/pharmacy-orders", pharmacyOrderRoutes);
 router.use("/ai-symptom", aiSymptomRoutes);
 router.use("/emergency", emergencyRoutes);
+
+// Register the new dynamic services
+router.get("/specialties", getSpecialties);
+router.use("/hospitals", hospitalRoutes);
+router.use("/ambulance", ambulanceRoutes);
+router.use("/pharmacy", pharmacyRoutes);
 
 export default router;

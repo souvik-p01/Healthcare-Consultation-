@@ -33,6 +33,13 @@ const METHODS = [
     color: 'blue',
   },
   {
+    id: 'stripe',
+    label: 'Stripe',
+    sub: 'International Card Payments',
+    icon: <CreditCard className="w-5 h-5" />,
+    color: 'blue',
+  },
+  {
     id: 'netbanking',
     label: 'Net Banking',
     sub: 'All major banks',
@@ -176,6 +183,29 @@ const PaymentGateway = ({
     return { paymentId: orderData.data.paymentId, orderId: orderData.data.orderId, method: 'cod', data: orderData.data };
   };
 
+  /* ── Stripe ── */
+  const handleStripe = async () => {
+    const { data: orderData } = await paymentAPI.createOrder({
+      amount: numericAmount,
+      currency: 'INR',
+      serviceType: orderDetails.serviceType || 'pharmacy',
+      description: orderDetails.description || 'Stripe Card Payment',
+      paymentMethod: 'stripe',
+      metadata: orderDetails.metadata || {},
+    });
+    await new Promise((r) => setTimeout(r, 1000)); // Simulated processing delay
+    
+    // Auto-confirm the stripe payment simulation in backend
+    await paymentAPI.confirmPayment({
+      razorpay_order_id: orderData.data.orderId,
+      razorpay_payment_id: `ch_${Date.now()}`,
+      razorpay_signature: "stripe_mock_sig",
+      isStripe: true
+    });
+
+    return { paymentId: `ch_${Date.now()}`, orderId: orderData.data.orderId, method: 'stripe', data: orderData.data };
+  };
+
   /* ── main pay handler ── */
   const handlePay = async () => {
     setIsProcessing(true);
@@ -184,6 +214,7 @@ const PaymentGateway = ({
       switch (selectedMethod) {
         case 'upi':        result = await openRazorpay('upi');        break;
         case 'card':       result = await openRazorpay('card');       break;
+        case 'stripe':     result = await handleStripe();             break;
         case 'netbanking': result = await openRazorpay('netbanking'); break;
         case 'wallet':     result = await openRazorpay('wallet');     break;
         case 'cod':        result = await handleCOD();                break;
@@ -227,7 +258,7 @@ const PaymentGateway = ({
 
         <div className="p-4 md:p-6">
           <div className="text-center mb-6 p-4 bg-gradient-to-r from-violet-50 to-blue-50 rounded-xl">
-            <div className="text-4xl font-bold text-gray-800">₹{amount.toFixed(2)}</div>
+            <div className="text-4xl font-bold text-gray-800">₹{numericAmount.toFixed(2)}</div>
             <div className="text-sm text-gray-600 mt-1">Total Amount</div>
           </div>
 

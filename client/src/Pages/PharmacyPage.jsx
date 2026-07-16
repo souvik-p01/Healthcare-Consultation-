@@ -905,7 +905,9 @@ const PharmacyPage = () => {
         lat: searchCoords.lat,
         lng: searchCoords.lng
       });
-      const backendPharmacies = response.data.data?.pharmacies || response.data.pharmacies || [];
+      const backendPharmacies = Array.isArray(response.data.data)
+        ? response.data.data
+        : (response.data.data?.pharmacies || response.data.pharmacies || []);
       
       let mapped = backendPharmacies.map(pharm => {
         let lat = pharm.coordinates.lat;

@@ -64,6 +64,11 @@ const MonitoringPage = () => {
     fetchData()
   }, [])
 
+  // Fetch trends when selectedMetric changes
+  useEffect(() => {
+    fetchTrends(selectedMetric)
+  }, [selectedMetric])
+
   const fetchData = async () => {
     try {
       setLoading(true)
@@ -139,18 +144,50 @@ const MonitoringPage = () => {
     }
   }
 
-  const fetchTrends = async () => {
+  const fetchTrends = async (metricKey) => {
     try {
-      const heartRes = await healthMetricsService.getMetricsTrend('heart_rate', 7)
-      const bpRes = await healthMetricsService.getMetricsTrend('blood_pressure', 7)
+      const keyMap = {
+        heart: 'heart_rate',
+        bp: 'blood_pressure',
+        temp: 'temperature',
+        oxygen: 'blood_oxygen',
+        respiratory: 'respiratory_rate',
+        sugar: 'blood_sugar',
+        bmi: 'bmi',
+        weight: 'weight',
+        sleep: 'sleep',
+        steps: 'steps',
+        calories: 'calories'
+      }
+      const backendKey = keyMap[metricKey || selectedMetric] || 'heart_rate'
+      const res = await healthMetricsService.getMetricsTrend(backendKey, 7)
       
-      if (heartRes.data?.success && bpRes.data?.success) {
-        const heartTrend = heartRes.data.data.map(m => m.value || 0)
-        const bpTrend = bpRes.data.data.map(m => m.systolic || 0)
+      if (res.data?.success) {
+        const trendData = res.data.data.map(m => {
+          if (backendKey === 'blood_pressure') {
+            return m.systolic || 0
+          }
+          return m.value || 0
+        })
+        
+        // Generate fallback values if no trend is seeded yet
+        const defaultTrends = {
+          heart: [72, 75, 70, 68, 74, 72, 71],
+          bp: [120, 118, 122, 119, 121, 120, 118],
+          temp: [98.6, 98.4, 98.7, 98.5, 98.8, 98.6, 98.6],
+          oxygen: [98, 97, 98, 99, 98, 98, 98],
+          respiratory: [16, 17, 15, 16, 18, 16, 16],
+          sugar: [90, 95, 88, 92, 94, 89, 90],
+          bmi: [22.4, 22.4, 22.5, 22.5, 22.5, 22.5, 22.5],
+          weight: [70.2, 70.1, 70.3, 70.4, 70.4, 70.3, 70.2],
+          sleep: [7.2, 7.5, 6.8, 8.0, 7.4, 7.1, 7.5],
+          steps: [8400, 9200, 7500, 6800, 8100, 10200, 8400],
+          calories: [2200, 2350, 2100, 2050, 2250, 2450, 2200]
+        }
+
         setTrends({
           labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-          heartRate: heartTrend.length > 0 ? heartTrend : [72, 75, 70, 68, 74, 72, 71],
-          bloodPressure: bpTrend.length > 0 ? bpTrend : [120, 118, 122, 119, 121, 120, 118]
+          data: trendData.length > 0 ? trendData : (defaultTrends[metricKey || selectedMetric] || [70, 72, 71, 73, 72, 74, 72])
         })
       }
     } catch (err) {
@@ -185,7 +222,49 @@ const MonitoringPage = () => {
         value: metricsData.blood_oxygen.value,
         status: metricsData.blood_oxygen.status,
         trend: metricsData.blood_oxygen.trend
-      } : defaults.oxygen
+      } : defaults.oxygen,
+      respiratory: metricsData.respiratory_rate ? {
+        ...defaults.respiratory,
+        value: metricsData.respiratory_rate.value,
+        status: metricsData.respiratory_rate.status,
+        trend: metricsData.respiratory_rate.trend
+      } : defaults.respiratory,
+      sugar: metricsData.blood_sugar ? {
+        ...defaults.sugar,
+        value: metricsData.blood_sugar.value,
+        status: metricsData.blood_sugar.status,
+        trend: metricsData.blood_sugar.trend
+      } : defaults.sugar,
+      bmi: metricsData.bmi ? {
+        ...defaults.bmi,
+        value: metricsData.bmi.value,
+        status: metricsData.bmi.status,
+        trend: metricsData.bmi.trend
+      } : defaults.bmi,
+      weight: metricsData.weight ? {
+        ...defaults.weight,
+        value: metricsData.weight.value,
+        status: metricsData.weight.status,
+        trend: metricsData.weight.trend
+      } : defaults.weight,
+      sleep: metricsData.sleep ? {
+        ...defaults.sleep,
+        value: metricsData.sleep.value,
+        status: metricsData.sleep.status,
+        trend: metricsData.sleep.trend
+      } : defaults.sleep,
+      steps: metricsData.steps ? {
+        ...defaults.steps,
+        value: metricsData.steps.value,
+        status: metricsData.steps.status,
+        trend: metricsData.steps.trend
+      } : defaults.steps,
+      calories: metricsData.calories ? {
+        ...defaults.calories,
+        value: metricsData.calories.value,
+        status: metricsData.calories.status,
+        trend: metricsData.calories.trend
+      } : defaults.calories
     }
   }
 
@@ -225,6 +304,69 @@ const MonitoringPage = () => {
       icon: <Droplets className="w-6 h-6" />,
       status: 'good',
       range: '95-100',
+      trend: 'stable'
+    },
+    respiratory: {
+      value: 16,
+      unit: 'breaths/min',
+      label: 'Respiratory Rate',
+      icon: <Activity className="w-6 h-6" />,
+      status: 'normal',
+      range: '12-20',
+      trend: 'stable'
+    },
+    sugar: {
+      value: 90,
+      unit: 'mg/dL',
+      label: 'Blood Sugar',
+      icon: <Droplets className="w-6 h-6" />,
+      status: 'normal',
+      range: '70-140',
+      trend: 'stable'
+    },
+    bmi: {
+      value: 22.5,
+      unit: 'kg/m²',
+      label: 'BMI',
+      icon: <TrendingUp className="w-6 h-6" />,
+      status: 'normal',
+      range: '18.5-24.9',
+      trend: 'stable'
+    },
+    weight: {
+      value: 70,
+      unit: 'kg',
+      label: 'Weight',
+      icon: <Activity className="w-6 h-6" />,
+      status: 'normal',
+      range: '60-80',
+      trend: 'stable'
+    },
+    sleep: {
+      value: 7.5,
+      unit: 'hrs',
+      label: 'Sleep',
+      icon: <Clock className="w-6 h-6" />,
+      status: 'normal',
+      range: '7-9',
+      trend: 'stable'
+    },
+    steps: {
+      value: 8400,
+      unit: 'steps',
+      label: 'Steps',
+      icon: <TrendingUp className="w-6 h-6" />,
+      status: 'normal',
+      range: '5000-10000',
+      trend: 'stable'
+    },
+    calories: {
+      value: 2200,
+      unit: 'kcal',
+      label: 'Calories',
+      icon: <Zap className="w-6 h-6" />,
+      status: 'normal',
+      range: '1800-2500',
       trend: 'stable'
     }
   })
@@ -483,22 +625,27 @@ const MonitoringPage = () => {
                   <div className="bg-gray-50 rounded-xl p-4">
                     <h4 className="font-medium text-gray-700 mb-3">Weekly Trend</h4>
                     <div className="h-32 flex items-end gap-1">
-                      {trends[selectedMetric === 'heart' ? 'heartRate' : 'bloodPressure'].map((value, idx) => (
-                        <div
-                          key={idx}
-                          className="flex-1 flex flex-col items-center"
-                        >
+                      {trends.data && trends.data.map((value, idx) => {
+                        const maxVal = Math.max(...trends.data, 1);
+                        const percentHeight = (value / maxVal) * 90 + 10; // min 10% for visibility
+                        return (
                           <div
-                            className={`w-full rounded-t ${
-                              selectedMetric === 'heart'
-                                ? 'bg-orange-500'
-                                : 'bg-blue-500'
-                            }`}
-                            style={{ height: `${(value / 200) * 100}%` }}
-                          ></div>
-                          <div className="text-xs text-gray-500 mt-1">{trends.labels[idx]}</div>
-                        </div>
-                      ))}
+                            key={idx}
+                            className="flex-1 flex flex-col items-center animate-fadeIn"
+                          >
+                            <div
+                              className={`w-full rounded-t ${
+                                selectedMetric === 'heart'
+                                  ? 'bg-orange-500'
+                                  : 'bg-blue-500'
+                              }`}
+                              style={{ height: `${percentHeight}%` }}
+                              title={`${value} ${vitals[selectedMetric].unit}`}
+                            ></div>
+                            <div className="text-xs text-gray-500 mt-1">{trends.labels[idx]}</div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

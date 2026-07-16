@@ -113,8 +113,11 @@ export const getNearbyHospitals = asyncHandler(async (req, res) => {
 /* ============================================================
    🚨 REQUEST AMBULANCE
 ============================================================ */
+import { Hospital } from "../models/Hospital.model.js";
+import { Ambulance } from "../models/Ambulance.model.js";
+
 export const requestAmbulance = asyncHandler(async (req, res) => {
-  const { hospitalId, pickupLocation, eta } = req.body;
+  const { hospitalId, pickupLocation, eta, providerName } = req.body;
   const patientId = req.user._id;
 
   if (!hospitalId || !pickupLocation) {
@@ -124,26 +127,46 @@ export const requestAmbulance = asyncHandler(async (req, res) => {
   const pickupLat = parseFloat(pickupLocation.lat) || 19.0760;
   const pickupLng = parseFloat(pickupLocation.lng) || 72.8777;
   
-  const hospitals = getMockHospitals(pickupLat, pickupLng);
-  const selectedHospital = hospitals.find(h => h._id === hospitalId) || hospitals[0];
+  // Find real hospital from MongoDB
+  const selectedHospital = await Hospital.findById(hospitalId) || await Hospital.findOne();
+  if (!selectedHospital) {
+    throw new ApiError(404, "No hospital found to dispatch ambulance");
+  }
+
+  // Find real ambulance from MongoDB matching the provider name
+  const query = {};
+  if (providerName) {
+    query.providerName = providerName;
+  }
+  let ambulance = await Ambulance.findOne(query);
+  if (!ambulance) {
+    ambulance = await Ambulance.findOne() || {
+      ambulanceNumber: "MH-12-AM-9999",
+      driverName: "Vikram Singh",
+      driverPhone: "+91 98765 43210",
+      latitude: selectedHospital.latitude,
+      longitude: selectedHospital.longitude,
+      estimatedArrival: 15
+    };
+  }
 
   const ambulanceRequest = new AmbulanceRequest({
     patientId,
     hospitalId,
-    hospitalName: selectedHospital.name,
+    hospitalName: selectedHospital.hospitalName,
     pickupLocation: {
       lat: pickupLat,
       lng: pickupLng,
       address: pickupLocation.address || "Current Location"
     },
     status: "dispatched",
-    eta: eta || 15,
-    driverName: "Vikram Singh",
-    driverPhone: "+91 98765 43210",
-    ambulanceNumber: "MH-12-EM-4567",
+    eta: eta || ambulance.estimatedArrival || 15,
+    driverName: ambulance.driverName,
+    driverPhone: ambulance.driverPhone,
+    ambulanceNumber: ambulance.ambulanceNumber,
     currentLocation: {
-      lat: selectedHospital.coordinates.lat,
-      lng: selectedHospital.coordinates.lng
+      lat: ambulance.latitude,
+      lng: ambulance.longitude
     }
   });
 

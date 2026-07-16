@@ -1,9 +1,10 @@
-import { Doctor } from "../models/Doctor.model.js";
+import { Doctor } from "../models/Doctor.js";
 import { Appointment } from "../models/appointment.model.js";
 import { Patient } from "../models/Patient.model.js";
 import { Prescription } from "../models/prescription.model.js";
 import { MedicalRecord } from "../models/medicalRecord.model.js";
 import { User } from "../models/User.model.js";
+import doctorService from "../services/doctor.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -18,24 +19,40 @@ const getDoctorOrCreate = async (user) => {
     if (!doctor) {
         // Try searching by name
         const fullName = `${user.firstName} ${user.lastName}`.trim();
-        doctor = await Doctor.findOne({ name: new RegExp('^Dr\\.?\\s*' + fullName + '$', 'i') }) ||
-                 await Doctor.findOne({ name: new RegExp('^' + fullName + '$', 'i') });
+        doctor = await Doctor.findOne({ fullName: new RegExp('^Dr\\.?\\s*' + fullName + '$', 'i') }) ||
+                 await Doctor.findOne({ fullName: new RegExp('^' + fullName + '$', 'i') });
     }
     
     if (!doctor) {
         // Create new Doctor document
+        const generatedId = `doc_${user._id.toString().substring(18)}`;
         doctor = await Doctor.create({
-            name: `Dr. ${user.firstName} ${user.lastName}`,
-            medicalLicenseNumber: `LIC-${user._id.toString().substring(18).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
-            specialty: 'General Medicine',
-            experience: '5 years',
-            price: '₹500',
+            doctorId: generatedId,
+            fullName: `Dr. ${user.firstName} ${user.lastName}`,
+            gender: user.gender || "Male",
+            qualification: "MBBS, MD",
+            specialization: "General Medicine",
+            yearsOfExperience: 5,
+            hospitalName: "HealthCare Plus Hospital",
+            consultationFee: 500,
+            languages: ["English", "Hindi"],
             rating: 4.8,
-            reviews: 10,
-            image: user.avatar || '👨‍⚕️',
-            availableToday: true,
-            languages: ['English', 'Hindi'],
-            availability: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+            reviewCount: 10,
+            profilePhoto: user.avatar || "👨‍⚕️",
+            availability: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+            nextAvailableSlot: "Tomorrow",
+            address: "Sector 5, Salt Lake",
+            city: "Kolkata",
+            state: "West Bengal",
+            country: "India",
+            latitude: 22.5726,
+            longitude: 88.3639,
+            phone: user.phoneNumber || "+91 98765 43210",
+            email: user.email,
+            teleconsultAvailable: true,
+            emergencyAvailable: true,
+            verified: true,
+            licenseNumber: `LIC-${user._id.toString().substring(18).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`
         });
     }
     
@@ -49,20 +66,15 @@ const getDoctorOrCreate = async (user) => {
 };
 
 /**
- * Get all doctors with optional specialty filtering
+ * Get all doctors with optional filterings
  */
 export const getAllDoctors = asyncHandler(async (req, res) => {
-    const { specialty } = req.query;
+    const result = await doctorService.queryDoctors(req.query);
     
-    const query = {};
-    if (specialty && specialty !== 'all') {
-        query.specialty = new RegExp(specialty, 'i');
-    }
-
-    const doctors = await Doctor.find(query).sort({ rating: -1 });
-
+    // Format response data to array of doctors for backwards compatibility if needed, 
+    // but returning full result object containing the list
     return res.status(200).json(
-        new ApiResponse(200, doctors, "Doctors fetched successfully")
+        new ApiResponse(200, result.doctors, "Doctors fetched successfully", { pagination: result.pagination })
     );
 });
 
@@ -70,19 +82,57 @@ export const getAllDoctors = asyncHandler(async (req, res) => {
  * Add a new doctor (Admin only)
  */
 export const addDoctor = asyncHandler(async (req, res) => {
-    const { name, specialty, experience, price, languages, availability } = req.body;
+    const { 
+        fullName, 
+        gender, 
+        qualification, 
+        specialization, 
+        subspecialization, 
+        yearsOfExperience, 
+        hospitalName, 
+        clinicName, 
+        consultationFee, 
+        languages, 
+        profilePhoto, 
+        availability, 
+        address, 
+        city, 
+        state, 
+        latitude, 
+        longitude, 
+        phone, 
+        email, 
+        teleconsultAvailable, 
+        emergencyAvailable, 
+        licenseNumber 
+    } = req.body;
 
-    if (!name || !specialty || !experience || !price) {
-        throw new ApiError(400, "All required fields must be provided");
-    }
+    const doctorId = `doc_${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const doctor = await Doctor.create({
-        name,
-        specialty,
-        experience,
-        price,
-        languages: languages || ['English', 'Hindi'],
-        availability: availability || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+    const doctor = await doctorService.addDoctor({
+        doctorId,
+        fullName,
+        gender,
+        qualification,
+        specialization,
+        subspecialization: subspecialization || "",
+        yearsOfExperience: parseInt(yearsOfExperience),
+        hospitalName,
+        clinicName: clinicName || "",
+        consultationFee: parseFloat(consultationFee),
+        languages: languages || ["English", "Hindi"],
+        profilePhoto: profilePhoto || "👨‍⚕️",
+        availability: availability || ["Mon", "Tue", "Wed", "Thu", "Fri"],
+        address,
+        city,
+        state,
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        phone,
+        email,
+        teleconsultAvailable: teleconsultAvailable !== false,
+        emergencyAvailable: emergencyAvailable === true,
+        licenseNumber
     });
 
     return res.status(201).json(
@@ -96,7 +146,7 @@ export const addDoctor = asyncHandler(async (req, res) => {
 export const deleteDoctor = asyncHandler(async (req, res) => {
     const { doctorId } = req.params;
 
-    const doctor = await Doctor.findByIdAndDelete(doctorId);
+    const doctor = await doctorService.deleteDoctor(doctorId);
 
     if (!doctor) {
         throw new ApiError(404, "Doctor not found");
@@ -104,6 +154,16 @@ export const deleteDoctor = asyncHandler(async (req, res) => {
 
     return res.status(200).json(
         new ApiResponse(200, {}, "Doctor removed successfully")
+    );
+});
+
+/**
+ * Get specialties count dynamically from database
+ */
+export const getSpecialties = asyncHandler(async (req, res) => {
+    const specialties = await doctorService.getSpecialties();
+    return res.status(200).json(
+        new ApiResponse(200, specialties, "Specialties counts retrieved successfully")
     );
 });
 
@@ -187,11 +247,11 @@ export const getDoctorDashboard = asyncHandler(async (req, res) => {
     ];
     
     const doctorInfo = {
-        name: doctor.name,
-        specialty: doctor.specialty,
-        experience: doctor.experience,
+        name: doctor.fullName,
+        specialty: doctor.specialization,
+        experience: `${doctor.yearsOfExperience} years`,
         rating: doctor.rating,
-        totalPatients: doctor.reviews * 12 + 15
+        totalPatients: doctor.reviewCount * 12 + 15
     };
     
     return res.status(200).json(new ApiResponse(200, {
@@ -255,7 +315,7 @@ export const getDoctorAppointments = asyncHandler(async (req, res) => {
         if (apt.appointmentType === 'video') typeStr = 'Video Consultation';
         else if (apt.appointmentType === 'phone') typeStr = 'Phone Call';
         else if (apt.appointmentType === 'chat') typeStr = 'Online Chat';
-
+ 
         return {
             id: apt._id,
             name: patientName,

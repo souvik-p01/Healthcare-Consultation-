@@ -1,7 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 
-const pharmacySchema = new Schema({
-    pharmacyName: {
+const hospitalSchema = new Schema({
+    hospitalName: {
         type: String,
         required: true,
         trim: true
@@ -22,27 +22,25 @@ const pharmacySchema = new Schema({
         type: String,
         required: true
     },
-    openNow: {
-        type: Boolean,
-        default: true
-    },
-    deliveryAvailable: {
-        type: Boolean,
-        default: true
-    },
     rating: {
         type: Number,
         default: 4.5
     },
-    availableMedicines: [
-        {
-            type: Schema.Types.ObjectId,
-            ref: "Medicine"
-        }
-    ],
-    isGooglePlace: {
+    ambulanceAvailable: {
         type: Boolean,
-        default: false
+        default: true
+    },
+    emergency: {
+        type: Boolean,
+        default: true
+    },
+    departments: {
+        type: [String],
+        default: ["Emergency", "Cardiology", "Neurology", "General Medicine"]
+    },
+    beds: {
+        type: Number,
+        default: 10
     },
     location: {
         type: {
@@ -62,20 +60,26 @@ const pharmacySchema = new Schema({
 });
 
 // Geospatial index for nearby querying
-pharmacySchema.index({ location: "2dsphere" });
+hospitalSchema.index({ location: "2dsphere" });
 
-// Backwards compatibility virtuals/aliases for old database/frontend code
-pharmacySchema.virtual("name").get(function() {
-    return this.pharmacyName;
+// Backwards compatibility virtuals/aliases for frontend
+hospitalSchema.virtual("name").get(function() {
+    return this.hospitalName;
 }).set(function(val) {
-    this.pharmacyName = val;
+    this.hospitalName = val;
 });
 
-pharmacySchema.virtual("coordinates").get(function() {
+hospitalSchema.virtual("available").get(function() {
+    return this.ambulanceAvailable;
+}).set(function(val) {
+    this.ambulanceAvailable = val;
+});
+
+hospitalSchema.virtual("coordinates").get(function() {
     return {
         lat: this.latitude,
         lng: this.longitude
     };
 });
 
-export const Pharmacy = mongoose.models.Pharmacy || mongoose.model("Pharmacy", pharmacySchema);
+export const Hospital = mongoose.models.Hospital || mongoose.model("Hospital", hospitalSchema);
