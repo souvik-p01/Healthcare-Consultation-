@@ -141,8 +141,8 @@ const EmergencyPage = () => {
         const fetchedHospitals = response.data.data
         
         // Calculate distances if coordinates are available
-        const userLat = coords?.lat || 19.0760
-        const userLng = coords?.lng || 72.8777
+        const userLat = coords?.lat || 23.2324
+        const userLng = coords?.lng || 87.0633
         
         let nearest = null
         let minDistance = Infinity
@@ -215,8 +215,8 @@ const EmergencyPage = () => {
         console.error('IP Geolocation fallback failed:', ipError)
       }
       
-      setLocation('Mumbai (Default)')
-      const coords = { lat: 19.0760, lng: 72.8777 }
+      setLocation('Bankura (Default)')
+      const coords = { lat: 23.2324, lng: 87.0633 }
       setUserCoordinates(coords)
       loadHospitals(coords)
     }
@@ -297,7 +297,7 @@ const EmergencyPage = () => {
     if (!mapContainerRef.current || !window.google) return
 
     try {
-      const center = userCoordinates || { lat: 19.0760, lng: 72.8777 }
+      const center = userCoordinates || { lat: 23.2324, lng: 87.0633 }
 
       const mapOptions = {
         center: center,
@@ -553,8 +553,8 @@ const EmergencyPage = () => {
       const response = await emergencyAPI.requestAmbulance({
         hospitalId: selectedHospital._id,
         pickupLocation: {
-          lat: userCoordinates?.lat || 19.0760,
-          lng: userCoordinates?.lng || 72.8777,
+          lat: userCoordinates?.lat || 23.2324,
+          lng: userCoordinates?.lng || 87.0633,
           address: location
         },
         eta: eta,
