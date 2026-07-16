@@ -542,222 +542,231 @@ export const getPatientPrescriptions = asyncHandler(async (req, res) => {
    📅 SCHEDULE APPOINTMENT
 ============================================================ */
 export const scheduleAppointment = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const { doctorId, date, time, appointmentDate, appointmentTime, type, reason, notes, phone, email } = req.body;
-  // Prefer the new keys if provided
-  const effectiveDate = appointmentDate || date;
-  const effectiveTime = appointmentTime || time;
+  try {
+    const userId = req.user._id;
+    const { doctorId, date, time, appointmentDate, appointmentTime, type, reason, notes, phone, email } = req.body;
+    // Prefer the new keys if provided
+    const effectiveDate = appointmentDate || date;
+    const effectiveTime = appointmentTime || time;
 
-  const user = await User.findById(userId);
-  if (!user) {
-    throw new ApiError(404, "User not found");
-  }
-
-  let patientId = user.patientId;
-  if (!patientId) {
-    let patientDoc = await Patient.findOne({ user: userId });
-    if (patientDoc) {
-      patientId = patientDoc._id;
-      await User.findByIdAndUpdate(userId, { patientId });
-    } else {
-      // Automatically create a patient profile if needed (for patients, admins, doctors doing testing)
-      patientDoc = new Patient({
-        user: userId,
-        bloodType: "Unknown",
-        height: { value: 0, unit: "cm" },
-        weight: { value: 0, unit: "kg" },
-        medicalHistory: { conditions: [], surgeries: [], familyHistory: [] },
-        allergies: [],
-        medications: []
-      });
-      await patientDoc.save();
-      patientId = patientDoc._id;
-      await User.findByIdAndUpdate(userId, { patientId });
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new ApiError(404, "User not found");
     }
-  }
 
-  // Handle mock doctor IDs or invalid ObjectIds by finding/creating a real doctor user
-  let targetDoctorId = doctorId;
-  const isObjectId = mongoose.Types.ObjectId.isValid(doctorId);
-  if (!isObjectId) {
-    const firstDoc = await User.findOne({ role: 'doctor' });
-    if (firstDoc) {
-      targetDoctorId = firstDoc._id;
-    } else {
-      const dummyDocUser = new User({
-        firstName: "Rajesh",
-        lastName: "Kumar",
-        email: "rajesh.kumar@healthcare.com",
-        password: "Password123!",
-        role: "doctor",
-        specialization: "General Physician",
-        consultationFee: 499,
-        isActive: true,
-        isEmailVerified: true
-      });
-      await dummyDocUser.save({ validateBeforeSave: false });
-      targetDoctorId = dummyDocUser._id;
+    let patientId = user.patientId;
+    if (!patientId) {
+      let patientDoc = await Patient.findOne({ user: userId });
+      if (patientDoc) {
+        patientId = patientDoc._id;
+        await User.findByIdAndUpdate(userId, { patientId });
+      } else {
+        // Automatically create a patient profile if needed (for patients, admins, doctors doing testing)
+        patientDoc = new Patient({
+          user: userId,
+          bloodType: "Unknown",
+          height: { value: 0, unit: "cm" },
+          weight: { value: 0, unit: "kg" },
+          medicalHistory: { conditions: [], surgeries: [], familyHistory: [] },
+          allergies: [],
+          medications: []
+        });
+        await patientDoc.save();
+        patientId = patientDoc._id;
+        await User.findByIdAndUpdate(userId, { patientId });
+      }
     }
-  } else {
-    // Check if the doctor exists
-    const doctorExists = await User.findById(doctorId);
-    if (!doctorExists) {
+
+    // Handle mock doctor IDs or invalid ObjectIds by finding/creating a real doctor user
+    let targetDoctorId = doctorId;
+    const isObjectId = mongoose.Types.ObjectId.isValid(doctorId);
+    if (!isObjectId) {
       const firstDoc = await User.findOne({ role: 'doctor' });
       if (firstDoc) {
         targetDoctorId = firstDoc._id;
+      } else {
+        const dummyDocUser = new User({
+          firstName: "Rajesh",
+          lastName: "Kumar",
+          email: "rajesh.kumar@healthcare.com",
+          password: "Password123!",
+          role: "doctor",
+          specialization: "General Physician",
+          consultationFee: 499,
+          isActive: true,
+          isEmailVerified: true
+        });
+        await dummyDocUser.save({ validateBeforeSave: false });
+        targetDoctorId = dummyDocUser._id;
+      }
+    } else {
+      // Check if the doctor exists
+      const doctorExists = await User.findById(doctorId);
+      if (!doctorExists) {
+        const firstDoc = await User.findOne({ role: 'doctor' });
+        if (firstDoc) {
+          targetDoctorId = firstDoc._id;
+        }
       }
     }
-  }
 
-  // Combine date and time
-  const appointmentDateTime = new Date(`${effectiveDate}T${effectiveTime}:00`);
-  
-  if (isNaN(appointmentDateTime.getTime())) {
-    throw new ApiError(400, "Invalid date or time format");
-  }
-
-  const now = new Date();
-  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const apptDateOnly = new Date(appointmentDateTime.getFullYear(), appointmentDateTime.getMonth(), appointmentDateTime.getDate());
-  if (apptDateOnly < todayDate) {
-    throw new ApiError(400, "Appointment date cannot be in the past");
-  }
-
-  const hours = appointmentDateTime.getHours();
-  if (hours < 6 || hours > 22) {
-    throw new ApiError(400, "Appointments can only be scheduled between 6 AM and 10 PM");
-  }
-  
-  // Check if doctor is available (up to 10 video slots, block other slot-hogging types)
-  const requestedApptType = type || "in-person";
-  const existingAppointments = await Appointment.find({
-    doctorId: targetDoctorId,
-    appointmentDate: appointmentDateTime,
-    status: { $in: ["scheduled", "confirmed"] }
-  });
-
-  if (existingAppointments.length > 0) {
-    const hasNonVideo = existingAppointments.some(apt => apt.appointmentType !== 'video');
-    if (hasNonVideo || requestedApptType !== 'video') {
-      throw new ApiError(400, "Doctor is not available at this time");
-    }
-    const maxVideoSlots = 10;
-    if (existingAppointments.length >= maxVideoSlots) {
-      throw new ApiError(400, `Doctor has reached the maximum capacity of ${maxVideoSlots} video consultations for this time slot`);
-    }
-  }
-
-  // Dynamic fee calculation based on type
-  let fee = 500;
-  if (type === 'video') fee = 499;
-  else if (type === 'phone') fee = 299;
-  else if (type === 'chat') fee = 199;
-
-  // Admin role gets free bypass
-  const isFree = user.role === "admin";
-
-  let meetLink = null;
-  if (requestedApptType === 'video') {
-    meetLink = generateGoogleMeetLink();
-  }
-
-  // Log incoming payload for debugging
-  console.log('scheduleAppointment payload:', req.body);
-  const appointment = new Appointment({
-    patientId,
-    doctorId: targetDoctorId,
-    appointmentDate: appointmentDateTime,
-    appointmentTime: effectiveTime,
-    appointmentType: requestedApptType,
-    consultationFee: fee,
-    symptoms: reason || "",
-    patientNotes: notes || "",
-    status: isFree ? "confirmed" : "scheduled",
-    paymentStatus: isFree ? "free" : "pending",
-    videoConsultation: requestedApptType === 'video' ? {
-      meetingUrl: meetLink,
-      joinUrl: meetLink,
-      meetingId: meetLink.split('/').pop()
-    } : undefined
-  });
-
-  await appointment.save();
-
-  // Populate doctor details
-  await appointment.populate({
-    path: "doctorId",
-    select: "firstName lastName specialization avatar",
-  });
-
-  // Send SMS/Email notifications with Google Meet / local room info
-  try {
-    const roomID = `telemed_${appointment._id || appointment.id}`;
-    let joinUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/services/telemedicine?room=${roomID}`;
-    if (requestedApptType === 'video' && meetLink) {
-      joinUrl = meetLink;
+    // Combine date and time
+    const appointmentDateTime = new Date(`${effectiveDate}T${effectiveTime}:00`);
+    
+    if (isNaN(appointmentDateTime.getTime())) {
+      throw new ApiError(400, "Invalid date or time format");
     }
 
-    const doctorName = appointment.doctorId 
-      ? `Dr. ${appointment.doctorId.firstName} ${appointment.doctorId.lastName}` 
-      : "your doctor";
+    const now = new Date();
+    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const apptDateOnly = new Date(appointmentDateTime.getFullYear(), appointmentDateTime.getMonth(), appointmentDateTime.getDate());
+    if (apptDateOnly < todayDate) {
+      throw new ApiError(400, "Appointment date cannot be in the past");
+    }
 
-    const targetPhone = phone || user.phoneNumber;
-    const targetEmail = email || user.email;
-    const patientName = user.firstName 
-      ? `${user.firstName} ${user.lastName || ""}`.trim()
-      : "Patient";
+    const hours = appointmentDateTime.getHours();
+    if (hours < 6 || hours > 22) {
+      throw new ApiError(400, "Appointments can only be scheduled between 6 AM and 10 PM");
+    }
+    
+    // Check if doctor is available (up to 10 video slots, block other slot-hogging types)
+    const requestedApptType = type || "in-person";
+    const existingAppointments = await Appointment.find({
+      doctorId: targetDoctorId,
+      appointmentDate: appointmentDateTime,
+      status: { $in: ["scheduled", "confirmed"] }
+    });
 
-    let meetMsg = "";
+    if (existingAppointments.length > 0) {
+      const hasNonVideo = existingAppointments.some(apt => apt.appointmentType !== 'video');
+      if (hasNonVideo || requestedApptType !== 'video') {
+        throw new ApiError(400, "Doctor is not available at this time");
+      }
+      const maxVideoSlots = 10;
+      if (existingAppointments.length >= maxVideoSlots) {
+        throw new ApiError(400, `Doctor has reached the maximum capacity of ${maxVideoSlots} video consultations for this time slot`);
+      }
+    }
+
+    // Dynamic fee calculation based on type
+    let fee = 500;
+    if (type === 'video') fee = 499;
+    else if (type === 'phone') fee = 299;
+    else if (type === 'chat') fee = 199;
+
+    // Admin role gets free bypass
+    const isFree = user.role === "admin";
+
+    let meetLink = null;
     if (requestedApptType === 'video') {
-      meetMsg = `Google Meet link: ${meetLink}`;
-    } else if (requestedApptType === 'chat') {
-      meetMsg = `Chat Link: ${joinUrl}`;
-    } else if (requestedApptType === 'phone') {
-      meetMsg = `The doctor will call you on your registered phone.`;
-    } else {
-      meetMsg = `Location: Main Clinic`;
+      meetLink = generateGoogleMeetLink();
     }
 
-    const msg = `Hello ${patientName}, your ${requestedApptType} consultation with ${doctorName} is ${appointment.status} for ${effectiveDate} at ${effectiveTime}. ${meetMsg}`;
+    // Log incoming payload for debugging
+    console.log('scheduleAppointment payload:', req.body);
+    const appointment = new Appointment({
+      patientId,
+      doctorId: targetDoctorId,
+      appointmentDate: appointmentDateTime,
+      appointmentTime: effectiveTime,
+      appointmentType: requestedApptType,
+      consultationFee: fee,
+      symptoms: reason || "",
+      patientNotes: notes || "",
+      status: isFree ? "confirmed" : "scheduled",
+      paymentStatus: isFree ? "free" : "pending",
+      videoConsultation: requestedApptType === 'video' ? {
+        meetingUrl: meetLink,
+        joinUrl: meetLink,
+        meetingId: meetLink.split('/').pop()
+      } : undefined
+    });
 
-    // Send SMS if phone number is available
-    if (targetPhone && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-      await sendSMSNotification(targetPhone, {
-        message: msg,
-        type: "appointment"
-      });
-      console.log(`📱 SMS invitation sent to ${targetPhone}`);
-    } else {
-      console.log(`ℹ️ Twilio credentials missing or phone number unavailable. SMS log: "${msg}"`);
+    await appointment.save();
+
+    // Populate doctor details
+    await appointment.populate({
+      path: "doctorId",
+      select: "firstName lastName specialization avatar",
+    });
+
+    // Send SMS/Email notifications with Google Meet / local room info
+    try {
+      const roomID = `telemed_${appointment._id || appointment.id}`;
+      let joinUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/services/telemedicine?room=${roomID}`;
+      if (requestedApptType === 'video' && meetLink) {
+        joinUrl = meetLink;
+      }
+
+      const doctorName = appointment.doctorId 
+        ? `Dr. ${appointment.doctorId.firstName} ${appointment.doctorId.lastName}` 
+        : "your doctor";
+
+      const targetPhone = phone || user.phoneNumber;
+      const targetEmail = email || user.email;
+      const patientName = user.firstName 
+        ? `${user.firstName} ${user.lastName || ""}`.trim()
+        : "Patient";
+
+      let meetMsg = "";
+      if (requestedApptType === 'video') {
+        meetMsg = `Google Meet link: ${meetLink}`;
+      } else if (requestedApptType === 'chat') {
+        meetMsg = `Chat Link: ${joinUrl}`;
+      } else if (requestedApptType === 'phone') {
+        meetMsg = `The doctor will call you on your registered phone.`;
+      } else {
+        meetMsg = `Location: Main Clinic`;
+      }
+
+      const msg = `Hello ${patientName}, your ${requestedApptType} consultation with ${doctorName} is ${appointment.status} for ${effectiveDate} at ${effectiveTime}. ${meetMsg}`;
+
+      // Send SMS if phone number is available
+      if (targetPhone && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+        await sendSMSNotification(targetPhone, {
+          message: msg,
+          type: "appointment"
+        });
+        console.log(`📱 SMS invitation sent to ${targetPhone}`);
+      } else {
+        console.log(`ℹ️ Twilio credentials missing or phone number unavailable. SMS log: "${msg}"`);
+      }
+
+      // Send Email if email is available
+      if (targetEmail && process.env.SMTP_HOST && process.env.SMTP_USER) {
+        await sendEmailNotification(targetEmail, {
+          subject: `Your ${requestedApptType.toUpperCase()} Consultation Room Info - MedCare`,
+          template: 'appointment',
+          data: {
+            title: `Your ${requestedApptType.toUpperCase()} Consultation Room is Ready`,
+            patientName: patientName,
+            message: `Your virtual ${requestedApptType} session has been booked. You can join the session room directly using the link below.`,
+            appointmentDate: effectiveDate,
+            appointmentTime: effectiveTime,
+            doctorName: doctorName,
+            actionUrl: joinUrl
+          }
+        });
+        console.log(`📧 Email invitation sent to ${targetEmail}`);
+      } else {
+        console.log(`ℹ️ SMTP credentials missing or email unavailable. Email template log prepared.`);
+      }
+    } catch (notifErr) {
+      // Fail silently for notifications so appointment booking itself doesn't crash if Twilio/SMTP fails
+      console.error("⚠️ Failed to send booking notifications:", notifErr.message);
     }
 
-    // Send Email if email is available
-    if (targetEmail && process.env.SMTP_HOST && process.env.SMTP_USER) {
-      await sendEmailNotification(targetEmail, {
-        subject: `Your ${requestedApptType.toUpperCase()} Consultation Room Info - MedCare`,
-        template: 'appointment',
-        data: {
-          title: `Your ${requestedApptType.toUpperCase()} Consultation Room is Ready`,
-          patientName: patientName,
-          message: `Your virtual ${requestedApptType} session has been booked. You can join the session room directly using the link below.`,
-          appointmentDate: effectiveDate,
-          appointmentTime: effectiveTime,
-          doctorName: doctorName,
-          actionUrl: joinUrl
-        }
-      });
-      console.log(`📧 Email invitation sent to ${targetEmail}`);
-    } else {
-      console.log(`ℹ️ SMTP credentials missing or email unavailable. Email template log prepared.`);
-    }
-  } catch (notifErr) {
-    // Fail silently for notifications so appointment booking itself doesn't crash if Twilio/SMTP fails
-    console.error("⚠️ Failed to send booking notifications:", notifErr.message);
+    return res.status(201).json(
+      new ApiResponse(201, { appointment }, "Appointment scheduled successfully")
+    );
+  } catch (err) {
+    console.error("🚨 scheduleAppointment Exception:", err);
+    return res.status(500).json({
+      success: false,
+      message: `Booking failed: ${err.message}`,
+      stack: err.stack
+    });
   }
-
-  return res.status(201).json(
-    new ApiResponse(201, { appointment }, "Appointment scheduled successfully")
-  );
 });
 
 /* ============================================================
