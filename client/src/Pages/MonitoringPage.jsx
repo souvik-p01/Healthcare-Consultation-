@@ -38,7 +38,12 @@ const MonitoringPage = () => {
   const [medications, setMedications] = useState([])
   const [reminders, setReminders] = useState([])
   const [vitals, setVitals] = useState({})
-  const [trends, setTrends] = useState({ labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], heartRate: [], bloodPressure: [] })
+  const [trends, setTrends] = useState({
+    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    heartRate: [72, 75, 70, 68, 74, 72, 71],
+    bloodPressure: [120, 118, 122, 119, 121, 120, 118],
+    data: [72, 75, 70, 68, 74, 72, 71]
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -185,9 +190,19 @@ const MonitoringPage = () => {
           calories: [2200, 2350, 2100, 2050, 2250, 2450, 2200]
         }
 
-        setTrends({
-          labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-          data: trendData.length > 0 ? trendData : (defaultTrends[metricKey || selectedMetric] || [70, 72, 71, 73, 72, 74, 72])
+        const calculatedData = trendData.length > 0 ? trendData : (defaultTrends[metricKey || selectedMetric] || [70, 72, 71, 73, 72, 74, 72])
+        setTrends(prev => {
+          const updated = {
+            ...prev,
+            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            data: calculatedData
+          }
+          if (backendKey === 'heart_rate') {
+            updated.heartRate = calculatedData
+          } else if (backendKey === 'blood_pressure') {
+            updated.bloodPressure = calculatedData
+          }
+          return updated
         })
       }
     } catch (err) {
@@ -469,11 +484,13 @@ const MonitoringPage = () => {
 
   // Calculate dynamic data for Weekly Report
   const getWeeklyReportStats = () => {
-    const heartSum = trends.heartRate.reduce((a, b) => a + b, 0)
-    const avgHeart = trends.heartRate.length > 0 ? Math.round(heartSum / trends.heartRate.length) : 72
+    const heartList = trends.heartRate || []
+    const heartSum = heartList.reduce((a, b) => a + b, 0)
+    const avgHeart = heartList.length > 0 ? Math.round(heartSum / heartList.length) : 72
 
-    const bpSum = trends.bloodPressure.reduce((a, b) => a + b, 0)
-    const avgSystolic = trends.bloodPressure.length > 0 ? Math.round(bpSum / trends.bloodPressure.length) : 120
+    const bpList = trends.bloodPressure || []
+    const bpSum = bpList.reduce((a, b) => a + b, 0)
+    const avgSystolic = bpList.length > 0 ? Math.round(bpSum / bpList.length) : 120
     const avgDiastolic = 80 // Base estimate
 
     const totalMeds = medications.length
